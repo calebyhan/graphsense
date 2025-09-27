@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import DropZone from './DropZone';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { useAnalysisLifecycle } from '@/lib/api/analysisQueries';
 import { CheckCircle, AlertCircle, FileText, Database, BarChart3 } from 'lucide-react';
 import { FileParser } from '@/lib/utils/fileParser';
 
@@ -15,7 +16,10 @@ export default function UploadSection({ onSuccess }: UploadSectionProps = {}) {
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [dataInfo, setDataInfo] = useState<{ columns: string[]; rowCount: number; dataTypes: Record<string, string> } | null>(null);
-  const { setRawData, startAnalysis } = useAnalysisStore();
+  
+  // Use both store for local state and React Query for backend analysis
+  const { setRawData } = useAnalysisStore();
+  const analysisLifecycle = useAnalysisLifecycle();
 
   const handleFileUpload = async (file: File) => {
     setUploadStatus('uploading');
@@ -54,9 +58,9 @@ export default function UploadSection({ onSuccess }: UploadSectionProps = {}) {
         onSuccess();
       }
 
-      // Automatically start analysis
+      // Automatically start analysis using React Query
       try {
-        await startAnalysis(result.data, file.name);
+        analysisLifecycle.startAnalysis({ data: result.data, filename: file.name });
       } catch (analysisError) {
         console.warn('Analysis failed to start automatically:', analysisError);
         // Don't change upload status - file was parsed successfully

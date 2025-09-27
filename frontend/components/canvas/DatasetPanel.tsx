@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { useAnalysisLifecycle } from '@/lib/api/analysisQueries';
 import DropZone from '@/components/upload/DropZone';
 import AgentProgress from '@/components/analysis/AgentProgress';
 
@@ -16,7 +17,6 @@ export default function DatasetPanel() {
   const {
     rawData,
     dataProfile,
-    agentStates,
     recommendations,
     selectChart,
     setRawData,
@@ -24,12 +24,15 @@ export default function DatasetPanel() {
     setDataProfile,
     setPatterns,
     setRecommendations,
-    startAnalysis,
     errorType,
     showErrorNotification,
     setShowErrorNotification,
     retryAnalysis
   } = useAnalysisStore();
+
+  // Use React Query for analysis operations
+  const analysisLifecycle = useAnalysisLifecycle();
+  const agentStates = analysisLifecycle.agentStates;
 
   const [activeTab, setActiveTab] = useState<'upload' | 'data' | 'analysis'>('upload');
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
@@ -130,7 +133,7 @@ export default function DatasetPanel() {
 
           // Automatically start the 3-agent analysis
           try {
-            await startAnalysis(results.data as Array<Record<string, any>>, file.name);
+            analysisLifecycle.startAnalysis({ data: results.data as Array<Record<string, any>>, filename: file.name });
           } catch (analysisError) {
             console.warn('Analysis failed to start automatically:', analysisError);
             // Don't change upload status - file was parsed successfully
@@ -487,7 +490,7 @@ export default function DatasetPanel() {
                       <button
                         onClick={() => {
                           if (rawData) {
-                            startAnalysis(rawData, fileName || 'dataset');
+                            analysisLifecycle.startAnalysis({ data: rawData, filename: fileName || 'dataset' });
                           }
                         }}
                         className="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"

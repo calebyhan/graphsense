@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { BarChart3, ExternalLink, Download, AlertCircle, Loader2 } from 'lucide-react';
 import { SharingService, SharedVisualization } from '@/lib/services/sharingService';
+import { useSharedVisualizationQuery } from '@/lib/api/sharingQueries';
 import ChartRenderer from '@/components/visualization/ChartRenderer';
 import ExportButton from '@/components/canvas/ExportButton';
 import { useRef } from 'react';
@@ -11,42 +12,23 @@ import { useRef } from 'react';
 export default function SharedVisualizationPage() {
   const { token } = useParams();
   const chartRef = useRef<HTMLDivElement>(null);
-  const [visualization, setVisualization] = useState<SharedVisualization | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>('');
 
-  useEffect(() => {
-    async function fetchSharedVisualization() {
-      if (!token || typeof token !== 'string') {
-        setError('Invalid share token');
-        setLoading(false);
-        return;
-      }
+  // Validate token format
+  const isValidToken = token && typeof token === 'string' && SharingService.isValidShareToken(token);
+  
+  // Use React Query to fetch shared visualization
+  const { 
+    data: visualization, 
+    isLoading: loading, 
+    error: queryError 
+  } = useSharedVisualizationQuery(token as string, isValidToken);
 
-      if (!SharingService.isValidShareToken(token)) {
-        setError('Invalid share token format');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const shared = await SharingService.getSharedVisualization(token);
-
-        if (!shared) {
-          setError('This shared chart could not be found or is no longer available');
-        } else {
-          setVisualization(shared);
-        }
-      } catch (err) {
-        console.error('Failed to fetch shared visualization:', err);
-        setError('Failed to load shared chart');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchSharedVisualization();
-  }, [token]);
+  // Format error message
+  const error = !isValidToken 
+    ? (typeof token !== 'string' ? 'Invalid share token' : 'Invalid share token format')
+    : queryError
+    ? 'Failed to load shared chart'
+    : (!visualization && !loading ? 'This shared chart could not be found or is no longer available' : '');
 
   if (loading) {
     return (

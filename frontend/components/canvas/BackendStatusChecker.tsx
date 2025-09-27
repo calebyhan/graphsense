@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, AlertCircle, XCircle, Wifi, WifiOff, Activity } from 'lucide-react';
-import { backendAPI } from '@/lib/api/backendClient';
+import { useDetailedHealthCheck } from '@/lib/api/backendQueries';
 
 interface BackendStatus {
   status: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
@@ -28,66 +28,53 @@ interface BackendStatus {
 }
 
 export default function BackendStatusChecker() {
-  const [status, setStatus] = useState<BackendStatus>({ status: 'unknown' });
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  const checkBackendHealth = async (): Promise<BackendStatus> => {
-    const startTime = Date.now();
-    
-    try {
-      // Try detailed health check first
-      const data = await backendAPI.detailedHealthCheck();
-      const responseTime = Date.now() - startTime;
+  // Use React Query for health check with polling
+  const { 
+    data: healthData, 
+    error, 
+    isLoading,
+    dataUpdatedAt 
+  } = useDetailedHealthCheck();
 
-      return {
-        ...data,
-        response_time: responseTime,
-        last_checked: Date.now(),
+  // Convert health data to status format
+  const status: BackendStatus = React.useMemo(() => {
+    if (!isOnline) {
+      return { 
+        status: 'unhealthy', 
+        error: 'No internet connection',
+        last_checked: Date.now()
       };
-    } catch (error: any) {
-      const responseTime = Date.now() - startTime;
-      
-      // If detailed check fails, try basic health check
-      try {
-        const basicData = await backendAPI.healthCheck();
-        return {
-          ...basicData,
-          response_time: responseTime,
-          last_checked: Date.now(),
-        };
-      } catch (basicError: any) {
-        return {
-          status: 'unhealthy',
-          error: basicError.message || error.message || 'Network error',
-          response_time: responseTime,
-          last_checked: Date.now(),
-        };
-      }
     }
-  };
 
-  const performHealthCheck = async () => {
-    const healthStatus = await checkBackendHealth();
-    setStatus(healthStatus);
-  };
+    if (error) {
+      return {
+        status: 'unhealthy',
+        error: (error as any)?.message || 'Network error',
+        last_checked: dataUpdatedAt
+      };
+    }
+
+    if (isLoading && !healthData) {
+      return { status: 'unknown', last_checked: dataUpdatedAt };
+    }
+
+    return {
+      ...healthData,
+      last_checked: dataUpdatedAt
+    };
+  }, [healthData, error, isLoading, isOnline, dataUpdatedAt]);
 
   useEffect(() => {
-    // Initial check
-    performHealthCheck();
-
-    // Set up polling interval
-    const interval = setInterval(performHealthCheck, 30000); // Check every 30 seconds
-
     // Network status listeners
     const handleOnline = () => {
       setIsOnline(true);
-      performHealthCheck();
     };
     
     const handleOffline = () => {
       setIsOnline(false);
-      setStatus(prev => ({ ...prev, status: 'unhealthy', error: 'No internet connection' }));
     };
 
     // Keyboard shortcut to toggle expanded view (Ctrl/Cmd + Shift + H)
@@ -103,7 +90,6 @@ export default function BackendStatusChecker() {
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      clearInterval(interval);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('keydown', handleKeyDown);

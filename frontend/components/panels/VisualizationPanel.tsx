@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dataset, ChartRecommendation } from '@/components/AutoVizAgent';
 import AgentProgress from '@/components/analysis/AgentProgress';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { useAnalysisLifecycle } from '@/lib/api/analysisQueries';
 import { MiniMap } from '@/components/canvas/MiniMap';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
@@ -39,14 +40,17 @@ export function VisualizationPanel({
   const { viewport, updateViewport, canvasElements } = useCanvasStore();
   const {
     rawData,
-    agentStates,
     errorType,
     showErrorNotification,
     setShowErrorNotification,
     retryAnalysis
   } = useAnalysisStore();
 
-  // Auto-switch between tabs based on analysis state
+  // Use React Query for analysis state
+  const analysisLifecycle = useAnalysisLifecycle();
+  const agentStates = analysisLifecycle.agentStates;
+
+  // Auto-switch between tabs based on analysis state using React Query
   useEffect(() => {
     const isAnalysisComplete = Object.values(agentStates).every(state => state === 'complete');
     const isAnalysisInProgress = Object.values(agentStates).some(state => state === 'running');
@@ -66,7 +70,7 @@ export function VisualizationPanel({
         setActiveTab('analysis');
       }
     }
-  }, [agentStates, recommendations, rawData, activeTab]);
+  }, [agentStates, recommendations, rawData, activeTab, analysisLifecycle.analysisResults]);
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 90) return 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-900/20';

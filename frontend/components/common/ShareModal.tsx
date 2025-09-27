@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Share2, Copy, Check, ExternalLink, Users, Globe } from 'lucide-react';
 import { SharingService, ShareOptions, ShareResult } from '@/lib/services/sharingService';
+import { useShareVisualizationMutation } from '@/lib/api/sharingQueries';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -11,31 +12,20 @@ interface ShareModalProps {
 }
 
 export default function ShareModal({ isOpen, onClose, shareOptions }: ShareModalProps) {
-  const [shareResult, setShareResult] = useState<ShareResult | null>(null);
-  const [isSharing, setIsSharing] = useState(false);
   const [copiedStates, setCopiedStates] = useState<Record<string, boolean>>({});
-  const [error, setError] = useState<string>('');
+  
+  const shareVisualizationMutation = useShareVisualizationMutation()
 
-  useEffect(() => {
+  // Reset state when modal opens - this is UI state management, not data fetching
+  React.useEffect(() => {
     if (isOpen) {
-      setShareResult(null);
-      setError('');
+      shareVisualizationMutation.reset()
       setCopiedStates({});
     }
-  }, [isOpen]);
+  }, [isOpen, shareVisualizationMutation]);
 
-  const handleShare = async () => {
-    setIsSharing(true);
-    setError('');
-
-    try {
-      const result = await SharingService.shareVisualization(shareOptions);
-      setShareResult(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create share link');
-    } finally {
-      setIsSharing(false);
-    }
+  const handleShare = () => {
+    shareVisualizationMutation.mutate(shareOptions)
   };
 
   const handleCopy = async (text: string, key: string) => {
@@ -49,18 +39,18 @@ export default function ShareModal({ isOpen, onClose, shareOptions }: ShareModal
     }
   };
 
-  const shareLinks = shareResult ? [
+  const shareLinks = shareVisualizationMutation.data ? [
     {
       key: 'url',
       label: 'Share URL',
-      value: shareResult.shareUrl,
+      value: shareVisualizationMutation.data.shareUrl,
       description: 'Direct link to view the chart',
       icon: ExternalLink
     },
     {
       key: 'token',
       label: 'Share Token',
-      value: shareResult.shareToken,
+      value: shareVisualizationMutation.data.shareToken,
       description: 'Use this token to access the chart',
       icon: Share2
     }
@@ -119,9 +109,13 @@ export default function ShareModal({ isOpen, onClose, shareOptions }: ShareModal
                 </div>
               </div>
 
-              {error && (
+              {shareVisualizationMutation.error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-800">{error}</p>
+                  <p className="text-sm text-red-800">
+                    {shareVisualizationMutation.error instanceof Error 
+                      ? shareVisualizationMutation.error.message 
+                      : 'Failed to create share link'}
+                  </p>
                 </div>
               )}
 
@@ -129,10 +123,10 @@ export default function ShareModal({ isOpen, onClose, shareOptions }: ShareModal
               <div className="flex gap-3">
                 <button
                   onClick={handleShare}
-                  disabled={isSharing}
+                  disabled={shareVisualizationMutation.isPending}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isSharing ? (
+                  {shareVisualizationMutation.isPending ? (
                     <>
                       <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
                       Creating Link...

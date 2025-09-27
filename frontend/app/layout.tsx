@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
+import { ReactQueryProvider } from "@/lib/react-query";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Auto Visualization Agent",
+  title: "GraphSense",
   description: "AI-powered chart recommendations for your data",
 };
 
@@ -28,9 +29,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
+        <ReactQueryProvider>
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+        </ReactQueryProvider>
       </body>
     </html>
   );
