@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
-import { X, Upload, Database, Brain, CheckCircle, TrendingUp, BarChart3, FileText, AlertCircle } from 'lucide-react';
+import { X, Upload, Database, CheckCircle, TrendingUp, BarChart3, FileText, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -244,7 +244,7 @@ export default function DatasetPanel() {
                 : rawData ? 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300' : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
             }`}
           >
-            <Brain className="h-4 w-4 mx-auto mb-1" />
+            <img src="/favicon.ico" alt="Analysis" className="h-4 w-4 mx-auto mb-1 rounded-sm" />
             Analysis
           </button>
         </div>
@@ -481,7 +481,7 @@ export default function DatasetPanel() {
                   {agentStates.profiler === 'idle' && agentStates.recommender === 'idle' && agentStates.validator === 'idle' ? (
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <Brain className="h-5 w-5 text-blue-600" />
+                        <img src="/favicon.ico" alt="GraphSense" className="h-5 w-5 rounded-sm" />
                         <span className="text-sm font-medium text-blue-900">Ready for Analysis</span>
                       </div>
                       <p className="text-sm text-blue-700 mb-3">
@@ -502,7 +502,7 @@ export default function DatasetPanel() {
                   ) : (
                     <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
-                        <Brain className="h-5 w-5 text-gray-600" />
+                        <img src="/favicon.ico" alt="GraphSense" className="h-5 w-5 rounded-sm" />
                         <span className="text-sm font-medium text-gray-900">Analysis in Progress</span>
                       </div>
                       <p className="text-sm text-gray-600 mb-2">
