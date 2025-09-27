@@ -44,6 +44,14 @@ export default function DatasetPanel() {
         size: { width: 400, height: 300 },
         data: { rawData, dataProfile }
       });
+
+      // Auto-switch to analysis tab if we have recommendations or if analysis is in progress
+      if (recommendations && recommendations.length > 0) {
+        setActiveTab('analysis');
+      } else if (agentStates.profiler !== 'idle' || agentStates.recommender !== 'idle' || agentStates.validator !== 'idle') {
+        // Analysis is in progress, switch to analysis tab to show progress
+        setActiveTab('analysis');
+      }
     } else if (type === 'chart' && data && data.title) {
       const recommendation = recommendations?.find(rec => rec.config?.title === data.title);
       addElement({
@@ -195,11 +203,11 @@ export default function DatasetPanel() {
           </button>
           <button
             onClick={() => setActiveTab('analysis')}
-            disabled={!recommendations}
+            disabled={!rawData}
             className={`flex-1 px-4 py-3 text-sm font-medium ${
               activeTab === 'analysis'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : recommendations ? 'text-gray-500 hover:text-gray-700' : 'text-gray-300 cursor-not-allowed'
+                : rawData ? 'text-gray-500 hover:text-gray-700' : 'text-gray-300 cursor-not-allowed'
             }`}
           >
             <Brain className="h-4 w-4 mx-auto mb-1" />
@@ -369,8 +377,8 @@ export default function DatasetPanel() {
                 <AgentProgress agentStates={agentStates} />
               </div>
 
-              {/* Recommendations */}
-              {recommendations && recommendations.length > 0 && (
+              {/* Recommendations or Analysis Status */}
+              {recommendations && recommendations.length > 0 ? (
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-3">Chart Recommendations</h4>
                   <div className="space-y-3">
@@ -399,17 +407,69 @@ export default function DatasetPanel() {
                             rec.chartType === 'line' ? 'bg-blue-100 text-blue-800' :
                             rec.chartType === 'bar' ? 'bg-green-100 text-green-800' :
                             rec.chartType === 'scatter' ? 'bg-purple-100 text-purple-800' :
+                            rec.chartType === 'pie' ? 'bg-pink-100 text-pink-800' :
+                            rec.chartType === 'area' ? 'bg-indigo-100 text-indigo-800' :
+                            rec.chartType === 'treemap' ? 'bg-yellow-100 text-yellow-800' :
+                            rec.chartType === 'histogram' ? 'bg-teal-100 text-teal-800' :
+                            rec.chartType === 'box_plot' ? 'bg-orange-100 text-orange-800' :
+                            rec.chartType === 'heatmap' ? 'bg-red-100 text-red-800' :
+                            rec.chartType === 'sankey' ? 'bg-cyan-100 text-cyan-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
                             {rec.chartType}
                           </span>
-                          <button className="text-xs text-blue-600 hover:text-blue-800">
+                          <button 
+                            className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent parent div click
+                              if (rec.config) handleSelectChart(rec.config);
+                            }}
+                          >
                             Add to Canvas
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Analysis Status or Start Analysis */}
+                  {agentStates.profiler === 'idle' && agentStates.recommender === 'idle' && agentStates.validator === 'idle' ? (
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Brain className="h-5 w-5 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-900">Ready for Analysis</span>
+                      </div>
+                      <p className="text-sm text-blue-700 mb-3">
+                        Start AI-powered analysis to get intelligent chart recommendations for your dataset.
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (rawData) {
+                            startAnalysis(rawData, fileName || 'dataset');
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                        disabled={!rawData}
+                      >
+                        Start Analysis
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Brain className="h-5 w-5 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-900">Analysis in Progress</span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">
+                        Our AI agents are analyzing your dataset. This typically takes 20-40 seconds.
+                      </p>
+                      <div className="text-xs text-gray-500">
+                        The analysis tab will automatically show recommendations when complete.
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

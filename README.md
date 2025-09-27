@@ -11,6 +11,7 @@ An AI-powered data visualization platform that automatically analyzes datasets a
 - **3-Agent AI Pipeline**: Enhanced Data Profiler → Chart Recommender → Validation Agent
 - **10 Chart Types**: Support for all major visualization types (Bar, Line, Scatter, Pie, Histogram, Box Plot, Heatmap, Area, Treemap, Sankey)
 - **Real-time Progress**: Live agent status updates and progress tracking
+- **Backend Status Checker**: Live connection monitoring with system metrics and health diagnostics
 - **Export Functionality**: PNG, SVG, and PDF export for all chart types
 - **Infinite Canvas**: Drag-and-drop workspace for organizing visualizations
 - **Sharing System**: Generate shareable links with tokens
@@ -23,7 +24,16 @@ An AI-powered data visualization platform that automatically analyzes datasets a
 - **JSON Parsing**: Robust AI response parsing with fallback mechanisms ✅
 - **Real-time Processing**: Complete pipeline processes datasets in ~20-40 seconds ⚡
 
-### 🛠 Technical Stack
+### � System Monitoring & Diagnostics
+- **Real-time Status Indicator**: Always-visible connection status on the canvas
+- **Detailed Health Metrics**: Backend response times, system CPU/memory usage, database connectivity
+- **Automatic Health Checks**: Continuous monitoring every 30 seconds with instant error reporting
+- **Network Status Detection**: Automatic offline/online detection with graceful degradation
+- **Interactive Diagnostics**: Click-to-expand detailed system information
+- **Keyboard Shortcuts**: Quick access via Ctrl+Shift+H for power users
+- **Error Recovery**: Automatic reconnection attempts and status restoration
+
+### �🛠 Technical Stack
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS, Recharts, Zustand
 - **Backend**: Python 3.11, FastAPI, Google Gemini API, Pandas, Scikit-learn
 - **Database**: Supabase (PostgreSQL) with Row Level Security

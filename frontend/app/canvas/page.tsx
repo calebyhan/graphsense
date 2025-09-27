@@ -8,6 +8,7 @@ import DatasetCard from '@/components/canvas/elements/DatasetCard';
 import ChartCard from '@/components/canvas/elements/ChartCard';
 import DataLoader from '@/components/canvas/DataLoader';
 import DatasetPanel from '@/components/canvas/DatasetPanel';
+import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
@@ -133,6 +134,9 @@ export default function CanvasPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-100">
+      {/* Backend Status Checker */}
+      <BackendStatusChecker />
+
       {/* Top Header */}
       <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
