@@ -7,7 +7,6 @@ import FloatingToolbar from '@/components/canvas/FloatingToolbar';
 import { DataPanel } from '@/components/panels/DataPanel';
 import { VisualizationPanel } from '@/components/panels/VisualizationPanel';
 import { TopNavigation } from '@/components/navigation/TopNavigation';
-import { MiniMap } from '@/components/canvas/MiniMap';
 import { VisualizationCard } from '@/components/visualization/VisualizationCard';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
@@ -272,14 +271,6 @@ export default function AutoVizAgent() {
     }
   }, [selectedVizId, handleVisualizationDelete]);
 
-  // Prepare visualization positions for MiniMap
-  const visualizationPositions = visualizations.map(viz => ({
-    id: viz.id,
-    x: viz.position.x,
-    y: viz.position.y,
-    width: viz.size.width,
-    height: viz.size.height
-  }));
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-gray-50 dark:bg-gray-900 prevent-zoom">
@@ -350,20 +341,6 @@ export default function AutoVizAgent() {
             hasSelection={selectedVizId !== null}
           />
 
-          {/* Mini Map */}
-          <MiniMap
-            visualizations={visualizationPositions}
-            canvasSize={{ width: 10000, height: 10000 }}
-            viewportSize={{ width: typeof window !== 'undefined' ? window.innerWidth : 1200, height: typeof window !== 'undefined' ? window.innerHeight : 800 }}
-            viewportPosition={{ x: -viewport.x / viewport.zoom, y: -viewport.y / viewport.zoom }}
-            onViewportChange={(position) => {
-              updateViewport({
-                x: -position.x * viewport.zoom,
-                y: -position.y * viewport.zoom,
-                zoom: viewport.zoom
-              });
-            }}
-          />
         </div>
 
         {/* Visualization Panel - Right Sidebar */}

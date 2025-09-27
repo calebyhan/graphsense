@@ -48,8 +48,15 @@ interface CanvasStore {
   getSelectedElements: () => CanvasElement[];
 }
 
+const getDefaultViewport = () => {
+  // Cartesian coordinate system: (0,0) represents the mathematical origin
+  // Canvas size: 6000x4000 with origin at visual center
+  // X-axis: -3000 to +3000, Y-axis: -2000 to +2000
+  return { x: 0, y: 0, zoom: 0.8 };
+};
+
 export const useCanvasStore = create<CanvasStore>((set, get) => ({
-  viewport: { x: 0, y: 0, zoom: 1 },
+  viewport: getDefaultViewport(),
   selectedTool: 'pointer',
   canvasElements: [],
   selectedElements: [],
@@ -60,7 +67,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({ viewport });
   },
 
-  resetViewport: () => set({ viewport: { x: 0, y: 0, zoom: 1 } }),
+  resetViewport: () => set({ viewport: getDefaultViewport() }),
 
   setSelectedTool: (tool) => set({ selectedTool: tool }),
 
