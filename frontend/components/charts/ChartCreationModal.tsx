@@ -76,7 +76,7 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
 
     const newElement = {
       type: 'chart' as const,
-      position: { x: 100, y: 100 },
+      position: { x: 0, y: 0 }, // Centered coordinate system
       size: { width: 400, height: 300 },
       data: {
         config: previewConfig,

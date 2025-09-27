@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dataset, ChartRecommendation } from '@/components/AutoVizAgent';
 import AgentProgress from '@/components/analysis/AgentProgress';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { MiniMap } from '@/components/canvas/MiniMap';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 interface VisualizationPanelProps {
   selectedDataset: Dataset | null;
@@ -34,6 +36,7 @@ export function VisualizationPanel({
   onAutoViz
 }: VisualizationPanelProps) {
   const [activeTab, setActiveTab] = useState<'analysis' | 'recommendations' | 'manual'>('analysis');
+  const { viewport, updateViewport, canvasElements } = useCanvasStore();
   const {
     rawData,
     agentStates,
@@ -332,6 +335,25 @@ export function VisualizationPanel({
             )}
           </div>
         )}
+      </div>
+
+      {/* MiniMap Section */}
+      <div className="border-t border-gray-200 dark:border-gray-700">
+        <div className="p-4">
+          <MiniMap
+            visualizations={canvasElements.map(element => ({
+              id: element.id,
+              x: element.position.x,
+              y: element.position.y,
+              width: element.size.width,
+              height: element.size.height
+            }))}
+            canvasSize={{ width: 6000, height: 4000 }} // Default canvas size
+            viewportSize={{ width: 1600, height: 900 }} // Default viewport size
+            viewportPosition={viewport}
+            onViewportChange={(position) => updateViewport({ ...viewport, x: position.x, y: position.y })}
+          />
+        </div>
       </div>
 
       {/* Footer */}

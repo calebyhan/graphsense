@@ -78,17 +78,17 @@ export default function DataLoader() {
     setRecommendations(sampleRecommendations);
     selectChart(sampleRecommendations[0].config);
 
-    // Add elements to canvas automatically
+    // Add elements to canvas automatically (centered coordinate system)
     addElement({
       type: 'dataset',
-      position: { x: 100, y: 100 },
+      position: { x: -300, y: -200 }, // Top-left relative to center
       size: { width: 400, height: 300 },
       data: { rawData: sampleData, dataProfile: sampleDataProfile }
     });
 
     addElement({
       type: 'chart',
-      position: { x: 600, y: 100 },
+      position: { x: 200, y: -200 }, // Top-right relative to center
       size: { width: 500, height: 400 },
       data: {
         config: sampleRecommendations[0].config,
@@ -99,7 +99,7 @@ export default function DataLoader() {
 
     addElement({
       type: 'chart',
-      position: { x: 100, y: 500 },
+      position: { x: -300, y: 200 }, // Bottom-left relative to center
       size: { width: 500, height: 400 },
       data: {
         config: sampleRecommendations[1].config,

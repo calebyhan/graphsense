@@ -22,7 +22,7 @@ export default function RecommendationsPanel() {
 
     const newElement = {
       type: 'chart' as const,
-      position: { x: 100, y: 100 },
+      position: { x: 0, y: 0 }, // Centered coordinate system
       size: { width: 500, height: 400 },
       data: {
         config: {
