@@ -13,9 +13,10 @@ from dotenv import load_dotenv
 
 from app.core.config import get_settings
 from app.core.logging_config import setup_logging
-from app.api.routes import datasets, analysis, visualizations, health
+from app.api.routes import datasets, analysis, visualizations, health, cache
 from app.database.supabase_client import get_supabase_client
 from app.services.agent_pipeline import AgentPipelineService
+from app.utils.memory_manager import initialize_memory_manager, shutdown_memory_manager
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +38,11 @@ async def lifespan(app: FastAPI):
         supabase = get_supabase_client()
         logger.info("Supabase connection established")
 
+        # Initialize memory manager
+        memory_manager = await initialize_memory_manager()
+        app.state.memory_manager = memory_manager
+        logger.info("Memory manager initialized")
+
         # Initialize agent pipeline
         agent_service = AgentPipelineService()
         app.state.agent_service = agent_service
@@ -50,6 +56,13 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("Shutting down Auto Visualization Agent Backend")
+    
+    # Shutdown memory manager
+    try:
+        await shutdown_memory_manager()
+        logger.info("Memory manager shutdown complete")
+    except Exception as e:
+        logger.error(f"Error shutting down memory manager: {e}")
 
 # Create FastAPI app
 app = FastAPI(
@@ -139,6 +152,15 @@ app.include_router(
         200: {"description": "Visualization operation successful"},
         201: {"description": "Visualization created"},
         404: {"description": "Visualization not found"}
+    }
+)
+app.include_router(
+    cache.router,
+    prefix="/api/cache",
+    tags=["🗄️ Cache Management"],
+    responses={
+        200: {"description": "Cache operation successful"},
+        500: {"description": "Cache operation failed"}
     }
 )
 

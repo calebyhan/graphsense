@@ -7,6 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Dataset } from '@/components/AutoVizAgent';
+import { useFileUpload } from '@/hooks/useFileUpload';
+import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { FileParser } from '@/lib/utils/fileParser';
 
 interface DataPanelProps {
   datasets: Dataset[];
@@ -17,6 +20,52 @@ interface DataPanelProps {
 export function DataPanel({ datasets, selectedDataset, onDatasetSelect }: DataPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedDataset, setDraggedDataset] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string>('');
+  const { setRawData, startAnalysis } = useAnalysisStore();
+
+  const handleFileSelect = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    setUploadError('');
+    const file = files[0];
+
+    try {
+      const result = await FileParser.parseFile(file);
+
+      if (result.error || result.data.length === 0) {
+        setUploadError(result.error || 'No data found in the file');
+        return;
+      }
+
+      const sizeError = FileParser.validateDataSize(result.data);
+      if (sizeError) {
+        setUploadError(sizeError);
+        return;
+      }
+
+      setRawData(result.data);
+      await startAnalysis(result.data, file.name);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Failed to process file');
+    }
+  };
+
+  const { openFileDialog, fileInputProps } = useFileUpload({
+    accept: '.csv,.json,.xlsx,.xls,.tsv,.txt',
+    onFileSelect: handleFileSelect
+  });
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const files = e.dataTransfer.files;
+    handleFileSelect(files);
+  };
 
   const filteredDatasets = datasets.filter(dataset =>
     dataset.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -54,16 +103,31 @@ export function DataPanel({ datasets, selectedDataset, onDatasetSelect }: DataPa
 
   return (
     <div className="w-80 h-full glass-effect border-r border-gray-200 dark:border-gray-700 flex flex-col shadow-figma-lg">
+      {/* Hidden file input */}
+      <input {...fileInputProps} />
+
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Data Sources</h2>
-        
+
         {/* Import Zone */}
-        <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-colors cursor-pointer">
+        <div
+          className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-indigo-400 dark:hover:border-indigo-500 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-colors cursor-pointer"
+          onClick={openFileDialog}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
           <Upload className="w-8 h-8 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">Drop files here or click to upload</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">CSV, JSON, Excel, or connect to API</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">CSV, JSON, Excel (max 100MB)</p>
         </div>
+
+        {/* Upload Error */}
+        {uploadError && (
+          <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <p className="text-xs text-red-600 dark:text-red-400">{uploadError}</p>
+          </div>
+        )}
       </div>
 
       {/* Search and Filter */}

@@ -1,11 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Wand2, TrendingUp, BarChart3, PieChart, LineChart, Zap, Map, Calendar, Grid3X3, Info, Brain, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dataset, ChartRecommendation } from '@/components/AutoVizAgent';
+import AgentProgress from '@/components/analysis/AgentProgress';
+import { useAnalysisStore } from '@/store/useAnalysisStore';
 
 interface VisualizationPanelProps {
   selectedDataset: Dataset | null;
@@ -24,14 +26,44 @@ const allChartTypes = [
   { type: 'heatmap', name: 'Heatmap', icon: <Grid3X3 className="w-4 h-4" /> },
 ];
 
-export function VisualizationPanel({ 
-  selectedDataset, 
-  recommendations, 
-  isAnalyzing, 
-  onCreateVisualization, 
-  onAutoViz 
+export function VisualizationPanel({
+  selectedDataset,
+  recommendations,
+  isAnalyzing,
+  onCreateVisualization,
+  onAutoViz
 }: VisualizationPanelProps) {
-  const [activeTab, setActiveTab] = useState<'recommendations' | 'manual'>('recommendations');
+  const [activeTab, setActiveTab] = useState<'analysis' | 'recommendations' | 'manual'>('analysis');
+  const {
+    rawData,
+    agentStates,
+    errorType,
+    showErrorNotification,
+    setShowErrorNotification,
+    retryAnalysis
+  } = useAnalysisStore();
+
+  // Auto-switch between tabs based on analysis state
+  useEffect(() => {
+    const isAnalysisComplete = Object.values(agentStates).every(state => state === 'complete');
+    const isAnalysisInProgress = Object.values(agentStates).some(state => state === 'running');
+    
+    // Only switch tabs if we have data and aren't manually viewing a different tab
+    if (rawData) {
+      // If analysis just completed and we have recommendations, switch to smart tab
+      if (isAnalysisComplete && recommendations.length > 0 && activeTab === 'analysis') {
+        setActiveTab('recommendations');
+      }
+      // If analysis is starting/in progress and we're not on manual tab, switch to analysis
+      else if (isAnalysisInProgress && activeTab !== 'manual') {
+        setActiveTab('analysis');
+      }
+      // If we have data but no analysis has started and we're not on a specific tab, default to analysis
+      else if (!isAnalysisInProgress && !isAnalysisComplete && activeTab !== 'manual' && activeTab !== 'recommendations') {
+        setActiveTab('analysis');
+      }
+    }
+  }, [agentStates, recommendations, rawData, activeTab]);
 
   const getConfidenceColor = (confidence: number) => {
     if (confidence >= 90) return 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-900/20';
@@ -46,10 +78,10 @@ export function VisualizationPanel({
     const manualRecommendation: ChartRecommendation = {
       id: `manual-${Date.now()}`,
       type: chartType as any,
-      name: `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`,
+      name: chartType ? `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart` : 'Chart',
       confidence: 75,
-      reasoning: `Manual selection of ${chartType} chart`,
-      description: `User-created ${chartType} visualization`,
+      reasoning: chartType ? `Manual selection of ${chartType} chart` : 'Manual chart selection',
+      description: chartType ? `User-created ${chartType} visualization` : 'User-created visualization',
       bestFor: ['Manual analysis', 'Custom visualization']
     };
     
@@ -84,9 +116,19 @@ export function VisualizationPanel({
         {/* Tabs */}
         <div className="flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1">
           <button
-            className={`flex-1 px-3 py-2 text-sm rounded-md transition-colors ${
-              activeTab === 'recommendations' 
-                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' 
+            className={`flex-1 px-2 py-2 text-xs rounded-md transition-colors ${
+              activeTab === 'analysis'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+            }`}
+            onClick={() => setActiveTab('analysis')}
+          >
+            Analysis
+          </button>
+          <button
+            className={`flex-1 px-2 py-2 text-xs rounded-md transition-colors ${
+              activeTab === 'recommendations'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
             onClick={() => setActiveTab('recommendations')}
@@ -94,9 +136,9 @@ export function VisualizationPanel({
             Smart
           </button>
           <button
-            className={`flex-1 px-3 py-2 text-sm rounded-md transition-colors ${
-              activeTab === 'manual' 
-                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' 
+            className={`flex-1 px-2 py-2 text-xs rounded-md transition-colors ${
+              activeTab === 'manual'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
             onClick={() => setActiveTab('manual')}
@@ -108,7 +150,33 @@ export function VisualizationPanel({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4">
-        {!selectedDataset ? (
+        {activeTab === 'analysis' ? (
+          // Analysis tab
+          <div className="space-y-4">
+            {!rawData ? (
+              <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
+                <Brain className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <h3 className="text-sm font-medium mb-2">No Data Uploaded</h3>
+                <p className="text-xs mb-2">Upload a dataset to start AI analysis</p>
+                <div className="text-xs text-gray-400 dark:text-gray-500">
+                  <p>• 3-agent pipeline will analyze your data</p>
+                  <p>• Real-time progress tracking</p>
+                  <p>• Intelligent recommendations</p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <AgentProgress
+                  agentStates={agentStates}
+                  errorType={errorType}
+                  showErrorNotification={showErrorNotification}
+                  onCloseErrorNotification={() => setShowErrorNotification(false)}
+                  onRetryAnalysis={retryAnalysis}
+                />
+              </div>
+            )}
+          </div>
+        ) : !selectedDataset ? (
           // No dataset selected state
           <div className="text-center text-gray-500 dark:text-gray-400 mt-12">
             <Brain className="w-16 h-16 mx-auto mb-4 opacity-30" />

@@ -54,11 +54,9 @@ export default function DatasetPanel() {
         data: { rawData, dataProfile }
       });
 
-      // Auto-switch to analysis tab if we have recommendations or if analysis is in progress
-      if (recommendations && recommendations.length > 0) {
-        setActiveTab('analysis');
-      } else if (agentStates.profiler !== 'idle' || agentStates.recommender !== 'idle' || agentStates.validator !== 'idle') {
-        // Analysis is in progress, switch to analysis tab to show progress
+      // Auto-switch to analysis tab to show analysis or recommendations
+      // Only switch if we're not already on the analysis tab to prevent conflicts
+      if (activeTab !== 'analysis') {
         setActiveTab('analysis');
       }
     } else if (type === 'chart' && data) {

@@ -4,7 +4,7 @@ Validation Agent - Validates and scores chart recommendations with quality asses
 
 import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from .base_agent import BaseAgent
@@ -16,6 +16,7 @@ from app.models.analysis import (
     AgentReasoning,
     ComprehensiveDataAnalysis
 )
+from app.models.processing_context import ProcessingContext
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,64 @@ class ValidationAgent(BaseAgent):
 
         except Exception as e:
             logger.error(f"Validation failed completely: {e}")
+            # Create minimal fallback validated recommendations
+            return self._create_minimal_validated_recommendations(recommendations)
+
+    async def validate_with_context(
+        self,
+        recommendations: List[ChartRecommendation],
+        context: ProcessingContext
+    ) -> List[ValidatedRecommendation]:
+        """
+        Validate and score recommendations using shared processing context.
+        This method leverages cached analysis results to avoid redundant computations.
+        """
+        try:
+            start_time = datetime.now()
+            
+            logger.info(f"Starting context-aware validation for {len(recommendations)} recommendations")
+
+            # Use cached profiler results if available
+            if context.profiler_results:
+                logger.info("Using cached profiler results for validation")
+                analysis = context.profiler_results
+            else:
+                # This shouldn't happen in normal flow, but handle gracefully
+                logger.warning("No cached profiler results found, cannot validate recommendations")
+                raise ValueError("ProcessingContext must contain profiler results")
+
+            # Generate validation using AI with cached data
+            try:
+                validation_data = await self._generate_validation_scores_with_context(recommendations, context)
+                logger.info("Successfully generated AI validation scores using cached data")
+            except Exception as ai_error:
+                logger.warning(f"AI validation failed: {ai_error}, falling back to rule-based validation")
+                validation_data = self._fallback_validation_with_context(recommendations, context)
+
+            # Parse and validate recommendations
+            validated_recommendations = self._create_validated_recommendations(recommendations, validation_data, analysis)
+
+            # Add processing time
+            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+            for rec in validated_recommendations:
+                rec.reasoning.append(AgentReasoning(
+                    agent_type=AgentType.VALIDATOR,
+                    reasoning="Chart recommendation validated using cached analysis data",
+                    confidence=rec.validation_result.validation_score,
+                    evidence=[],
+                    processing_time_ms=processing_time
+                ))
+
+            # Sort by confidence and return top 5
+            validated_recommendations.sort(key=lambda x: x.validation_result.final_score, reverse=True)
+            for i, rec in enumerate(validated_recommendations):
+                rec.final_ranking = i + 1
+
+            logger.info(f"Context-aware validation completed successfully for {len(validated_recommendations)} recommendations in {processing_time}ms")
+            return validated_recommendations
+
+        except Exception as e:
+            logger.error(f"Context-aware validation failed completely: {e}")
             # Create minimal fallback validated recommendations
             return self._create_minimal_validated_recommendations(recommendations)
 
@@ -166,6 +225,109 @@ class ValidationAgent(BaseAgent):
             logger.error(f"Failed to parse validation response as JSON or missing validations key. Response: {response[:500]}..., using fallback")
             # Fallback to rule-based validation
             return self._fallback_validation(recommendations, analysis)
+
+    async def _generate_validation_scores_with_context(
+        self,
+        recommendations: List[ChartRecommendation],
+        context: ProcessingContext
+    ) -> Dict[str, Any]:
+        """Generate validation scores using cached context data"""
+
+        # Prepare recommendations summary for AI
+        recs_summary = []
+        for rec in recommendations:
+            recs_summary.append({
+                "chart_type": rec.chart_type.value,
+                "confidence": rec.confidence,
+                "suitability_score": rec.suitability_score,
+                "data_mapping": {
+                    "x_axis": rec.data_mapping.x_axis,
+                    "y_axis": rec.data_mapping.y_axis,
+                    "color": rec.data_mapping.color,
+                    "size": rec.data_mapping.size
+                },
+                "reasoning": [r.reasoning for r in rec.reasoning]
+            })
+
+        # Use cached data from context
+        data_summary = {
+            "columns": context.column_metadata,  # Use cached column metadata
+            "correlations": context.get_cached_statistic("correlations"),
+            "data_quality": context.get_cached_statistic("data_quality"),
+            "patterns": context.get_cached_statistic("patterns"),
+            "row_count": len(context.sample_data),
+            "numeric_columns": context.get_numeric_columns(),
+            "categorical_columns": context.get_categorical_columns(),
+            "temporal_columns": context.get_temporal_columns()
+        }
+
+        prompt = f"""
+        As a data visualization validation expert, evaluate these chart recommendations for quality, appropriateness, and effectiveness.
+
+        Dataset Analysis (using cached computations):
+        {json.dumps(data_summary, default=str, indent=2)}
+
+        Chart Recommendations to Validate:
+        {json.dumps(recs_summary, default=str, indent=2)}
+
+        For EACH chart recommendation, provide:
+        1. Validation score (0.0-1.0) based on visualization best practices
+        2. Quality metrics assessment
+        3. Refinement suggestions
+        4. Final score combining original confidence and validation
+
+        Evaluation Criteria:
+        - Data-ink ratio: Is the chart efficient in displaying information?
+        - Cognitive load: How easy is it to understand?
+        - Clarity: Is the message clear and unambiguous?
+        - Appropriateness: Does the chart type match the data and intent?
+        - Aesthetic quality: Is it visually appealing and professional?
+        - Accessibility: Can it be understood by diverse audiences?
+
+        Respond in JSON format:
+        {{
+            "validations": [
+                {{
+                    "chart_type": "bar",
+                    "validation_score": 0.85,
+                    "quality_metrics": {{
+                        "data_ink_ratio": 0.8,
+                        "cognitive_load": "low",
+                        "clarity_score": 0.9,
+                        "appropriateness": 0.85,
+                        "aesthetic_quality": 0.8,
+                        "accessibility": 0.9
+                    }},
+                    "refinements": {{
+                        "suggested_title": "Improved chart title",
+                        "axis_improvements": ["Add units to y-axis", "Rotate x-axis labels"],
+                        "color_suggestions": "Use colorblind-friendly palette",
+                        "layout_improvements": ["Increase chart height", "Add gridlines"]
+                    }},
+                    "final_score": 0.87,
+                    "validation_reasoning": "Detailed explanation of validation..."
+                }},
+                ... (repeat for each recommendation)
+            ]
+        }}
+        """
+
+        response = await self.generate_response(
+            prompt,
+            system_instruction="You are an expert in data visualization validation and quality assessment. Provide detailed scoring in valid JSON format.",
+            timeout=120  # Extended timeout for validation
+        )
+
+        # Use the base agent's JSON extraction method
+        json_response = self.extract_json_from_response(response)
+        
+        if not json_response or 'validations' not in json_response:
+            logger.error(f"Failed to parse validation response as JSON or missing validations key. Response: {response[:500]}..., using fallback")
+            # Fallback to rule-based validation
+            return self._fallback_validation_with_context(recommendations, context)
+            
+        logger.info(f"Successfully parsed validation response with {len(json_response.get('validations', []))} validations")
+        return json_response
             
         logger.info(f"Successfully parsed validation response with {len(json_response.get('validations', []))} validations")
         return json_response
@@ -266,6 +428,47 @@ class ValidationAgent(BaseAgent):
 
         return {"validations": validations}
 
+    def _fallback_validation_with_context(
+        self,
+        recommendations: List[ChartRecommendation],
+        context: ProcessingContext
+    ) -> Dict[str, Any]:
+        """Fallback rule-based validation using processing context"""
+        validations = []
+
+        for rec in recommendations:
+            # Simple rule-based scoring using cached context data
+            validation_score = self._calculate_rule_based_score_with_context(rec, context)
+
+            quality_metrics = {
+                "data_ink_ratio": 0.7,
+                "cognitive_load": "medium",
+                "clarity_score": 0.75,
+                "appropriateness": validation_score,
+                "aesthetic_quality": 0.7,
+                "accessibility": 0.8
+            }
+
+            refinements = {
+                "suggested_title": f"{rec.chart_type.value.title()} Chart",
+                "axis_improvements": ["Add proper labels", "Include units"],
+                "color_suggestions": "Use consistent color scheme",
+                "layout_improvements": ["Optimize aspect ratio"]
+            }
+
+            final_score = (rec.confidence + validation_score) / 2
+
+            validations.append({
+                "chart_type": rec.chart_type.value,
+                "validation_score": validation_score,
+                "quality_metrics": quality_metrics,
+                "refinements": refinements,
+                "final_score": final_score,
+                "validation_reasoning": f"Rule-based validation for {rec.chart_type.value} chart using cached context data"
+            })
+
+        return {"validations": validations}
+
     def _create_fallback_validation(self, rec: ChartRecommendation) -> Dict[str, Any]:
         """Create a fallback validation for a single recommendation"""
         return {
@@ -321,6 +524,40 @@ class ValidationAgent(BaseAgent):
 
         # Data quality considerations
         data_quality_score = analysis.data_quality.get("completeness", 0.5)
+        score += data_quality_score * 0.2
+
+        return min(1.0, score)
+
+    def _calculate_rule_based_score_with_context(
+        self,
+        rec: ChartRecommendation,
+        context: ProcessingContext
+    ) -> float:
+        """Calculate a simple rule-based validation score using cached context data"""
+        score = 0.5  # Base score
+
+        # Use cached column metadata from context
+        numeric_cols = context.get_numeric_columns()
+        categorical_cols = context.get_categorical_columns()
+        temporal_cols = context.get_temporal_columns()
+
+        # Chart-specific validation rules using cached metadata
+        if rec.chart_type.value == "bar":
+            if rec.data_mapping.x_axis in categorical_cols and rec.data_mapping.y_axis in numeric_cols:
+                score += 0.3
+        elif rec.chart_type.value == "line":
+            if rec.data_mapping.x_axis in temporal_cols and rec.data_mapping.y_axis in numeric_cols:
+                score += 0.4
+        elif rec.chart_type.value == "scatter":
+            if rec.data_mapping.x_axis in numeric_cols and rec.data_mapping.y_axis in numeric_cols:
+                score += 0.3
+        elif rec.chart_type.value == "histogram":
+            if rec.data_mapping.x_axis in numeric_cols:
+                score += 0.3
+
+        # Data quality considerations from cached data
+        cached_quality = context.get_cached_data_quality("completeness")
+        data_quality_score = cached_quality if cached_quality is not None else 0.5
         score += data_quality_score * 0.2
 
         return min(1.0, score)

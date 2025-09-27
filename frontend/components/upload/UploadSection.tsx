@@ -6,7 +6,11 @@ import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { CheckCircle, AlertCircle, FileText, Database, BarChart3 } from 'lucide-react';
 import { FileParser } from '@/lib/utils/fileParser';
 
-export default function UploadSection() {
+interface UploadSectionProps {
+  onSuccess?: () => void;
+}
+
+export default function UploadSection({ onSuccess }: UploadSectionProps = {}) {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -44,6 +48,11 @@ export default function UploadSection() {
       // Store the parsed data
       setRawData(result.data);
       setUploadStatus('success');
+
+      // Call onSuccess callback to close modal
+      if (onSuccess) {
+        onSuccess();
+      }
 
       // Automatically start analysis
       try {

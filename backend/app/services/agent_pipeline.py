@@ -6,6 +6,7 @@ import logging
 import asyncio
 import json
 import numpy as np
+import pandas as pd
 from typing import Dict, Any, List, Callable, Optional
 from datetime import datetime
 
@@ -16,9 +17,14 @@ from app.models.analysis import (
     ComprehensiveDataAnalysis,
     ChartRecommendation,
     ValidatedRecommendation,
+    ValidationResult,
     AnalysisResponse
 )
+from app.models.processing_context import ProcessingContext
 from app.database.supabase_client import get_supabase_client
+from app.utils.memory_manager import get_memory_manager, RequestPriority
+from app.utils.intelligent_cache import get_intelligent_cache
+from app.utils.data_sampling import DataSampler
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +95,9 @@ class AgentPipelineService:
         self.recommender_agent = ChartRecommenderAgent()
         self.validation_agent = ValidationAgent()
         self.supabase = get_supabase_client()
+        self.memory_manager = get_memory_manager()
+        self.cache = get_intelligent_cache()
+        self.data_sampler = DataSampler(max_sample_size=5000)
 
     async def analyze_dataset(
         self,
@@ -97,7 +106,29 @@ class AgentPipelineService:
         progress_callback: Optional[Callable[[str, str], None]] = None
     ) -> AnalysisResponse:
         """
-        Run the complete 3-agent analysis pipeline
+        Run the complete 3-agent analysis pipeline with intelligent caching.
+        This method now uses shared context by default for better performance.
+
+        Args:
+            data: The dataset to analyze
+            dataset_id: ID of the dataset
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            AnalysisResponse with recommendations and analysis
+        """
+        # Use the new context-aware pipeline by default
+        return await self.analyze_dataset_with_shared_context(data, dataset_id, progress_callback)
+
+    async def analyze_dataset_legacy(
+        self,
+        data: List[Dict[str, Any]],
+        dataset_id: str,
+        progress_callback: Optional[Callable[[str, str], None]] = None
+    ) -> AnalysisResponse:
+        """
+        Legacy method: Run the complete 3-agent analysis pipeline with intelligent caching
+        (without shared context - kept for backward compatibility)
 
         Args:
             data: The dataset to analyze
@@ -113,6 +144,57 @@ class AgentPipelineService:
             if progress_callback:
                 progress_callback("pipeline", "starting")
 
+            # Generate data fingerprint for caching
+            fingerprint = self.cache.get_data_fingerprint(data)
+            logger.info(f"Generated fingerprint for dataset {dataset_id}: {fingerprint}")
+
+            # Check if we have cached analysis results
+            cached_analysis = self.cache.get_cached_analysis(fingerprint)
+            if cached_analysis:
+                logger.info(f"Using cached analysis for dataset {dataset_id} (fingerprint: {fingerprint})")
+                
+                # Check for cached chart recommendations
+                cached_recommendations = self.cache.get_cached_chart_recommendations(fingerprint)
+                if cached_recommendations:
+                    logger.info(f"Using cached chart recommendations for dataset {dataset_id}")
+                    
+                    # Create validated recommendations from cached data
+                    # Note: In a real scenario, we might want to run validation again
+                    # but for performance, we'll use cached recommendations
+                    validated_recommendations = []
+                    for rec in cached_recommendations:
+                        # Convert to ValidatedRecommendation (simplified)
+                        validated_rec = ValidatedRecommendation(
+                            chart_type=rec.chart_type,
+                            confidence=rec.confidence,
+                            data_mapping=rec.data_mapping,
+                            reasoning=rec.reasoning,
+                            validation_result=ValidationResult(
+                                chart_type=rec.chart_type,
+                                validation_score=rec.suitability_score,
+                                quality_metrics={},
+                                final_score=rec.suitability_score
+                            ),
+                            interaction_config=rec.interaction_config,
+                            styling_suggestions=rec.styling_suggestions
+                        )
+                        validated_recommendations.append(validated_rec)
+                    
+                    processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+                    
+                    if progress_callback:
+                        progress_callback("pipeline", "completed")
+                    
+                    logger.info(f"Pipeline completed using cache for dataset {dataset_id} in {processing_time}ms")
+                    
+                    return AnalysisResponse(
+                        success=True,
+                        dataset_id=dataset_id,
+                        recommendations=validated_recommendations,
+                        data_profile=cached_analysis,
+                        processing_time_ms=processing_time
+                    )
+
             # Stage 1: Enhanced Data Profiler Agent
             if progress_callback:
                 progress_callback("profiler", "running")
@@ -120,6 +202,9 @@ class AgentPipelineService:
             logger.info(f"Starting profiler agent for dataset {dataset_id}")
             analysis = await self.profiler_agent.analyze(data)
             analysis.dataset_id = dataset_id
+
+            # Cache the analysis result
+            self.cache.cache_analysis_result(fingerprint, analysis)
 
             # Store profiler results
             await self._store_agent_analysis(dataset_id, "profiler", analysis.dict())
@@ -133,6 +218,9 @@ class AgentPipelineService:
 
             logger.info(f"Starting recommender agent for dataset {dataset_id}")
             recommendations = await self.recommender_agent.recommend(analysis)
+
+            # Cache the chart recommendations
+            self.cache.cache_chart_recommendations(fingerprint, recommendations)
 
             # Store recommender results
             recommendations_data = [rec.dict() for rec in recommendations]
@@ -181,6 +269,228 @@ class AgentPipelineService:
 
         except Exception as e:
             logger.error(f"Pipeline failed for dataset {dataset_id}: {e}")
+
+            if progress_callback:
+                progress_callback("pipeline", "failed")
+
+            # Update dataset status to failed
+            await self._update_dataset_status(dataset_id, "failed")
+
+            raise
+
+    async def analyze_dataset_with_memory_management(
+        self,
+        data: List[Dict[str, Any]],
+        dataset_id: str,
+        priority: RequestPriority = RequestPriority.NORMAL
+    ) -> None:
+        """
+        Run analysis with memory management and queuing
+        
+        Args:
+            data: The dataset to analyze
+            dataset_id: ID of the dataset
+            priority: Processing priority
+        """
+        try:
+            # Estimate memory requirements based on data size
+            data_size_mb = len(str(data)) / (1024 * 1024)
+            estimated_memory_mb = max(100, int(data_size_mb * 3))  # Conservative estimate
+            
+            logger.info(f"Queuing analysis for dataset {dataset_id} (estimated memory: {estimated_memory_mb}MB)")
+            
+            # Create analysis callback
+            async def analysis_callback():
+                return await self.analyze_dataset(data, dataset_id)
+            
+            # Queue the analysis request
+            success = await self.memory_manager.queue_request(
+                request_id=f"analysis_{dataset_id}",
+                callback=analysis_callback,
+                estimated_memory_mb=estimated_memory_mb,
+                priority=priority,
+                timeout_seconds=600  # 10 minutes timeout
+            )
+            
+            if not success:
+                logger.error(f"Failed to queue analysis for dataset {dataset_id}")
+                await self._update_dataset_status(dataset_id, "failed")
+                raise Exception("System overloaded - analysis request rejected")
+            
+            logger.info(f"Analysis queued successfully for dataset {dataset_id}")
+            
+        except Exception as e:
+            logger.error(f"Memory-managed analysis failed for dataset {dataset_id}: {e}")
+            await self._update_dataset_status(dataset_id, "failed")
+            raise
+
+    async def analyze_dataset_with_shared_context(
+        self,
+        data: List[Dict[str, Any]],
+        dataset_id: str,
+        progress_callback: Optional[Callable[[str, str], None]] = None
+    ) -> AnalysisResponse:
+        """
+        Run the complete 3-agent analysis pipeline using shared processing context
+        to avoid redundant data copying and calculations.
+
+        Args:
+            data: The dataset to analyze
+            dataset_id: ID of the dataset
+            progress_callback: Optional callback for progress updates
+
+        Returns:
+            AnalysisResponse with recommendations and analysis
+        """
+        try:
+            start_time = datetime.now()
+
+            if progress_callback:
+                progress_callback("pipeline", "starting")
+
+            # Generate data fingerprint for caching
+            fingerprint = self.cache.get_data_fingerprint(data)
+            logger.info(f"Generated fingerprint for dataset {dataset_id}: {fingerprint}")
+
+            # Check if we have cached analysis results
+            cached_analysis = self.cache.get_cached_analysis(fingerprint)
+            if cached_analysis:
+                logger.info(f"Using cached analysis for dataset {dataset_id} (fingerprint: {fingerprint})")
+                
+                # Check for cached chart recommendations
+                cached_recommendations = self.cache.get_cached_chart_recommendations(fingerprint)
+                if cached_recommendations:
+                    logger.info(f"Using cached chart recommendations for dataset {dataset_id}")
+                    
+                    # Create validated recommendations from cached data
+                    validated_recommendations = []
+                    for rec in cached_recommendations:
+                        # Convert to ValidatedRecommendation (simplified)
+                        validated_rec = ValidatedRecommendation(
+                            chart_type=rec.chart_type,
+                            confidence=rec.confidence,
+                            data_mapping=rec.data_mapping,
+                            reasoning=rec.reasoning,
+                            validation_result=ValidationResult(
+                                chart_type=rec.chart_type,
+                                validation_score=rec.suitability_score,
+                                quality_metrics={},
+                                final_score=rec.suitability_score
+                            ),
+                            interaction_config=rec.interaction_config,
+                            styling_suggestions=rec.styling_suggestions
+                        )
+                        validated_recommendations.append(validated_rec)
+                    
+                    processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+                    
+                    if progress_callback:
+                        progress_callback("pipeline", "completed")
+                    
+                    logger.info(f"Pipeline completed using cache for dataset {dataset_id} in {processing_time}ms")
+                    
+                    return AnalysisResponse(
+                        success=True,
+                        dataset_id=dataset_id,
+                        recommendations=validated_recommendations,
+                        data_profile=cached_analysis,
+                        processing_time_ms=processing_time
+                    )
+
+            # Create shared processing context
+            logger.info(f"Creating shared processing context for dataset {dataset_id}")
+            
+            # Apply intelligent sampling for large datasets
+            original_size = len(data)
+            sampled_data = self.data_sampler.smart_sample(data, 5000)
+            sampled_df = pd.DataFrame(sampled_data)
+            
+            # Create processing context with sampled data
+            context = ProcessingContext(
+                dataset_id=dataset_id,
+                original_data_size=original_size,
+                sample_data=sampled_df
+            )
+            
+            logger.info(f"Created processing context: {context.get_cache_summary()}")
+
+            # Stage 1: Enhanced Data Profiler Agent with shared context
+            if progress_callback:
+                progress_callback("profiler", "running")
+
+            logger.info(f"Starting context-aware profiler agent for dataset {dataset_id}")
+            analysis = await self.profiler_agent.analyze_with_context(context)
+            analysis.dataset_id = dataset_id
+
+            # Cache the analysis result
+            self.cache.cache_analysis_result(fingerprint, analysis)
+
+            # Store profiler results
+            await self._store_agent_analysis(dataset_id, "profiler", analysis.dict())
+
+            if progress_callback:
+                progress_callback("profiler", "completed")
+
+            # Stage 2: Chart Recommender Agent with shared context
+            if progress_callback:
+                progress_callback("recommender", "running")
+
+            logger.info(f"Starting context-aware recommender agent for dataset {dataset_id}")
+            recommendations = await self.recommender_agent.recommend_with_context(context)
+
+            # Cache the chart recommendations
+            self.cache.cache_chart_recommendations(fingerprint, recommendations)
+
+            # Store recommender results
+            recommendations_data = [rec.dict() for rec in recommendations]
+            await self._store_agent_analysis(dataset_id, "recommender", {
+                "recommendations": recommendations_data
+            })
+
+            if progress_callback:
+                progress_callback("recommender", "completed")
+
+            # Stage 3: Validation Agent with shared context
+            if progress_callback:
+                progress_callback("validator", "running")
+
+            logger.info(f"Starting context-aware validation agent for dataset {dataset_id}")
+            validated_recommendations = await self.validation_agent.validate_with_context(
+                recommendations, context
+            )
+
+            # Store validation results
+            validated_data = [rec.dict() for rec in validated_recommendations]
+            await self._store_agent_analysis(dataset_id, "validator", {
+                "validated_recommendations": validated_data
+            })
+
+            if progress_callback:
+                progress_callback("validator", "completed")
+
+            # Update dataset status
+            await self._update_dataset_status(dataset_id, "completed")
+
+            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+
+            if progress_callback:
+                progress_callback("pipeline", "completed")
+
+            # Clean up context to free memory
+            context.clear_cache()
+
+            logger.info(f"Context-aware pipeline completed for dataset {dataset_id} in {processing_time}ms")
+
+            return AnalysisResponse(
+                success=True,
+                dataset_id=dataset_id,
+                recommendations=validated_recommendations,
+                data_profile=analysis,
+                processing_time_ms=processing_time
+            )
+
+        except Exception as e:
+            logger.error(f"Context-aware pipeline failed for dataset {dataset_id}: {e}")
 
             if progress_callback:
                 progress_callback("pipeline", "failed")
@@ -341,3 +651,33 @@ class AgentPipelineService:
         except Exception as e:
             logger.error(f"Failed to update dataset status: {e}")
             # Don't raise - this shouldn't break the pipeline
+
+    async def get_cache_metrics(self) -> Dict[str, Any]:
+        """Get comprehensive cache performance metrics"""
+        try:
+            metrics = self.cache.get_cache_metrics()
+            cache_sizes = self.cache.get_cache_sizes()
+            optimization_report = self.cache.optimize_cache_performance()
+            
+            return {
+                "metrics": metrics,
+                "cache_sizes": cache_sizes,
+                "optimization": optimization_report,
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Failed to get cache metrics: {e}")
+            return {"error": str(e)}
+
+    async def clear_cache(self, cache_type: Optional[str] = None) -> Dict[str, Any]:
+        """Clear cache and return status"""
+        try:
+            self.cache.clear_cache(cache_type)
+            return {
+                "success": True,
+                "message": f"Cleared {'all caches' if cache_type is None else f'{cache_type} cache'}",
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Failed to clear cache: {e}")
+            return {"success": False, "error": str(e)}
