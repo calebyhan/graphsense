@@ -116,8 +116,14 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
     updateViewport(newViewport);
   }, [updateViewport]));
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
+  const handleWheel = useCallback((e: WheelEvent) => {
+    // Prevent browser zoom only if the user isn't holding Ctrl/Cmd
+    if (!e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+    } else {
+      // Let browser handle Ctrl+wheel for browser zoom
+      return;
+    }
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -146,6 +152,72 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
     });
   }, [localViewport, throttledWheelUpdate]);
 
+  // Wheel event listener with passive: false
+  useEffect(() => {
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+
+    canvasElement.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvasElement.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  // Keyboard shortcuts for zoom
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!canvasRef.current) return;
+
+      // Only handle zoom if the canvas is focused or no input is focused
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        (activeElement as HTMLElement).contentEditable === 'true'
+      );
+
+      if (isInputFocused) return;
+
+      if ((e.ctrlKey || e.metaKey)) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          const currentViewport = localViewport;
+          const worldX = (centerX - currentViewport.x) / currentViewport.zoom;
+          const worldY = (centerY - currentViewport.y) / currentViewport.zoom;
+          const newZoom = Math.min(5, currentViewport.zoom * 1.2);
+          const newX = centerX - worldX * newZoom;
+          const newY = centerY - worldY * newZoom;
+
+          const newViewport = { x: newX, y: newY, zoom: newZoom };
+          setLocalViewport(newViewport);
+          updateViewport(newViewport);
+        } else if (e.key === '-') {
+          e.preventDefault();
+          const currentViewport = localViewport;
+          const worldX = (centerX - currentViewport.x) / currentViewport.zoom;
+          const worldY = (centerY - currentViewport.y) / currentViewport.zoom;
+          const newZoom = Math.max(0.1, currentViewport.zoom * 0.8);
+          const newX = centerX - worldX * newZoom;
+          const newY = centerY - worldY * newZoom;
+
+          const newViewport = { x: newX, y: newY, zoom: newZoom };
+          setLocalViewport(newViewport);
+          updateViewport(newViewport);
+        } else if (e.key === '0') {
+          e.preventDefault();
+          const newViewport = { x: 0, y: 0, zoom: 1 };
+          setLocalViewport(newViewport);
+          updateViewport(newViewport);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [localViewport, updateViewport]);
+
   // Set cursor based on selected tool
   useEffect(() => {
     if (canvasRef.current) {
@@ -170,7 +242,6 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
       style={{
         cursor: selectedTool === 'drag' ? 'grab' : 'default',
         touchAction: 'none',

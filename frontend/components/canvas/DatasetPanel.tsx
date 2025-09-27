@@ -39,9 +39,11 @@ export default function DatasetPanel() {
   };
 
   const handleAddToCanvas = (type: 'dataset' | 'chart', data?: any) => {
+    console.log('handleAddToCanvas called:', { type, data });
     const canvasCenter = { x: 400, y: 300 }; // Default center position
 
     if (type === 'dataset' && rawData) {
+      console.log('Adding dataset to canvas');
       addElement({
         type: 'dataset',
         position: { x: canvasCenter.x, y: canvasCenter.y },
@@ -56,18 +58,39 @@ export default function DatasetPanel() {
         // Analysis is in progress, switch to analysis tab to show progress
         setActiveTab('analysis');
       }
-    } else if (type === 'chart' && data && data.title) {
-      const recommendation = recommendations?.find(rec => rec.config?.title === data.title);
+    } else if (type === 'chart' && data) {
+      console.log('Adding chart to canvas');
+      // Find recommendation by title match or by config object reference
+      const recommendation = recommendations?.find(rec => 
+        (data.title && rec.config?.title === data.title) ||
+        rec.config === data
+      );
+      
+      // Ensure we have a title for the chart
+      const chartTitle = data.title || 
+                        (data.xAxis && data.yAxis ? `${data.yAxis} vs ${data.xAxis}` : null) ||
+                        (data.category && data.value ? `${data.value} by ${data.category}` : null) ||
+                        `${recommendation?.chartType || 'Chart'} Visualization`;
+      
+      console.log('Chart details:', { recommendation, chartTitle, originalData: data });
+      
       addElement({
         type: 'chart',
         position: { x: canvasCenter.x + 100, y: canvasCenter.y + 100 },
         size: { width: 500, height: 400 },
         data: {
-          config: data,
+          config: {
+            ...data,
+            title: chartTitle
+          },
           chartType: recommendation?.chartType || 'bar',
-          recommendation
+          recommendation,
+          title: chartTitle
         }
       });
+      console.log('Chart added to canvas successfully');
+    } else {
+      console.warn('handleAddToCanvas: Invalid type or missing data', { type, data, hasRawData: !!rawData });
     }
   };
 
@@ -128,6 +151,7 @@ export default function DatasetPanel() {
       console.warn('handleSelectChart called with invalid chartConfig:', chartConfig);
       return;
     }
+    console.log('handleSelectChart called with config:', chartConfig);
     selectChart(chartConfig);
     handleAddToCanvas('chart', chartConfig);
   };

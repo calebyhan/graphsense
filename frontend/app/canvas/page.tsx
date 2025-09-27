@@ -6,6 +6,10 @@ import BottomToolbar from '@/components/canvas/BottomToolbar';
 import CanvasElement from '@/components/canvas/CanvasElement';
 import DatasetCard from '@/components/canvas/elements/DatasetCard';
 import ChartCard from '@/components/canvas/elements/ChartCard';
+import TableCard from '@/components/canvas/elements/TableCard';
+import MapCard from '@/components/canvas/elements/MapCard';
+import TextCard from '@/components/canvas/elements/TextCard';
+import ChartCreationModal from '@/components/charts/ChartCreationModal';
 import DataLoader from '@/components/canvas/DataLoader';
 import DatasetPanel from '@/components/canvas/DatasetPanel';
 import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
@@ -17,7 +21,8 @@ import Link from 'next/link';
 
 export default function CanvasPage() {
   const { canvasElements, selectedTool, addElement } = useCanvasStore();
-  const { rawData, dataProfile, recommendations, selectedChart } = useAnalysisStore();
+  const { rawData, dataProfile, recommendations, selectedChart, parsedData } = useAnalysisStore();
+  const [showChartModal, setShowChartModal] = React.useState(false);
 
   // Enable keyboard shortcuts
   useKeyboardShortcuts();
@@ -47,40 +52,30 @@ export default function CanvasPage() {
         }
         break;
       case 'chart':
-        if (selectedChart) {
-          const recommendation = recommendations?.find(
-            rec => rec.config?.title === selectedChart?.title
-          );
-          addElement({
-            type: 'chart',
-            position: { x: canvasX, y: canvasY },
-            size: { width: 500, height: 400 },
-            data: { config: selectedChart, chartType: recommendation?.chartType || 'bar', recommendation }
-          });
-        }
+        setShowChartModal(true);
         break;
       case 'table':
         addElement({
           type: 'table',
           position: { x: canvasX, y: canvasY },
-          size: { width: 400, height: 300 },
-          data: {}
+          size: { width: 600, height: 400 },
+          data: { rawData: parsedData || rawData || [] }
         });
         break;
       case 'text':
         addElement({
           type: 'text',
           position: { x: canvasX, y: canvasY },
-          size: { width: 300, height: 100 },
-          data: { text: 'Double-click to edit...' }
+          size: { width: 300, height: 200 },
+          data: { content: '', title: 'Text Block' }
         });
         break;
       case 'map':
         addElement({
           type: 'map',
           position: { x: canvasX, y: canvasY },
-          size: { width: 400, height: 300 },
-          data: {}
+          size: { width: 500, height: 400 },
+          data: { rawData: parsedData || rawData || [] }
         });
         break;
     }
@@ -107,25 +102,26 @@ export default function CanvasPage() {
         );
       case 'table':
         return (
-          <div className="h-full flex items-center justify-center text-gray-500">
-            <p>Table component coming soon...</p>
-          </div>
+          <TableCard
+            data={element.data?.rawData || []}
+            title={element.data?.title || 'Data Table'}
+          />
         );
       case 'text':
         return (
-          <div className="h-full">
-            <textarea
-              className="w-full h-full border-none outline-none resize-none bg-transparent text-sm"
-              defaultValue={element.data?.text || 'Enter text...'}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
+          <TextCard
+            initialContent={element.data?.content || ''}
+            title={element.data?.title || 'Text Block'}
+            editable={true}
+          />
         );
       case 'map':
         return (
-          <div className="h-full flex items-center justify-center text-gray-500">
-            <p>Map component coming soon...</p>
-          </div>
+          <MapCard
+            data={element.data?.rawData || []}
+            title={element.data?.title || 'Map Visualization'}
+            config={element.data?.config}
+          />
         );
       default:
         return <div>Unknown element type</div>;
@@ -183,6 +179,12 @@ export default function CanvasPage() {
 
       {/* Dataset Panel */}
       <DatasetPanel />
+
+      {/* Chart Creation Modal */}
+      <ChartCreationModal
+        isOpen={showChartModal}
+        onClose={() => setShowChartModal(false)}
+      />
     </div>
   );
 }
