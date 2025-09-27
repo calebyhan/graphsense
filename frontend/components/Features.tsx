@@ -1,13 +1,13 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { Brain, BarChart3, MessageSquare } from "lucide-react";
+import { BarChart3, MessageSquare } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function Features() {
   const features = [
     {
-      icon: Brain,
+      icon: () => <img src="/favicon.ico" alt="GraphSense" className="h-6 w-6 rounded-sm" />,
       title: "Multi-Agent AI",
       description: "3 specialized agents work together to analyze, recommend, and validate visualizations"
     },

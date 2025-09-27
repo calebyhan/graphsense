@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Wand2, TrendingUp, BarChart3, PieChart, LineChart, Zap, Map, Calendar, Grid3X3, Info, Brain, Sparkles } from 'lucide-react';
+import { Wand2, TrendingUp, BarChart3, PieChart, LineChart, Zap, Map, Calendar, Grid3X3, Info, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -155,7 +155,7 @@ export function VisualizationPanel({
           <div className="space-y-4">
             {!rawData ? (
               <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
-                <Brain className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <img src="/favicon.ico" alt="GraphSense" className="w-12 h-12 mx-auto mb-3 opacity-30 rounded-sm" />
                 <h3 className="text-sm font-medium mb-2">No Data Uploaded</h3>
                 <p className="text-xs mb-2">Upload a dataset to start AI analysis</p>
                 <div className="text-xs text-gray-400 dark:text-gray-500">
@@ -179,7 +179,7 @@ export function VisualizationPanel({
         ) : !selectedDataset ? (
           // No dataset selected state
           <div className="text-center text-gray-500 dark:text-gray-400 mt-12">
-            <Brain className="w-16 h-16 mx-auto mb-4 opacity-30" />
+            <img src="/favicon.ico" alt="GraphSense" className="w-16 h-16 mx-auto mb-4 opacity-30 rounded-sm" />
             <h3 className="text-lg font-medium mb-2">No Dataset Selected</h3>
             <p className="text-sm mb-4">Select a dataset from the left panel to see AI-powered visualization recommendations</p>
             <div className="text-xs text-gray-400 dark:text-gray-500">
@@ -274,7 +274,7 @@ export function VisualizationPanel({
             ) : (
               // No recommendations yet
               <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
-                <Brain className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <img src="/favicon.ico" alt="GraphSense" className="w-12 h-12 mx-auto mb-3 opacity-30 rounded-sm" />
                 <p className="text-sm">Analyzing dataset...</p>
                 <p className="text-xs">AI recommendations will appear here</p>
               </div>
