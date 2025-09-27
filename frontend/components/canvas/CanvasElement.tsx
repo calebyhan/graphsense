@@ -1,0 +1,219 @@
+'use client';
+
+import React, { useRef, useCallback, useState, useEffect } from 'react';
+import { useCanvasStore, CanvasElement as CanvasElementType } from '@/store/useCanvasStore';
+import { Move, X, Maximize2, Minimize2 } from 'lucide-react';
+
+function useRafThrottle<T extends (...args: any[]) => void>(func: T): T {
+  const rafId = useRef<number | undefined>(undefined);
+  const lastArgs = useRef<any[]>([]);
+
+  const throttledFunc = useCallback((...args: any[]) => {
+    lastArgs.current = args;
+    if (rafId.current) return;
+
+    rafId.current = requestAnimationFrame(() => {
+      if (lastArgs.current) {
+        func(...lastArgs.current);
+      }
+      rafId.current = undefined;
+    });
+  }, [func]);
+
+  useEffect(() => {
+    return () => {
+      if (rafId.current) {
+        cancelAnimationFrame(rafId.current);
+      }
+    };
+  }, []);
+
+  return throttledFunc as T;
+}
+
+interface CanvasElementProps {
+  element: CanvasElementType;
+  children: React.ReactNode;
+}
+
+export default function CanvasElement({ element, children }: CanvasElementProps) {
+  const elementRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [localPosition, setLocalPosition] = useState(element.position);
+  const [localSize, setLocalSize] = useState(element.size);
+
+  // Sync local state with element props
+  useEffect(() => {
+    if (!isDragging) setLocalPosition(element.position);
+  }, [element.position, isDragging]);
+
+  useEffect(() => {
+    if (!isResizing) setLocalSize(element.size);
+  }, [element.size, isResizing]);
+
+  const {
+    updateElement,
+    removeElement,
+    selectElements,
+    selectedElements,
+    viewport
+  } = useCanvasStore();
+
+  // Throttled update functions
+  const throttledPositionUpdate = useRafThrottle(useCallback((id: string, position: { x: number; y: number }) => {
+    updateElement(id, { position });
+  }, [updateElement]));
+
+  const throttledSizeUpdate = useRafThrottle(useCallback((id: string, size: { width: number; height: number }) => {
+    updateElement(id, { size });
+  }, [updateElement]));
+
+  const isSelected = selectedElements.includes(element.id);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget && !(e.target as HTMLElement).closest('.element-header')) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Select this element if not already selected
+    if (!isSelected) {
+      selectElements([element.id]);
+    }
+
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - element.position.x * viewport.zoom,
+      y: e.clientY - element.position.y * viewport.zoom,
+    });
+  }, [element.id, element.position, isSelected, selectElements, viewport.zoom]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (isDragging) {
+      const newX = (e.clientX - dragStart.x) / viewport.zoom;
+      const newY = (e.clientY - dragStart.y) / viewport.zoom;
+      const newPosition = { x: newX, y: newY };
+
+      // Update local state immediately for smooth visual feedback
+      setLocalPosition(newPosition);
+      // Throttle the store update
+      throttledPositionUpdate(element.id, newPosition);
+    } else if (isResizing) {
+      const newWidth = Math.max(200, resizeStart.width + (e.clientX - resizeStart.x) / viewport.zoom);
+      const newHeight = Math.max(150, resizeStart.height + (e.clientY - resizeStart.y) / viewport.zoom);
+      const newSize = { width: newWidth, height: newHeight };
+
+      // Update local state immediately for smooth visual feedback
+      setLocalSize(newSize);
+      // Throttle the store update
+      throttledSizeUpdate(element.id, newSize);
+    }
+  }, [isDragging, isResizing, dragStart, resizeStart, element.id, throttledPositionUpdate, throttledSizeUpdate, viewport.zoom]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setIsResizing(false);
+  }, []);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setIsResizing(true);
+    setResizeStart({
+      x: e.clientX,
+      y: e.clientY,
+      width: element.size.width,
+      height: element.size.height,
+    });
+  }, [element.size]);
+
+  const handleDelete = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    removeElement(element.id);
+  }, [element.id, removeElement]);
+
+  // Add global event listeners for drag/resize
+  React.useEffect(() => {
+    if (isDragging || isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
+
+  return (
+    <div
+      ref={elementRef}
+      className={`absolute bg-white rounded-lg shadow-lg border-2 canvas-element-optimized ${isDragging || isResizing ? 'performance-mode' : 'smooth-transition'} ${
+        isSelected ? 'border-blue-500 shadow-xl' : 'border-gray-200'
+      } ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+      style={{
+        left: localPosition.x,
+        top: localPosition.y,
+        width: localSize.width,
+        height: localSize.height,
+        zIndex: element.zIndex || 0,
+        willChange: isDragging || isResizing ? 'transform' : 'auto',
+        transform: isDragging || isResizing ? 'translateZ(0)' : 'none',
+      }}
+      onMouseDown={handleMouseDown}
+    >
+      {/* Element Header */}
+      <div className="element-header flex items-center justify-between p-2 bg-gray-50 rounded-t-lg border-b border-gray-200">
+        <div className="flex items-center gap-2">
+          <Move className="h-4 w-4 text-gray-400" />
+          <span className="text-sm font-medium text-gray-700 capitalize">
+            {element.type}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleDelete}
+            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+            title="Delete element"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Element Content */}
+      <div className="p-4 h-full overflow-auto" style={{ pointerEvents: isDragging || isResizing ? 'none' : 'auto' }}>
+        {children}
+      </div>
+
+      {/* Resize Handle */}
+      {isSelected && (
+        <div
+          className="absolute bottom-0 right-0 w-4 h-4 bg-blue-500 rounded-tl-lg cursor-se-resize opacity-75 hover:opacity-100 transition-opacity"
+          onMouseDown={handleResizeStart}
+          title="Resize"
+        >
+          <Maximize2 className="h-3 w-3 text-white absolute bottom-0.5 right-0.5" />
+        </div>
+      )}
+
+      {/* Selection Indicators */}
+      {isSelected && (
+        <>
+          {/* Corner indicators */}
+          <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 rounded-full" />
+          <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
+          <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 rounded-full" />
+        </>
+      )}
+    </div>
+  );
+}

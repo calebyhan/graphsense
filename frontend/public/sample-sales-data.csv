@@ -1,0 +1,26 @@
+date,product,sales,quantity,category,region
+2024-01-01,Widget A,1200,50,Electronics,North
+2024-01-02,Widget B,800,30,Home,South
+2024-01-03,Widget C,1500,45,Electronics,East
+2024-01-04,Widget A,1100,48,Electronics,West
+2024-01-05,Widget B,950,35,Home,North
+2024-01-06,Widget D,2200,75,Sports,South
+2024-01-07,Widget A,1300,52,Electronics,East
+2024-01-08,Widget E,600,25,Books,West
+2024-01-09,Widget C,1650,50,Electronics,North
+2024-01-10,Widget B,750,28,Home,South
+2024-01-11,Widget F,1800,60,Sports,East
+2024-01-12,Widget A,1250,49,Electronics,West
+2024-01-13,Widget G,900,40,Books,North
+2024-01-14,Widget D,2100,70,Sports,South
+2024-01-15,Widget C,1400,42,Electronics,East
+2024-01-16,Widget B,850,32,Home,West
+2024-01-17,Widget H,1950,65,Sports,North
+2024-01-18,Widget A,1350,54,Electronics,South
+2024-01-19,Widget E,650,27,Books,East
+2024-01-20,Widget C,1550,47,Electronics,West
+2024-02-01,Widget A,1180,49,Electronics,North
+2024-02-02,Widget B,820,31,Home,South
+2024-02-03,Widget C,1520,46,Electronics,East
+2024-02-04,Widget D,2250,78,Sports,West
+2024-02-05,Widget E,680,29,Books,North
