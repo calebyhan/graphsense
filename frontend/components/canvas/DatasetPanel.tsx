@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse';
 import { X, Upload, Database, Brain, CheckCircle, TrendingUp, BarChart3, FileText, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import DropZone from '@/components/upload/DropZone';
@@ -39,9 +42,11 @@ export default function DatasetPanel() {
   };
 
   const handleAddToCanvas = (type: 'dataset' | 'chart', data?: any) => {
+    console.log('handleAddToCanvas called:', { type, data });
     const canvasCenter = { x: 400, y: 300 }; // Default center position
 
     if (type === 'dataset' && rawData) {
+      console.log('Adding dataset to canvas');
       addElement({
         type: 'dataset',
         position: { x: canvasCenter.x, y: canvasCenter.y },
@@ -49,25 +54,44 @@ export default function DatasetPanel() {
         data: { rawData, dataProfile }
       });
 
-      // Auto-switch to analysis tab if we have recommendations or if analysis is in progress
-      if (recommendations && recommendations.length > 0) {
-        setActiveTab('analysis');
-      } else if (agentStates.profiler !== 'idle' || agentStates.recommender !== 'idle' || agentStates.validator !== 'idle') {
-        // Analysis is in progress, switch to analysis tab to show progress
+      // Auto-switch to analysis tab to show analysis or recommendations
+      // Only switch if we're not already on the analysis tab to prevent conflicts
+      if (activeTab !== 'analysis') {
         setActiveTab('analysis');
       }
-    } else if (type === 'chart' && data && data.title) {
-      const recommendation = recommendations?.find(rec => rec.config?.title === data.title);
+    } else if (type === 'chart' && data) {
+      console.log('Adding chart to canvas');
+      // Find recommendation by title match or by config object reference
+      const recommendation = recommendations?.find(rec => 
+        (data.title && rec.config?.title === data.title) ||
+        rec.config === data
+      );
+      
+      // Ensure we have a title for the chart
+      const chartTitle = data.title || 
+                        (data.xAxis && data.yAxis ? `${data.yAxis} vs ${data.xAxis}` : null) ||
+                        (data.category && data.value ? `${data.value} by ${data.category}` : null) ||
+                        `${recommendation?.chartType || 'Chart'} Visualization`;
+      
+      console.log('Chart details:', { recommendation, chartTitle, originalData: data });
+      
       addElement({
         type: 'chart',
         position: { x: canvasCenter.x + 100, y: canvasCenter.y + 100 },
         size: { width: 500, height: 400 },
         data: {
-          config: data,
+          config: {
+            ...data,
+            title: chartTitle
+          },
           chartType: recommendation?.chartType || 'bar',
-          recommendation
+          recommendation,
+          title: chartTitle
         }
       });
+      console.log('Chart added to canvas successfully');
+    } else {
+      console.warn('handleAddToCanvas: Invalid type or missing data', { type, data, hasRawData: !!rawData });
     }
   };
 
@@ -128,6 +152,7 @@ export default function DatasetPanel() {
       console.warn('handleSelectChart called with invalid chartConfig:', chartConfig);
       return;
     }
+    console.log('handleSelectChart called with config:', chartConfig);
     selectChart(chartConfig);
     handleAddToCanvas('chart', chartConfig);
   };
@@ -165,29 +190,31 @@ export default function DatasetPanel() {
       />
 
       {/* Panel */}
-      <div className="fixed right-0 top-0 h-full w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out">
+      <div className="fixed right-0 top-0 h-full w-96 glass-effect shadow-figma-xl z-50 transform transition-transform duration-300 ease-in-out animate-slide-in-right border-l border-gray-200 dark:border-gray-700">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
           <div className="flex items-center gap-2">
-            <Database className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold text-gray-900">Dataset Manager</h2>
+            <Database className="h-5 w-5 text-indigo-600" />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Data Sources</h2>
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={handleClose}
-            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+            className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
           >
-            <X className="h-5 w-5" />
-          </button>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-800/30">
           <button
             onClick={() => setActiveTab('upload')}
-            className={`flex-1 px-4 py-3 text-sm font-medium ${
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'upload'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
             <Upload className="h-4 w-4 mx-auto mb-1" />
@@ -196,10 +223,10 @@ export default function DatasetPanel() {
           <button
             onClick={() => setActiveTab('data')}
             disabled={!rawData}
-            className={`flex-1 px-4 py-3 text-sm font-medium ${
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'data'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : rawData ? 'text-gray-500 hover:text-gray-700' : 'text-gray-300 cursor-not-allowed'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20'
+                : rawData ? 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300' : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
             }`}
           >
             <Database className="h-4 w-4 mx-auto mb-1" />
@@ -208,10 +235,10 @@ export default function DatasetPanel() {
           <button
             onClick={() => setActiveTab('analysis')}
             disabled={!rawData}
-            className={`flex-1 px-4 py-3 text-sm font-medium ${
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               activeTab === 'analysis'
-                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
-                : rawData ? 'text-gray-500 hover:text-gray-700' : 'text-gray-300 cursor-not-allowed'
+                ? 'text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20'
+                : rawData ? 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300' : 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
             }`}
           >
             <Brain className="h-4 w-4 mx-auto mb-1" />
@@ -226,22 +253,24 @@ export default function DatasetPanel() {
               <h3 className="text-sm font-medium text-gray-900 mb-3">Upload Dataset</h3>
 
               {uploadStatus === 'success' ? (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <Card className="p-4 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle className="h-5 w-5 text-green-600" />
-                    <span className="text-sm font-medium text-green-900">File Uploaded Successfully</span>
+                    <span className="text-sm font-medium text-green-900 dark:text-green-100">File Uploaded Successfully</span>
                   </div>
                   <div className="flex items-center gap-2 mb-3">
                     <FileText className="h-4 w-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">{fileName}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-300">{fileName}</span>
                   </div>
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={resetUpload}
-                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                    className="h-auto p-0 text-indigo-600 hover:text-indigo-700 text-sm font-medium"
                   >
                     Upload different file
-                  </button>
-                </div>
+                  </Button>
+                </Card>
               ) : (
                 <>
                   <DropZone onFileUpload={handleFileUpload} />
@@ -268,21 +297,22 @@ export default function DatasetPanel() {
               )}
 
               {rawData && (
-                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <Card className="mt-4 p-3 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800">
                   <div className="flex items-center gap-2 mb-2">
-                    <Database className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm font-medium text-blue-900">Dataset Ready</span>
+                    <Database className="h-4 w-4 text-indigo-600" />
+                    <span className="text-sm font-medium text-indigo-900 dark:text-indigo-100">Dataset Ready</span>
                   </div>
-                  <p className="text-sm text-blue-700 mb-3">
+                  <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-3">
                     {rawData.length} rows • {Object.keys(rawData[0] || {}).length} columns
                   </p>
-                  <button
+                  <Button
                     onClick={() => handleAddToCanvas('dataset')}
-                    className="w-full px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-sm"
+                    size="sm"
                   >
                     Add to Canvas
-                  </button>
-                </div>
+                  </Button>
+                </Card>
               )}
             </div>
           )}

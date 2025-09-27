@@ -74,7 +74,13 @@ export default function CanvasElement({ element, children }: CanvasElementProps)
   const isSelected = selectedElements.includes(element.id);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target !== e.currentTarget && !(e.target as HTMLElement).closest('.element-header')) {
+    // Don't start dragging if clicking on a button or interactive element
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'BUTTON' || target.closest('button')) {
+      return;
+    }
+
+    if (e.target !== e.currentTarget && !target.closest('.element-header')) {
       return;
     }
 
@@ -181,8 +187,9 @@ export default function CanvasElement({ element, children }: CanvasElementProps)
         <div className="flex items-center gap-1">
           <button
             onClick={handleDelete}
-            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors relative z-10"
             title="Delete element"
+            style={{ pointerEvents: 'auto' }}
           >
             <X className="h-4 w-4" />
           </button>
@@ -190,8 +197,13 @@ export default function CanvasElement({ element, children }: CanvasElementProps)
       </div>
 
       {/* Element Content */}
-      <div className="p-4 h-full overflow-auto" style={{ pointerEvents: isDragging || isResizing ? 'none' : 'auto' }}>
-        {children}
+      <div className="flex-1 overflow-auto" style={{
+        pointerEvents: isDragging || isResizing ? 'none' : 'auto',
+        height: `calc(100% - ${element.type === 'text' ? '60px' : '56px'})`
+      }}>
+        <div className="p-4 h-full">
+          {children}
+        </div>
       </div>
 
       {/* Resize Handle */}

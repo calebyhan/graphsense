@@ -15,6 +15,27 @@ interface ChartCardProps {
 export default function ChartCard({ config, chartType, recommendation, title }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
+  // Generate intelligent title for chart
+  const getChartTitle = () => {
+    // Use provided title first
+    if (title && title !== 'Untitled Chart') return title;
+
+    // Use config title if available and not generic
+    if (config?.title && config.title !== 'Untitled Chart') return config.title;
+
+    // Generate title based on chart configuration
+    if (config?.xAxis && config?.yAxis) {
+      return `${config.yAxis} vs ${config.xAxis}`;
+    } else if (config?.category && config?.value) {
+      return `${config.value} by ${config.category}`;
+    } else if (config?.xAxis) {
+      return `Distribution of ${config.xAxis}`;
+    }
+
+    // Fallback to chart type
+    return chartType ? `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart` : 'Chart';
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -22,14 +43,14 @@ export default function ChartCard({ config, chartType, recommendation, title }: 
         <div className="flex items-center gap-2">
           <BarChart3 className="h-4 w-4 text-blue-500" />
           <span className="text-sm font-medium text-gray-900">
-            {title || config?.title || 'Chart'}
+            {getChartTitle()}
           </span>
         </div>
 
         <ExportButton
           elementRef={chartRef}
           chartType={chartType}
-          filename={title || config?.title || 'chart'}
+          filename={getChartTitle().toLowerCase().replace(/\s+/g, '-')}
           className="scale-75"
         />
       </div>

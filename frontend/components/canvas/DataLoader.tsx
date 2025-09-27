@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Upload, Database, BarChart3 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Upload, Database, BarChart3, X } from 'lucide-react';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
@@ -70,6 +70,7 @@ const sampleRecommendations = [
 export default function DataLoader() {
   const { setRawData, setDataProfile, setRecommendations, selectChart } = useAnalysisStore();
   const { addElement } = useCanvasStore();
+  const [isVisible, setIsVisible] = useState(true);
 
   const loadSampleData = () => {
     setRawData(sampleData);
@@ -108,10 +109,23 @@ export default function DataLoader() {
     });
   };
 
+  if (!isVisible) {
+    return null;
+  }
+
   return (
     <div className="fixed top-6 right-6 z-50">
       <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">Quick Start</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-gray-900">Quick Start</h3>
+          <button
+            onClick={() => setIsVisible(false)}
+            className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+            title="Close"
+          >
+            <X className="h-4 w-4 text-gray-500 hover:text-gray-700" />
+          </button>
+        </div>
         <div className="space-y-2">
           <button
             onClick={loadSampleData}
