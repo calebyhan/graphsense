@@ -1,36 +1,176 @@
 @import "tailwindcss";
 
+/* Enhanced Design System - Figma Integration */
+@custom-variant dark (&:is(.dark *));
+
 :root {
+  --font-size: 16px;
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: oklch(0.145 0 0);
+  --card: #ffffff;
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #4F46E5; /* Indigo-600 from Figma */
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.95 0.0058 264.53);
+  --secondary-foreground: #030213;
+  --muted: #F3F4F6; /* Gray-100 */
+  --muted-foreground: #6B7280; /* Gray-500 */
+  --accent: #E5E7EB; /* Gray-200 */
+  --accent-foreground: #030213;
+  --destructive: #EF4444; /* Red-500 */
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.1);
+  --input: transparent;
+  --input-background: #F9FAFB; /* Gray-50 */
+  --ring: #4F46E5; /* Indigo-600 */
+  --radius: 0.75rem; /* 12px - Figma's border radius */
+
+  /* Figma-specific color palette */
+  --indigo-50: #EEF2FF;
+  --indigo-100: #E0E7FF;
+  --indigo-500: #6366F1;
+  --indigo-600: #4F46E5;
+  --indigo-700: #4338CA;
+  --gray-50: #F9FAFB;
+  --gray-100: #F3F4F6;
+  --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB;
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;
+  --gray-600: #4B5563;
+  --gray-700: #374151;
+  --gray-800: #1F2937;
+  --gray-900: #111827;
+}
+
+.dark {
+  --background: #0F172A; /* Slate-900 */
+  --foreground: #F1F5F9; /* Slate-100 */
+  --card: #1E293B; /* Slate-800 */
+  --card-foreground: #F1F5F9;
+  --popover: #1E293B;
+  --popover-foreground: #F1F5F9;
+  --primary: #6366F1; /* Indigo-500 for dark mode */
+  --primary-foreground: #ffffff;
+  --secondary: #334155; /* Slate-700 */
+  --secondary-foreground: #F1F5F9;
+  --muted: #334155;
+  --muted-foreground: #94A3B8; /* Slate-400 */
+  --accent: #475569; /* Slate-600 */
+  --accent-foreground: #F1F5F9;
+  --destructive: #EF4444;
+  --destructive-foreground: #ffffff;
+  --border: #334155;
+  --input: #334155;
+  --input-background: #1E293B;
+  --ring: #6366F1;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Figma-inspired typography */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      line-height: 1.2;
+      letter-spacing: -0.025em;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      line-height: 1.3;
+      letter-spacing: -0.025em;
+    }
+
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 500;
+      line-height: 1.4;
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    p {
+      font-size: 0.875rem;
+      font-weight: 400;
+      line-height: 1.6;
+      color: var(--muted-foreground);
+    }
+
+    label {
+      font-size: 0.875rem;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+  }
 }
 
-/* Performance optimizations for canvas interactions */
+/* Enhanced Canvas Optimizations */
 .canvas-optimized {
   transform: translateZ(0);
   will-change: transform;
   backface-visibility: hidden;
   perspective: 1000px;
+  /* Comprehensive zoom prevention */
+  -ms-content-zooming: none;
+  -ms-touch-action: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  touch-action: none;
+  /* Additional properties for better touchpad support */
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Ensure proper cursor behavior */
+  cursor: grab;
+}
+
+.canvas-optimized:active {
+  cursor: grabbing;
 }
 
 .canvas-element-optimized {
@@ -40,9 +180,46 @@ body {
   contain: layout style paint;
 }
 
-/* Smooth transitions only when not dragging */
+/* Smooth transitions - Figma-style */
 .smooth-transition {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.smooth-hover {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced grid pattern for canvas */
+.canvas-grid {
+  background-image: 
+    radial-gradient(circle, var(--gray-400) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.3;
+}
+
+.dark .canvas-grid {
+  background-image: 
+    radial-gradient(circle, var(--gray-600) 1px, transparent 1px);
+  opacity: 0.4;
+}
+
+/* Figma-style shadows */
+.shadow-figma {
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+.shadow-figma-lg {
+  box-shadow: 
+    0 4px 6px rgba(0, 0, 0, 0.1),
+    0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-figma-xl {
+  box-shadow: 
+    0 10px 25px rgba(0, 0, 0, 0.15),
+    0 4px 10px rgba(0, 0, 0, 0.1);
 }
 
 /* Disable pointer events during animations for better performance */
@@ -52,4 +229,84 @@ body {
 
 .performance-mode {
   pointer-events: auto;
+}
+
+/* Figma-style focus rings */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+}
+
+/* Glass morphism effects */
+.glass-effect {
+  backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass-effect {
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Canvas grid pattern for minimap */
+.canvas-grid {
+  background-image: radial-gradient(circle, rgba(99, 102, 241, 0.3) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Prevent browser zoom on canvas */
+.prevent-zoom {
+  -ms-content-zooming: none;
+  -ms-touch-action: manipulation;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* Prevent zoom on specific elements */
+.prevent-zoom * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* Override for text inputs and content that should be selectable */
+.prevent-zoom input,
+.prevent-zoom textarea,
+.prevent-zoom [contenteditable] {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
+}
+
+/* Animation keyframes */
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInFromRight 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
 }
