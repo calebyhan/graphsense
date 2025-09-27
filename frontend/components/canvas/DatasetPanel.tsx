@@ -43,7 +43,7 @@ export default function DatasetPanel() {
 
   const handleAddToCanvas = (type: 'dataset' | 'chart', data?: any) => {
     console.log('handleAddToCanvas called:', { type, data });
-    const canvasCenter = { x: 400, y: 300 }; // Default center position
+    const canvasCenter = { x: 0, y: 0 }; // Centered coordinate system
 
     if (type === 'dataset' && rawData) {
       console.log('Adding dataset to canvas');

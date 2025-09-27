@@ -46,12 +46,48 @@ interface InfiniteCanvasProps {
   onCanvasClick?: (e: React.MouseEvent) => void;
 }
 
+// Utility functions for coordinate conversion
+export const convertScreenToCartesian = (
+  screenX: number,
+  screenY: number,
+  viewport: { x: number; y: number; zoom: number },
+  canvasRect: DOMRect
+) => {
+  const centerX = canvasRect.width / 2;
+  const centerY = canvasRect.height / 2;
+
+  // Convert screen coordinates to Cartesian coordinates
+  const cartesianX = viewport.x + (screenX - centerX) / viewport.zoom;
+  const cartesianY = viewport.y - (screenY - centerY) / viewport.zoom;
+
+  return { x: cartesianX, y: cartesianY };
+};
+
+export const convertCartesianToScreen = (
+  cartesianX: number,
+  cartesianY: number,
+  viewport: { x: number; y: number; zoom: number },
+  canvasRect: DOMRect
+) => {
+  const centerX = canvasRect.width / 2;
+  const centerY = canvasRect.height / 2;
+
+  // Convert Cartesian coordinates to screen coordinates
+  const screenX = centerX + (cartesianX - viewport.x) * viewport.zoom;
+  const screenY = centerY - (cartesianY - viewport.y) * viewport.zoom;
+
+  return { x: screenX, y: screenY };
+};
+
 export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const accumulatedDelta = useRef({ x: 0, y: 0 });
-  const [localViewport, setLocalViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const [localViewport, setLocalViewport] = useState(() => {
+    // Initialize at Cartesian origin (0,0) - center of 6000x4000 canvas
+    return { x: 0, y: 0, zoom: 0.8 };
+  });
   
   // Touch gesture support
   const lastTouchDistance = useRef<number>(0);
@@ -108,10 +144,11 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       const deltaX = e.clientX - lastMousePos.current.x;
       const deltaY = e.clientY - lastMousePos.current.y;
 
-      // Update local viewport immediately for smooth visual feedback
+      // In Cartesian coordinates, panning right should move viewport left (decrease x)
+      // and panning down should move viewport down (decrease y) since positive Y goes up
       const newViewport = {
-        x: localViewport.x + deltaX,
-        y: localViewport.y + deltaY,
+        x: localViewport.x - deltaX / localViewport.zoom,
+        y: localViewport.y + deltaY / localViewport.zoom,
         zoom: localViewport.zoom
       };
 
@@ -155,12 +192,15 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       let newX = localViewport.x;
       let newY = localViewport.y;
 
-      if (centerPoint) {
-        // Zoom towards the specified point
-        const worldX = (centerPoint.x - localViewport.x) / startZoom;
-        const worldY = (centerPoint.y - localViewport.y) / startZoom;
-        newX = centerPoint.x - worldX * currentZoom;
-        newY = centerPoint.y - worldY * currentZoom;
+      if (centerPoint && canvasRef.current) {
+        // Zoom towards the specified point in centered coordinate system
+        const rect = canvasRef.current.getBoundingClientRect();
+        const canvasCenterX = rect.width / 2;
+        const canvasCenterY = rect.height / 2;
+        const worldX = (centerPoint.x - canvasCenterX) / startZoom;
+        const worldY = (centerPoint.y - canvasCenterY) / startZoom;
+        newX = canvasCenterX + localViewport.x - canvasCenterX - worldX * (currentZoom - startZoom);
+        newY = canvasCenterY + localViewport.y - canvasCenterY - worldY * (currentZoom - startZoom);
       }
 
       const newViewport = { x: newX, y: newY, zoom: currentZoom };
@@ -234,18 +274,25 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       
       if (Math.abs(newZoom - localViewport.zoom) > 0.001) {
         // Use immediate update for responsive feel during pinch
-        const worldX = (mouseX - localViewport.x) / localViewport.zoom;
-        const worldY = (mouseY - localViewport.y) / localViewport.zoom;
-        const newX = mouseX - worldX * newZoom;
-        const newY = mouseY - worldY * newZoom;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          // Convert mouse position to world coordinates in centered system
+          const worldX = (mouseX - centerX) / localViewport.zoom;
+          const worldY = (mouseY - centerY) / localViewport.zoom;
+          // Calculate new viewport position
+          const newX = centerX + localViewport.x - centerX - worldX * (newZoom - localViewport.zoom);
+          const newY = centerY + localViewport.y - centerY - worldY * (newZoom - localViewport.zoom);
 
-        const newViewport = { x: newX, y: newY, zoom: newZoom };
-        setLocalViewport(newViewport);
-        throttledWheelUpdate(newViewport);
-        setIsZooming(true);
-        
-        // Clear zoom indicator after a delay
-        setTimeout(() => setIsZooming(false), 100);
+          const newViewport = { x: newX, y: newY, zoom: newZoom };
+          setLocalViewport(newViewport);
+          throttledWheelUpdate(newViewport);
+          setIsZooming(true);
+
+          // Clear zoom indicator after a delay
+          setTimeout(() => setIsZooming(false), 100);
+        }
       }
       return;
     }
@@ -260,20 +307,27 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
           const newZoom = Math.max(0.1, Math.min(5, localViewport.zoom * zoomFactor));
 
           if (newZoom !== localViewport.zoom) {
-            const worldX = (mouseX - localViewport.x) / localViewport.zoom;
-            const worldY = (mouseY - localViewport.y) / localViewport.zoom;
-            const newX = mouseX - worldX * newZoom;
-            const newY = mouseY - worldY * newZoom;
+            const rect = canvasRef.current?.getBoundingClientRect();
+            if (rect) {
+              const centerX = rect.width / 2;
+              const centerY = rect.height / 2;
+              // Convert mouse position to world coordinates in centered system
+              const worldX = (mouseX - centerX) / localViewport.zoom;
+              const worldY = (mouseY - centerY) / localViewport.zoom;
+              // Calculate new viewport position
+              const newX = centerX + localViewport.x - centerX - worldX * (newZoom - localViewport.zoom);
+              const newY = centerY + localViewport.y - centerY - worldY * (newZoom - localViewport.zoom);
 
-            throttledWheelUpdate({
-              x: newX,
-              y: newY,
-              zoom: newZoom
-            });
+              throttledWheelUpdate({
+                x: newX,
+                y: newY,
+                zoom: newZoom
+              });
+            }
           }
         } else {
           // Small vertical movements - might be trackpad scroll
-          const newY = localViewport.y - e.deltaY * 2;
+          const newY = localViewport.y + e.deltaY * 2 / localViewport.zoom;
           throttledWheelUpdate({
             ...localViewport,
             y: newY
@@ -281,7 +335,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         }
       } else {
         // Shift + scroll - horizontal pan
-        const newX = localViewport.x - e.deltaY;
+        const newX = localViewport.x - e.deltaY / localViewport.zoom;
         throttledWheelUpdate({
           ...localViewport,
           x: newX
@@ -289,7 +343,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       }
     } else {
       // Horizontal scroll - pan horizontally
-      const newX = localViewport.x - e.deltaX;
+      const newX = localViewport.x - e.deltaX / localViewport.zoom;
       throttledWheelUpdate({
         ...localViewport,
         x: newX
@@ -356,13 +410,15 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         const canvasX = currentCenter.x - rect.left;
         const canvasY = currentCenter.y - rect.top;
 
-        // Convert to world coordinates
-        const worldX = (canvasX - localViewport.x) / localViewport.zoom;
-        const worldY = (canvasY - localViewport.y) / localViewport.zoom;
+        // Convert to world coordinates in centered system
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        const worldX = (canvasX - centerX) / localViewport.zoom;
+        const worldY = (canvasY - centerY) / localViewport.zoom;
 
         // Calculate new viewport position
-        const newX = canvasX - worldX * newZoom;
-        const newY = canvasY - worldY * newZoom;
+        const newX = centerX + localViewport.x - centerX - worldX * (newZoom - localViewport.zoom);
+        const newY = centerY + localViewport.y - centerY - worldY * (newZoom - localViewport.zoom);
 
         const newViewport = { x: newX, y: newY, zoom: newZoom };
         setLocalViewport(newViewport);
@@ -379,8 +435,8 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       const deltaY = touch.clientY - lastMousePos.current.y;
 
       const newViewport = {
-        x: localViewport.x + deltaX,
-        y: localViewport.y + deltaY,
+        x: localViewport.x - deltaX / localViewport.zoom,
+        y: localViewport.y + deltaY / localViewport.zoom,
         zoom: localViewport.zoom
       };
 
@@ -441,35 +497,43 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       const newZoom = Math.max(0.1, Math.min(5, currentZoom * scaleFactor));
       
       if (newZoom !== currentZoom) {
-        const zoomRatio = newZoom / currentZoom;
-        const newX = centerPoint.x - (centerPoint.x - localViewport.x) * zoomRatio;
-        const newY = centerPoint.y - (centerPoint.y - localViewport.y) * zoomRatio;
+        const rect = canvasRef.current?.getBoundingClientRect();
+        if (rect) {
+          const canvasCenterX = rect.width / 2;
+          const canvasCenterY = rect.height / 2;
+          // Convert mouse position to world coordinates in centered system
+          const worldX = (centerPoint.x - canvasCenterX) / currentZoom;
+          const worldY = (centerPoint.y - canvasCenterY) / currentZoom;
+          // Calculate new viewport position
+          const newX = canvasCenterX + localViewport.x - canvasCenterX - worldX * (newZoom - currentZoom);
+          const newY = canvasCenterY + localViewport.y - canvasCenterY - worldY * (newZoom - currentZoom);
 
-        const newViewport = {
-          x: newX,
-          y: newY,
-          zoom: newZoom
-        };
+          const newViewport = {
+            x: newX,
+            y: newY,
+            zoom: newZoom
+          };
 
-        setIsZooming(true);
-        throttledWheelUpdate(newViewport);
+          setIsZooming(true);
+          throttledWheelUpdate(newViewport);
 
-        // Clear zoom state after animation
-        if (zoomAnimationId.current) {
-          clearTimeout(zoomAnimationId.current);
+          // Clear zoom state after animation
+          if (zoomAnimationId.current) {
+            clearTimeout(zoomAnimationId.current);
+          }
+          zoomAnimationId.current = setTimeout(() => setIsZooming(false), 100) as any;
         }
-        zoomAnimationId.current = setTimeout(() => setIsZooming(false), 100) as any;
       }
     } else {
       // Regular scroll/pan
       const sensitivity = 1;
-      const deltaX = e.deltaX * sensitivity;
-      const deltaY = e.deltaY * sensitivity;
+      const deltaX = e.deltaX * sensitivity / localViewport.zoom;
+      const deltaY = e.deltaY * sensitivity / localViewport.zoom;
 
       const newViewport = {
         ...localViewport,
         x: localViewport.x - deltaX,
-        y: localViewport.y - deltaY
+        y: localViewport.y + deltaY
       };
 
       throttledWheelUpdate(newViewport);
@@ -508,11 +572,12 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
           const currentViewport = localViewport;
-          const worldX = (centerX - currentViewport.x) / currentViewport.zoom;
-          const worldY = (centerY - currentViewport.y) / currentViewport.zoom;
+          // For centered coordinate system, zoom towards canvas center
+          const worldX = -currentViewport.x / currentViewport.zoom;
+          const worldY = -currentViewport.y / currentViewport.zoom;
           const newZoom = Math.min(5, currentViewport.zoom * 1.2);
-          const newX = centerX - worldX * newZoom;
-          const newY = centerY - worldY * newZoom;
+          const newX = centerX - (centerX + worldX) * newZoom;
+          const newY = centerY - (centerY + worldY) * newZoom;
 
           const newViewport = { x: newX, y: newY, zoom: newZoom };
           setLocalViewport(newViewport);
@@ -520,17 +585,19 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         } else if (e.key === '-') {
           e.preventDefault();
           const currentViewport = localViewport;
-          const worldX = (centerX - currentViewport.x) / currentViewport.zoom;
-          const worldY = (centerY - currentViewport.y) / currentViewport.zoom;
+          // For centered coordinate system, zoom towards canvas center
+          const worldX = -currentViewport.x / currentViewport.zoom;
+          const worldY = -currentViewport.y / currentViewport.zoom;
           const newZoom = Math.max(0.1, currentViewport.zoom * 0.8);
-          const newX = centerX - worldX * newZoom;
-          const newY = centerY - worldY * newZoom;
+          const newX = centerX - (centerX + worldX) * newZoom;
+          const newY = centerY - (centerY + worldY) * newZoom;
 
           const newViewport = { x: newX, y: newY, zoom: newZoom };
           setLocalViewport(newViewport);
           updateViewport(newViewport);
         } else if (e.key === '0') {
           e.preventDefault();
+          // Reset to Cartesian origin (0,0) at center of screen
           const newViewport = { x: 0, y: 0, zoom: 1 };
           setLocalViewport(newViewport);
           updateViewport(newViewport);
@@ -712,12 +779,12 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         MozUserSelect: 'none' as any,
       }}
     >
-      {/* Figma-style Grid Background */}
+      {/* Cartesian Grid Background - Aligned with coordinate system */}
       <div
         className="absolute inset-0 canvas-grid pointer-events-none"
         style={{
           backgroundSize: `${20 * localViewport.zoom}px ${20 * localViewport.zoom}px`,
-          backgroundPosition: `${localViewport.x % (20 * localViewport.zoom)}px ${localViewport.y % (20 * localViewport.zoom)}px`,
+          backgroundPosition: `${((canvasRef.current?.getBoundingClientRect().width || 0) / 2 - localViewport.x * localViewport.zoom) % (20 * localViewport.zoom)}px ${((canvasRef.current?.getBoundingClientRect().height || 0) / 2 - localViewport.y * localViewport.zoom) % (20 * localViewport.zoom)}px`,
           willChange: 'background-position, background-size',
           contain: 'strict',
         }}
@@ -727,7 +794,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       <div
         className="absolute canvas-optimized"
         style={{
-          transform: `translate(${localViewport.x}px, ${localViewport.y}px) scale(${localViewport.zoom})`,
+          transform: `translate(${(canvasRef.current?.getBoundingClientRect().width || 0) / 2 - localViewport.x * localViewport.zoom}px, ${(canvasRef.current?.getBoundingClientRect().height || 0) / 2 - localViewport.y * localViewport.zoom}px) scale(${localViewport.zoom})`,
           transformOrigin: '0 0',
           willChange: 'transform',
         }}
@@ -735,44 +802,6 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         {children}
       </div>
 
-      {/* Zoom Controls - Figma Style */}
-      <div className="absolute bottom-4 left-4 flex items-center gap-2 glass-effect rounded-lg shadow-figma p-2 border border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => {
-            const newZoom = Math.max(0.1, localViewport.zoom - 0.1);
-            animateZoom(newZoom);
-          }}
-          className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 transition-colors"
-        >
-          −
-        </button>
-        <span className="px-2 text-sm text-gray-600 dark:text-gray-400 min-w-[60px] text-center">
-          {Math.round(localViewport.zoom * 100)}%
-        </span>
-        <button
-          onClick={() => {
-            const newZoom = Math.min(5, localViewport.zoom + 0.1);
-            animateZoom(newZoom);
-          }}
-          className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 transition-colors"
-        >
-          +
-        </button>
-        <button
-          onClick={() => {
-            animateZoom(1, null);
-            // Reset position after zoom animation
-            setTimeout(() => {
-              const newViewport = { x: 0, y: 0, zoom: 1 };
-              setLocalViewport(newViewport);
-              updateViewport(newViewport);
-            }, 150);
-          }}
-          className="px-3 py-1 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300 transition-colors"
-        >
-          Reset
-        </button>
-      </div>
 
       {/* Zoom Indicator - Shows during zoom operations */}
       {isZooming && (
@@ -799,7 +828,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       {process.env.NODE_ENV === 'development' && (
         <div className="absolute top-4 left-4 glass-effect text-xs px-2 py-1 rounded border border-gray-200 dark:border-gray-700">
           <span className="text-gray-600 dark:text-gray-400">
-            Zoom: {(localViewport.zoom * 100).toFixed(0)}% | X: {Math.round(localViewport.x)} | Y: {Math.round(localViewport.y)}
+            Zoom: {(localViewport.zoom * 100).toFixed(0)}% | {Math.round(localViewport.x)}, {Math.round(localViewport.y)}
           </span>
         </div>
       )}

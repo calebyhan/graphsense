@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
 export function useKeyboardShortcuts() {
-  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, toggleDatasetPanel } = useCanvasStore();
+  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, updateViewport, viewport } = useCanvasStore();
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -25,30 +25,15 @@ export function useKeyboardShortcuts() {
             e.preventDefault();
           }
           break;
-        case 'd':
-          if (!e.ctrlKey && !e.metaKey) {
-            toggleDatasetPanel();
-            e.preventDefault();
-          }
-          break;
-        case 't':
-          if (e.shiftKey) {
-            setSelectedTool('text');
-            e.preventDefault();
-          } else if (!e.ctrlKey && !e.metaKey) {
-            setSelectedTool('table');
-            e.preventDefault();
-          }
-          break;
         case 'c':
           if (!e.ctrlKey && !e.metaKey) {
             setSelectedTool('chart');
             e.preventDefault();
           }
           break;
-        case 'm':
+        case 't':
           if (!e.ctrlKey && !e.metaKey) {
-            setSelectedTool('map');
+            setSelectedTool('text');
             e.preventDefault();
           }
           break;
@@ -68,10 +53,39 @@ export function useKeyboardShortcuts() {
           setSelectedTool('pointer');
           e.preventDefault();
           break;
+        case 'f':
+          if (!e.ctrlKey && !e.metaKey) {
+            // Fit to screen - return to Cartesian origin (0, 0)
+            updateViewport({ x: 0, y: 0, zoom: 0.8 });
+            e.preventDefault();
+          }
+          break;
+      }
+
+      // Zoom shortcuts with Ctrl/Cmd
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case '=':
+          case '+':
+            const newZoomIn = Math.min(5, viewport.zoom * 1.2);
+            updateViewport({ ...viewport, zoom: newZoomIn });
+            e.preventDefault();
+            break;
+          case '-':
+            const newZoomOut = Math.max(0.1, viewport.zoom * 0.8);
+            updateViewport({ ...viewport, zoom: newZoomOut });
+            e.preventDefault();
+            break;
+          case '0':
+            // Fit to screen - return to Cartesian origin (0, 0)
+            updateViewport({ x: 0, y: 0, zoom: 0.8 });
+            e.preventDefault();
+            break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, toggleDatasetPanel]);
+  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, updateViewport, viewport]);
 }

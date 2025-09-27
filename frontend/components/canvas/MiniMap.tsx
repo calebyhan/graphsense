@@ -29,34 +29,38 @@ export function MiniMap({
   onViewportChange
 }: MiniMapProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const miniMapSize = { width: 200, height: 150 };
+  const miniMapSize = { width: 240, height: 160 }; // Adjusted for sidebar
   
   // Calculate scale factors
   const scaleX = miniMapSize.width / canvasSize.width;
   const scaleY = miniMapSize.height / canvasSize.height;
   
-  // Calculate viewport rectangle in minimap coordinates
+  // Calculate viewport rectangle in minimap coordinates for Cartesian coordinate system
+  // Canvas ranges: X(-3000 to +3000), Y(-2000 to +2000)
   const viewportRect = {
-    x: Math.max(0, viewportPosition.x * scaleX),
-    y: Math.max(0, viewportPosition.y * scaleY),
-    width: Math.min(miniMapSize.width, viewportSize.width * scaleX),
-    height: Math.min(miniMapSize.height, viewportSize.height * scaleY)
+    x: (viewportPosition.x + 3000) * scaleX - (viewportSize.width * scaleX) / 2,
+    y: (-viewportPosition.y + 2000) * scaleY - (viewportSize.height * scaleY) / 2,
+    width: viewportSize.width * scaleX,
+    height: viewportSize.height * scaleY
   };
+
 
   const handleMiniMapClick = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
-    
-    // Convert click position to canvas coordinates
-    const canvasX = (clickX / scaleX) - (viewportSize.width / 2);
-    const canvasY = (clickY / scaleY) - (viewportSize.height / 2);
-    
-    onViewportChange({ x: canvasX, y: canvasY });
+
+    // Convert click position to Cartesian coordinates
+    // MiniMap X: 0 to miniMapSize.width -> Canvas X: -3000 to +3000
+    // MiniMap Y: 0 to miniMapSize.height -> Canvas Y: +2000 to -2000 (flipped)
+    const cartesianX = (clickX / scaleX) - 3000;
+    const cartesianY = 2000 - (clickY / scaleY); // Flip Y for Cartesian
+
+    onViewportChange({ x: cartesianX, y: cartesianY });
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-40">
+    <div className="w-full">
       <Card className="shadow-figma-lg glass-effect border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between p-3 pb-2">
           <h4 className="text-xs font-medium text-gray-600 dark:text-gray-400">Canvas Overview</h4>
@@ -84,13 +88,40 @@ export function MiniMap({
               }}
               onClick={handleMiniMapClick}
             >
-              {/* Grid pattern */}
+              {/* Grid pattern for Cartesian coordinate system */}
               <div
                 className="absolute inset-0 opacity-20 dark:opacity-40 canvas-grid"
                 style={{
-                  backgroundSize: `${20 * scaleX}px ${20 * scaleY}px`
+                  backgroundSize: `${20 * scaleX}px ${20 * scaleY}px`,
+                  backgroundPosition: `${3000 * scaleX % (20 * scaleX)}px ${2000 * scaleY % (20 * scaleY)}px`
                 }}
               />
+              
+              {/* Coordinate axes indicators */}
+              <div className="absolute inset-0 pointer-events-none">
+                {/* X-axis (Y=0) */}
+                <div 
+                  className="absolute w-full border-t border-gray-400 dark:border-gray-500 opacity-30"
+                  style={{
+                    top: `${2000 * scaleY}px`,
+                  }}
+                />
+                {/* Y-axis (X=0) */}
+                <div 
+                  className="absolute h-full border-l border-gray-400 dark:border-gray-500 opacity-30"
+                  style={{
+                    left: `${3000 * scaleX}px`,
+                  }}
+                />
+                {/* Origin indicator */}
+                <div 
+                  className="absolute w-2 h-2 bg-red-500 rounded-full transform -translate-x-1 -translate-y-1 opacity-60"
+                  style={{
+                    left: `${3000 * scaleX}px`,
+                    top: `${2000 * scaleY}px`,
+                  }}
+                />
+              </div>
               
               {/* Visualizations */}
               {visualizations.map((viz) => (
@@ -98,8 +129,8 @@ export function MiniMap({
                   key={viz.id}
                   className="absolute bg-indigo-500 rounded-sm opacity-70 border border-indigo-600 hover:opacity-90 transition-opacity"
                   style={{
-                    left: Math.max(0, viz.x * scaleX),
-                    top: Math.max(0, viz.y * scaleY),
+                    left: Math.max(0, (viz.x + 3000) * scaleX),
+                    top: Math.max(0, (-viz.y + 2000) * scaleY), // Flip Y for Cartesian
                     width: Math.max(viz.width * scaleX, 4),
                     height: Math.max(viz.height * scaleY, 4)
                   }}
