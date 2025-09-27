@@ -14,44 +14,40 @@ The core innovation lies in the multi-agent architecture where specialized Gemin
 graph TB
     subgraph "Frontend (Next.js/React/TypeScript)"
         UI[User Interface]
+        PARSER[Client-Side File Parser]
         VIZ[Visualization Engine]
         STATE[State Management]
     end
 
     subgraph "Backend (Python/FastAPI)"
         API[API Gateway]
-        UPLOAD[File Upload Service]
+        PROCESSOR[Data Processing Service]
         PIPELINE[Agentic Pipeline Orchestrator]
     end
 
     subgraph "Agentic Pipeline"
-        PROFILER[Data Profiler Agent]
-        PATTERN[Pattern Recognition Agent]
-        INTENT[Intent Discovery Agent]
+        PROFILER[Enhanced Data Profiler Agent]
         RECOMMENDER[Chart Recommender Agent]
         VALIDATOR[Validation Agent]
-        CONSENSUS[Consensus Manager]
+        BATCH[Batched API Manager]
     end
 
     subgraph "Data Layer"
         SUPABASE[(Supabase)]
         CACHE[Redis Cache]
-        FILES[File Storage]
     end
 
-    UI --> API
+    UI --> PARSER
+    PARSER --> API
     VIZ --> API
-    API --> UPLOAD
+    API --> PROCESSOR
     API --> PIPELINE
     PIPELINE --> PROFILER
-    PIPELINE --> PATTERN
-    PIPELINE --> INTENT
     PIPELINE --> RECOMMENDER
     PIPELINE --> VALIDATOR
-    PIPELINE --> CONSENSUS
+    PIPELINE --> BATCH
     API --> SUPABASE
     API --> CACHE
-    UPLOAD --> FILES
 ```
 
 ### Technology Stack
@@ -87,8 +83,8 @@ graph TB
 #### Core UI Components
 
 ```typescript
-interface DatasetUploadProps {
-  onUpload: (file: File) => Promise<void>;
+interface DatasetSelectorProps {
+  onFileSelect: (processedData: ProcessedDataset) => Promise<void>;
   supportedFormats: string[];
   maxFileSize: number;
 }
@@ -103,7 +99,7 @@ interface VisualizationRecommendation {
 }
 
 interface AgentReasoning {
-  agentType: "profiler" | "pattern" | "intent" | "recommender" | "validator";
+  agentType: "profiler" | "recommender" | "validator";
   reasoning: string;
   confidence: number;
   evidence: string[];
@@ -140,98 +136,88 @@ interface ChartRenderer {
 class AgenticPipelineOrchestrator:
     def __init__(self):
         self.agents = {
-            'profiler': DataProfilerAgent(),
-            'pattern': PatternRecognitionAgent(),
-            'intent': IntentDiscoveryAgent(),
+            'profiler': EnhancedDataProfilerAgent(),
             'recommender': ChartRecommenderAgent(),
             'validator': ValidationAgent()
         }
-        self.consensus_manager = ConsensusManager()
+        self.batch_manager = BatchedAPIManager()
 
     async def process_dataset(
         self,
         dataset: ProcessedDataset
     ) -> List[VisualizationRecommendation]:
-        # Orchestrate multi-agent analysis
+        # Orchestrate 3-agent pipeline with batched API calls
         pass
 ```
 
-#### Specialized Agents
+#### Optimized Agent Architecture
 
 ```python
-class DataProfilerAgent(BaseAgent):
-    """Analyzes dataset characteristics, data types, and quality"""
-
-    async def analyze(self, dataset: ProcessedDataset) -> DataProfile:
-        # Statistical analysis, data type detection, quality assessment
-        pass
-
-class PatternRecognitionAgent(BaseAgent):
-    """Identifies patterns, trends, and relationships in data"""
-
-    async def analyze(self, dataset: ProcessedDataset) -> PatternAnalysis:
-        # Correlation analysis, trend detection, clustering
-        pass
-
-class IntentDiscoveryAgent(BaseAgent):
-    """Infers user intent and visualization goals from data context"""
-
-    async def analyze(
-        self,
-        dataset: ProcessedDataset,
-        context: Optional[str]
-    ) -> IntentAnalysis:
-        # LLM-based intent inference from column names, data patterns
+class EnhancedDataProfilerAgent(BaseAgent):
+    """Comprehensive data analysis including profiling, patterns, and relationships"""
+    
+    async def analyze(self, dataset: ProcessedDataset) -> ComprehensiveDataAnalysis:
+        # Combined: statistical analysis, data type detection, quality assessment,
+        # correlation analysis, trend detection, pattern recognition
         pass
 
 class ChartRecommenderAgent(BaseAgent):
-    """Recommends specific chart types based on analysis"""
-
+    """Recommends from ALL 10 chart types with data-driven reasoning"""
+    
     async def recommend(
         self,
-        profile: DataProfile,
-        patterns: PatternAnalysis,
-        intent: IntentAnalysis
+        analysis: ComprehensiveDataAnalysis
     ) -> List[ChartRecommendation]:
-        # Chart type selection based on best practices and data characteristics
+        # Evaluates ALL chart types: Bar, Line, Scatter, Pie, Histogram, 
+        # Box Plot, Heatmap, Area, Treemap, Sankey
+        # Returns top 3-5 with confidence scores and data mapping
         pass
 
 class ValidationAgent(BaseAgent):
-    """Validates and scores recommendations for quality"""
-
+    """Validates and refines recommendations with quality scoring"""
+    
     async def validate(
         self,
         recommendations: List[ChartRecommendation],
-        dataset: ProcessedDataset
+        analysis: ComprehensiveDataAnalysis
     ) -> List[ValidatedRecommendation]:
-        # Quality scoring, appropriateness validation
+        # Quality scoring, appropriateness validation, recommendation refinement
+        pass
+
+class BatchedAPIManager:
+    """Optimizes Gemini API calls through intelligent batching"""
+    
+    async def batch_agent_calls(
+        self,
+        agents: List[BaseAgent],
+        dataset: ProcessedDataset
+    ) -> Dict[str, Any]:
+        # Batches multiple agent prompts into fewer API calls
+        # Reduces latency and API costs
         pass
 ```
 
 ### Data Processing Pipeline
 
-#### File Processing Service
+#### Data Processing Service
 
 ```python
-class FileProcessingService:
-    def __init__(self):
-        self.parsers = {
-            'csv': CSVParser(),
-            'json': JSONParser(),
-            'xlsx': ExcelParser(),
-            'tsv': TSVParser()
-        }
-
-    async def process_file(self, file: UploadedFile) -> ProcessedDataset:
-        # File parsing, validation, and standardization
+class DataProcessingService:
+    """Processes client-parsed data for agent analysis"""
+    
+    async def process_dataset(self, client_data: Dict) -> ProcessedDataset:
+        # Validate and standardize client-parsed data
+        # Perform additional data quality checks
+        # Prepare data for agent analysis
         pass
 
-    def detect_data_types(self, df: pd.DataFrame) -> Dict[str, DataType]:
-        # Intelligent data type detection
+    def enhance_data_profile(self, dataset: ProcessedDataset) -> ProcessedDataset:
+        # Add server-side data insights
+        # Perform advanced statistical analysis
         pass
 
-    def clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
-        # Data cleaning and preprocessing
+    def validate_client_data(self, data: Dict) -> bool:
+        # Validate data structure and content from client
         pass
 ```
 
@@ -315,9 +301,10 @@ CREATE TABLE datasets (
     user_id UUID REFERENCES auth.users(id),
     filename VARCHAR NOT NULL,
     file_size INTEGER NOT NULL,
-    upload_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    processing_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     processing_status VARCHAR DEFAULT 'pending',
     data_profile JSONB,
+    sample_data JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -437,7 +424,7 @@ services:
 class GeminiAgentConfig:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model = "gemini-1.5-pro"  # Latest Gemini model
+        self.model = "gemini-2.0-flash-exp"  # Latest Gemini model
         self.temperature = 0.1  # Low temperature for consistent reasoning
         self.max_tokens = 4096
 

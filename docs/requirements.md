@@ -8,12 +8,12 @@ The Auto Visualization Agent is a web application that automatically analyzes re
 
 ### Requirement 1
 
-**User Story:** As a data analyst, I want to upload any real-world dataset and receive automatic chart recommendations through an intelligent agentic pipeline, so that I can quickly visualize my data with high-quality, validated recommendations.
+**User Story:** As a data analyst, I want to select any real-world dataset and receive automatic chart recommendations through an intelligent agentic pipeline, so that I can quickly visualize my data with high-quality, validated recommendations.
 
 #### Acceptance Criteria
 
-1. WHEN a user uploads a dataset file (CSV, JSON, Excel) THEN the system SHALL accept and parse the file successfully
-2. WHEN the dataset is parsed THEN the system SHALL initiate an agentic pipeline for dataset profiling and analysis
+1. WHEN a user selects a dataset file (CSV, JSON, Excel) THEN the client SHALL parse the file locally and extract data characteristics
+2. WHEN the dataset is parsed THEN the system SHALL send processed data to initiate an agentic pipeline for analysis
 3. WHEN the agentic pipeline runs THEN the system SHALL use LLM-based agents to analyze data characteristics, patterns, and visualization intent
 4. WHEN initial recommendations are generated THEN the system SHALL implement a feedback loop to validate and refine the recommendations
 5. WHEN analysis is complete THEN the system SHALL provide 3-5 optimal chart types with confidence scores and validation metrics
@@ -59,10 +59,10 @@ The Auto Visualization Agent is a web application that automatically analyzes re
 
 #### Acceptance Criteria
 
-1. WHEN uploading data THEN the system SHALL support CSV, JSON, Excel, and TSV formats
+1. WHEN selecting data files THEN the client SHALL support parsing CSV, JSON, Excel, and TSV formats locally
 2. WHEN analyzing data THEN the system SHALL correctly identify numeric, categorical, temporal, and text data types
-3. WHEN processing datasets THEN the system SHALL handle up to 100MB file sizes efficiently
-4. IF data has hierarchical or nested structures THEN the system SHALL flatten or suggest appropriate visualizations
+3. WHEN processing datasets THEN the client SHALL handle up to 100MB file sizes efficiently in the browser
+4. IF data has hierarchical or nested structures THEN the client SHALL flatten or suggest appropriate visualizations
 5. WHEN encountering time series data THEN the system SHALL automatically detect temporal patterns and recommend time-based charts
 
 ### Requirement 6
@@ -84,7 +84,7 @@ The Auto Visualization Agent is a web application that automatically analyzes re
 
 #### Acceptance Criteria
 
-1. WHEN accessing the application THEN the user SHALL see a clear upload interface with drag-and-drop functionality
+1. WHEN accessing the application THEN the user SHALL see a clear file selection interface with drag-and-drop functionality
 2. WHEN the agentic analysis is running THEN the system SHALL show progress indicators with agent activity updates
 3. WHEN recommendations are ready THEN the system SHALL present them in an organized layout with agent reasoning summaries
 4. IF errors occur during the agentic pipeline THEN the system SHALL provide helpful error messages with suggested solutions
