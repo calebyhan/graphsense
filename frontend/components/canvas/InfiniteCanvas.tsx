@@ -63,7 +63,7 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const lastPinchDistance = useRef<number>(0);
   const [isZooming, setIsZooming] = useState(false);
-  const zoomAnimationId = useRef<number>();
+  const zoomAnimationId = useRef<number | undefined>(undefined);
 
   const {
     viewport,
@@ -292,7 +292,7 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
   }, [localViewport, throttledWheelUpdate, setIsZooming]);
 
   // Touch event handlers for pinch-to-zoom
-  const getTouchDistance = (touches: TouchList) => {
+  const getTouchDistance = (touches: React.TouchList) => {
     if (touches.length < 2) return 0;
     const touch1 = touches[0];
     const touch2 = touches[1];
@@ -302,7 +302,7 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
     );
   };
 
-  const getTouchCenter = (touches: TouchList) => {
+  const getTouchCenter = (touches: React.TouchList) => {
     if (touches.length === 0) return { x: 0, y: 0 };
     if (touches.length === 1) return { x: touches[0].clientX, y: touches[0].clientY };
     
@@ -393,6 +393,148 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
       isDragging.current = false;
     }
   }, []);
+
+  // Native wheel event handler for passive: false
+  const handleNativeWheel = useCallback((e: WheelEvent) => {
+    // Always prevent default to stop browser zoom
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const centerPoint = { x: mouseX, y: mouseY };
+
+    let delta = 0;
+    let isZoomGesture = false;
+
+    // Comprehensive pinch gesture detection for all browsers/platforms
+    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) * 2) {
+      // Zoom gesture detected
+      isZoomGesture = true;
+      
+      // Normalize delta across different browsers and platforms
+      if (e.deltaMode === 1) { // DOM_DELTA_LINE
+        delta = e.deltaY * 33; // Convert lines to pixels
+      } else if (e.deltaMode === 2) { // DOM_DELTA_PAGE
+        delta = e.deltaY * 1000; // Convert pages to pixels
+      } else { // DOM_DELTA_PIXEL
+        delta = e.deltaY;
+      }
+
+      // Handle different browsers' scaling
+      if (Math.abs(delta) > 100) {
+        delta = Math.sign(delta) * Math.min(Math.abs(delta), 100);
+      }
+
+      // Apply zoom with momentum-based scaling
+      const scaleFactor = Math.pow(0.99, delta / 10);
+      const currentZoom = localViewport.zoom;
+      const newZoom = Math.max(0.1, Math.min(5, currentZoom * scaleFactor));
+      
+      if (newZoom !== currentZoom) {
+        const zoomRatio = newZoom / currentZoom;
+        const newX = centerPoint.x - (centerPoint.x - localViewport.x) * zoomRatio;
+        const newY = centerPoint.y - (centerPoint.y - localViewport.y) * zoomRatio;
+
+        const newViewport = {
+          x: newX,
+          y: newY,
+          zoom: newZoom
+        };
+
+        setIsZooming(true);
+        throttledWheelUpdate(newViewport);
+
+        // Clear zoom state after animation
+        if (zoomAnimationId.current) {
+          clearTimeout(zoomAnimationId.current);
+        }
+        zoomAnimationId.current = setTimeout(() => setIsZooming(false), 100) as any;
+      }
+    } else {
+      // Regular scroll/pan
+      const sensitivity = 1;
+      const deltaX = e.deltaX * sensitivity;
+      const deltaY = e.deltaY * sensitivity;
+
+      const newViewport = {
+        ...localViewport,
+        x: localViewport.x - deltaX,
+        y: localViewport.y - deltaY
+      };
+
+      throttledWheelUpdate(newViewport);
+    }
+  }, [localViewport, throttledWheelUpdate]);
+
+  // Wheel event listener with passive: false
+  useEffect(() => {
+    const canvasElement = canvasRef.current;
+    if (!canvasElement) return;
+
+    canvasElement.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => canvasElement.removeEventListener('wheel', handleNativeWheel);
+  }, [handleNativeWheel]);
+
+  // Keyboard shortcuts for zoom
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!canvasRef.current) return;
+
+      // Only handle zoom if the canvas is focused or no input is focused
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        (activeElement as HTMLElement).contentEditable === 'true'
+      );
+
+      if (isInputFocused) return;
+
+      if ((e.ctrlKey || e.metaKey)) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        if (e.key === '=' || e.key === '+') {
+          e.preventDefault();
+          const currentViewport = localViewport;
+          const worldX = (centerX - currentViewport.x) / currentViewport.zoom;
+          const worldY = (centerY - currentViewport.y) / currentViewport.zoom;
+          const newZoom = Math.min(5, currentViewport.zoom * 1.2);
+          const newX = centerX - worldX * newZoom;
+          const newY = centerY - worldY * newZoom;
+
+          const newViewport = { x: newX, y: newY, zoom: newZoom };
+          setLocalViewport(newViewport);
+          updateViewport(newViewport);
+        } else if (e.key === '-') {
+          e.preventDefault();
+          const currentViewport = localViewport;
+          const worldX = (centerX - currentViewport.x) / currentViewport.zoom;
+          const worldY = (centerY - currentViewport.y) / currentViewport.zoom;
+          const newZoom = Math.max(0.1, currentViewport.zoom * 0.8);
+          const newX = centerX - worldX * newZoom;
+          const newY = centerY - worldY * newZoom;
+
+          const newViewport = { x: newX, y: newY, zoom: newZoom };
+          setLocalViewport(newViewport);
+          updateViewport(newViewport);
+        } else if (e.key === '0') {
+          e.preventDefault();
+          const newViewport = { x: 0, y: 0, zoom: 1 };
+          setLocalViewport(newViewport);
+          updateViewport(newViewport);
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [localViewport, updateViewport]);
 
   // Set cursor based on selected tool
   useEffect(() => {

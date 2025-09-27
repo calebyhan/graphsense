@@ -10,7 +10,10 @@ import {
   Map,
   Type,
   Upload,
-  RotateCcw
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
+  Maximize
 } from 'lucide-react';
 import { useCanvasStore, ToolType } from '@/store/useCanvasStore';
 
@@ -54,10 +57,24 @@ function ToolButton({ tool, icon: Icon, label, shortcut, onClick, isSelected: cu
 }
 
 export default function BottomToolbar() {
-  const { resetViewport, isDatasetPanelOpen, toggleDatasetPanel } = useCanvasStore();
+  const { resetViewport, isDatasetPanelOpen, toggleDatasetPanel, viewport, updateViewport } = useCanvasStore();
 
   const handleDatasetToggle = () => {
     toggleDatasetPanel();
+  };
+
+  const handleZoomIn = () => {
+    const newZoom = Math.min(5, viewport.zoom * 1.2);
+    updateViewport({ ...viewport, zoom: newZoom });
+  };
+
+  const handleZoomOut = () => {
+    const newZoom = Math.max(0.1, viewport.zoom * 0.8);
+    updateViewport({ ...viewport, zoom: newZoom });
+  };
+
+  const handleFitToScreen = () => {
+    updateViewport({ x: 0, y: 0, zoom: 1 });
   };
 
   return (
@@ -118,7 +135,41 @@ export default function BottomToolbar() {
           {/* Divider */}
           <div className="w-px h-8 bg-gray-300 mx-2" />
 
+          {/* Zoom Controls */}
+          <button
+            onClick={handleZoomOut}
+            className="flex flex-col items-center justify-center p-3 rounded-lg transition-all duration-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-800 border border-gray-200"
+            title="Zoom Out (Ctrl+-)"
+          >
+            <ZoomOut className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium">Zoom-</span>
+          </button>
+
+          <div className="flex flex-col items-center justify-center p-2 bg-white text-gray-600 border border-gray-200 rounded-lg">
+            <span className="text-xs font-medium">{Math.round(viewport.zoom * 100)}%</span>
+          </div>
+
+          <button
+            onClick={handleZoomIn}
+            className="flex flex-col items-center justify-center p-3 rounded-lg transition-all duration-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-800 border border-gray-200"
+            title="Zoom In (Ctrl++)"
+          >
+            <ZoomIn className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium">Zoom+</span>
+          </button>
+
+          {/* Divider */}
+          <div className="w-px h-8 bg-gray-300 mx-2" />
+
           {/* Utility Actions */}
+          <button
+            onClick={handleFitToScreen}
+            className="flex flex-col items-center justify-center p-3 rounded-lg transition-all duration-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-800 border border-gray-200"
+            title="Fit to Screen (Ctrl+0)"
+          >
+            <Maximize className="h-5 w-5 mb-1" />
+            <span className="text-xs font-medium">Fit</span>
+          </button>
           <button
             onClick={resetViewport}
             className="flex flex-col items-center justify-center p-3 rounded-lg transition-all duration-200 bg-white text-gray-600 hover:bg-gray-50 hover:text-gray-800 border border-gray-200"
