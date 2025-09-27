@@ -182,8 +182,8 @@ export default function AutoVizAgent() {
     if (!selectedDataset) return;
     
     // Place in center of current viewport
-    const centerX = (window.innerWidth / 2 - viewport.x) / viewport.zoom;
-    const centerY = (window.innerHeight / 2 - viewport.y) / viewport.zoom;
+    const centerX = (typeof window !== 'undefined' ? window.innerWidth / 2 : 800) / viewport.zoom - viewport.x / viewport.zoom;
+    const centerY = (typeof window !== 'undefined' ? window.innerHeight / 2 : 600) / viewport.zoom - viewport.y / viewport.zoom;
     
     createVisualization(
       selectedDataset, 
@@ -334,7 +334,7 @@ export default function AutoVizAgent() {
           <MiniMap
             visualizations={visualizationPositions}
             canvasSize={{ width: 10000, height: 10000 }}
-            viewportSize={{ width: window.innerWidth, height: window.innerHeight }}
+            viewportSize={{ width: typeof window !== 'undefined' ? window.innerWidth : 1200, height: typeof window !== 'undefined' ? window.innerHeight : 800 }}
             viewportPosition={{ x: -viewport.x / viewport.zoom, y: -viewport.y / viewport.zoom }}
             onViewportChange={(position) => {
               updateViewport({

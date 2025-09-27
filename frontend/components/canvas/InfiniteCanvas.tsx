@@ -43,9 +43,10 @@ function useRafThrottle<T extends (...args: any[]) => void>(func: T): T {
 
 interface InfiniteCanvasProps {
   children: React.ReactNode;
+  onCanvasClick?: (e: React.MouseEvent) => void;
 }
 
-export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
+export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -63,7 +64,7 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
   const lastPinchDistance = useRef<number>(0);
   const [isZooming, setIsZooming] = useState(false);
-  const zoomAnimationId = useRef<number>();
+  const zoomAnimationId = useRef<number | undefined>(undefined);
 
   const {
     viewport,
@@ -90,7 +91,12 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
       const { clearSelection } = useCanvasStore.getState();
       clearSelection();
     }
-  }, [selectedTool]);
+    
+    // Call onCanvasClick if provided
+    if (onCanvasClick && e.target === e.currentTarget) {
+      onCanvasClick(e);
+    }
+  }, [selectedTool, onCanvasClick]);
 
   // Optimized viewport update with RAF throttling
   const throttledViewportUpdate = useRafThrottle(useCallback((newViewport: typeof viewport) => {
@@ -292,7 +298,7 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
   }, [localViewport, throttledWheelUpdate, setIsZooming]);
 
   // Touch event handlers for pinch-to-zoom
-  const getTouchDistance = (touches: TouchList) => {
+  const getTouchDistance = (touches: React.TouchList) => {
     if (touches.length < 2) return 0;
     const touch1 = touches[0];
     const touch2 = touches[1];
@@ -302,7 +308,7 @@ export default function InfiniteCanvas({ children }: InfiniteCanvasProps) {
     );
   };
 
-  const getTouchCenter = (touches: TouchList) => {
+  const getTouchCenter = (touches: React.TouchList) => {
     if (touches.length === 0) return { x: 0, y: 0 };
     if (touches.length === 1) return { x: touches[0].clientX, y: touches[0].clientY };
     
