@@ -37,7 +37,7 @@ export default function ChartContainer() {
   }
 
   const selectedRecommendation = recommendations?.find(
-    rec => rec.config.title === selectedChart.title
+    rec => rec.config?.title === selectedChart?.title
   );
 
   const chartType = selectedRecommendation?.chartType || 'bar';
@@ -49,7 +49,7 @@ export default function ChartContainer() {
   const shareOptions: ShareOptions = {
     chartConfig: selectedChart,
     chartType,
-    title: selectedChart.title,
+    title: selectedChart?.title || 'Chart',
     description: selectedRecommendation?.justification || `Interactive ${chartType.replace('_', ' ')} chart with AI-generated insights`,
   };
 
@@ -64,7 +64,7 @@ export default function ChartContainer() {
         <div className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-blue-500" />
           <h3 className="text-lg font-semibold text-gray-900">
-            {selectedChart.title}
+            {selectedChart?.title || 'Chart'}
           </h3>
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full capitalize">
             {chartType.replace('_', ' ')}
@@ -91,7 +91,7 @@ export default function ChartContainer() {
           <ExportButton
             elementRef={chartRef}
             chartType={chartType}
-            filename={`${selectedChart.title.replace(/\s+/g, '_').toLowerCase()}`}
+            filename={`${selectedChart?.title?.replace(/\s+/g, '_').toLowerCase() || 'chart'}`}
           />
         </div>
       </div>

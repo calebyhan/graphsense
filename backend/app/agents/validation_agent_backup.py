@@ -26,51 +26,7 @@ class ValidationAgent(BaseAgent):
     def __init__(self):
         super().__init__(AgentType.VALIDATOR)
 
-    async def validate(
-        self,
-        recommendations: List[ChartRecommendation],
-        analysis: ComprehensiveDataAnalysis
-    ) -> List[ValidatedRecommendation]:
-        """Validate and score recommendations"""
-        try:
-            start_time = datetime.now()
-            
-            logger.info(f"Starting validation for {len(recommendations)} recommendations")
-
-            # Generate validation using AI with fallback to rule-based
-            try:
-                validation_data = await self._generate_validation_scores(recommendations, analysis)
-                logger.info("Successfully generated AI validation scores")
-            except Exception as ai_error:
-                logger.warning(f"AI validation failed: {ai_error}, falling back to rule-based validation")
-                validation_data = self._fallback_validation(recommendations, analysis)
-
-            # Parse and validate recommendations
-            validated_recommendations = self._create_validated_recommendations(recommendations, validation_data, analysis)
-
-            # Add processing time
-            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-            for rec in validated_recommendations:
-                rec.reasoning.append(AgentReasoning(
-                    agent_type=AgentType.VALIDATOR,
-                    reasoning="Chart recommendation validated and scored",
-                    confidence=rec.validation_result.validation_score,
-                    evidence=[],
-                    processing_time_ms=processing_time
-                ))
-
-            # Sort by confidence and return top 5
-            validated_recommendations.sort(key=lambda x: x.validation_result.final_score, reverse=True)
-            for i, rec in enumerate(validated_recommendations):
-                rec.final_ranking = i + 1
-
-            logger.info(f"Validation completed successfully for {len(validated_recommendations)} recommendations")
-            return validated_recommendations
-
-        except Exception as e:
-            logger.error(f"Validation failed completely: {e}")
-            # Create minimal fallback validated recommendations
-            return self._create_minimal_validated_recommendations(recommendations)
+    async def validate(\n        self,\n        recommendations: List[ChartRecommendation],\n        analysis: ComprehensiveDataAnalysis\n    ) -> List[ValidatedRecommendation]:\n        \"\"\"Validate and score recommendations\"\"\"\n        try:\n            start_time = datetime.now()\n            \n            logger.info(f\"Starting validation for {len(recommendations)} recommendations\")\n\n            # Generate validation using AI with fallback to rule-based\n            try:\n                validation_data = await self._generate_validation_scores(recommendations, analysis)\n                logger.info(\"Successfully generated AI validation scores\")\n            except Exception as ai_error:\n                logger.warning(f\"AI validation failed: {ai_error}, falling back to rule-based validation\")\n                validation_data = self._fallback_validation(recommendations, analysis)\n\n            # Parse and validate recommendations\n            validated_recommendations = self._create_validated_recommendations(recommendations, validation_data, analysis)\n\n            # Add processing time\n            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)\n            for rec in validated_recommendations:\n                rec.reasoning.append(AgentReasoning(\n                    agent_type=AgentType.VALIDATOR,\n                    reasoning=\"Chart recommendation validated and scored\",\n                    confidence=rec.validation_result.validation_score,\n                    evidence=[],\n                    processing_time_ms=processing_time\n                ))\n\n            # Sort by confidence and return top 5\n            validated_recommendations.sort(key=lambda x: x.validation_result.final_score, reverse=True)\n            for i, rec in enumerate(validated_recommendations):\n                rec.final_ranking = i + 1\n\n            logger.info(f\"Validation completed successfully for {len(validated_recommendations)} recommendations\")\n            return validated_recommendations\n\n        except Exception as e:\n            logger.error(f\"Validation failed completely: {e}\")\n            # Create minimal fallback validated recommendations\n            return self._create_minimal_validated_recommendations(recommendations)
 
     async def _generate_validation_scores(
         self,
@@ -323,40 +279,7 @@ class ValidationAgent(BaseAgent):
         data_quality_score = analysis.data_quality.get("completeness", 0.5)
         score += data_quality_score * 0.2
 
-        return min(1.0, score)
-
-    def _create_minimal_validated_recommendations(
-        self, 
-        recommendations: List[ChartRecommendation]
-    ) -> List[ValidatedRecommendation]:
-        """Create minimal validated recommendations as last resort fallback"""
-        validated_recommendations = []
-        
-        for i, rec in enumerate(recommendations):
-            validation_result = ValidationResult(
-                chart_type=rec.chart_type,
-                validation_score=0.7,  # Default score
-                quality_metrics={"fallback": True},
-                refinements={},
-                final_score=rec.confidence
-            )
-            
-            validated_rec = ValidatedRecommendation(
-                chart_type=rec.chart_type,
-                confidence=rec.confidence,
-                data_mapping=rec.data_mapping,
-                reasoning=rec.reasoning.copy(),
-                validation_result=validation_result,
-                interaction_config=rec.interaction_config,
-                styling_suggestions=rec.styling_suggestions,
-                final_ranking=i + 1
-            )
-            
-            validated_recommendations.append(validated_rec)
-        
-        return validated_recommendations
-
-    async def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return min(1.0, score)\n\n    def _create_minimal_validated_recommendations(\n        self, \n        recommendations: List[ChartRecommendation]\n    ) -> List[ValidatedRecommendation]:\n        \"\"\"Create minimal validated recommendations as last resort fallback\"\"\"\n        validated_recommendations = []\n        \n        for i, rec in enumerate(recommendations):\n            validation_result = ValidationResult(\n                chart_type=rec.chart_type,\n                validation_score=0.7,  # Default score\n                quality_metrics={\"fallback\": True},\n                refinements={},\n                final_score=rec.confidence\n            )\n            \n            validated_rec = ValidatedRecommendation(\n                chart_type=rec.chart_type,\n                confidence=rec.confidence,\n                data_mapping=rec.data_mapping,\n                reasoning=rec.reasoning.copy(),\n                validation_result=validation_result,\n                interaction_config=rec.interaction_config,\n                styling_suggestions=rec.styling_suggestions,\n                final_ranking=i + 1\n            )\n            \n            validated_recommendations.append(validated_rec)\n        \n        return validated_recommendations\n\n    async def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Implement abstract analyze method"""
         # For the ValidationAgent, this method can delegate to validate
         # when given appropriate data structure

@@ -30,7 +30,7 @@ export default function RecommendationsPanel() {
             key={index}
             recommendation={recommendation}
             onSelect={() => selectChart(recommendation.config)}
-            isSelected={selectedChart?.title === recommendation.config.title}
+            isSelected={selectedChart?.title === recommendation.config?.title}
           />
         ))}
       </div>

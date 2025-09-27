@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import time
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
 import google.generativeai as genai
@@ -44,26 +45,39 @@ class BaseAgent(ABC):
         self,
         prompt: str,
         context: Optional[Dict[str, Any]] = None,
-        system_instruction: Optional[str] = None
+        system_instruction: Optional[str] = None,
+        timeout: int = 60
     ) -> str:
-        """Generate response using Gemini API"""
+        """Generate response using Gemini API with timeout"""
         try:
             start_time = time.time()
 
             # Prepare the full prompt
             full_prompt = self._prepare_prompt(prompt, context, system_instruction)
+            self.logger.info(f"Sending request to Gemini model: {self.config.model}")
 
-            # Generate response
-            response = await self.model.generate_content_async(
-                full_prompt,
-                generation_config=GenerationConfig(
-                    temperature=self.config.temperature,
-                    max_output_tokens=self.config.max_tokens
+            # Generate response with timeout
+            try:
+                response = await asyncio.wait_for(
+                    self.model.generate_content_async(
+                        full_prompt,
+                        generation_config=GenerationConfig(
+                            temperature=self.config.temperature,
+                            max_output_tokens=self.config.max_tokens
+                        )
+                    ),
+                    timeout=timeout
                 )
-            )
+            except asyncio.TimeoutError:
+                self.logger.error(f"Gemini API request timed out after {timeout} seconds")
+                raise Exception(f"API request timed out after {timeout} seconds")
 
             processing_time = int((time.time() - start_time) * 1000)
             self.logger.info(f"Generated response in {processing_time}ms")
+
+            if not response.text:
+                self.logger.error("Gemini API returned empty response")
+                raise Exception("Empty response from Gemini API")
 
             return response.text
 

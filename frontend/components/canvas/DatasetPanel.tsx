@@ -5,7 +5,6 @@ import Papa from 'papaparse';
 import { X, Upload, Database, Brain, CheckCircle, TrendingUp, BarChart3, FileText, AlertCircle } from 'lucide-react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
-import { AgentPipeline } from '@/lib/agents/AgentPipeline';
 import DropZone from '@/components/upload/DropZone';
 import AgentProgress from '@/components/analysis/AgentProgress';
 
@@ -21,14 +20,14 @@ export default function DatasetPanel() {
     updateAgentState,
     setDataProfile,
     setPatterns,
-    setRecommendations
+    setRecommendations,
+    startAnalysis
   } = useAnalysisStore();
 
   const [activeTab, setActiveTab] = useState<'upload' | 'data' | 'analysis'>('upload');
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
 
   const handleClose = () => {
@@ -45,8 +44,8 @@ export default function DatasetPanel() {
         size: { width: 400, height: 300 },
         data: { rawData, dataProfile }
       });
-    } else if (type === 'chart' && data) {
-      const recommendation = recommendations?.find(rec => rec.config.title === data.title);
+    } else if (type === 'chart' && data && data.title) {
+      const recommendation = recommendations?.find(rec => rec.config?.title === data.title);
       addElement({
         type: 'chart',
         position: { x: canvasCenter.x + 100, y: canvasCenter.y + 100 },
@@ -69,7 +68,7 @@ export default function DatasetPanel() {
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => {
+        complete: async (results) => {
           if (results.errors.length > 0) {
             const errorMessages = results.errors.map(err => err.message).join(', ');
             setError(`CSV parsing error: ${errorMessages}`);
@@ -92,6 +91,14 @@ export default function DatasetPanel() {
           setRawData(results.data);
           setUploadStatus('success');
           setActiveTab('data'); // Auto-switch to data tab
+
+          // Automatically start the 3-agent analysis
+          try {
+            await startAnalysis(results.data as Array<Record<string, any>>, file.name);
+          } catch (analysisError) {
+            console.warn('Analysis failed to start automatically:', analysisError);
+            // Don't change upload status - file was parsed successfully
+          }
         },
         error: (error) => {
           setError(`Failed to parse CSV file: ${error.message}`);
@@ -105,50 +112,33 @@ export default function DatasetPanel() {
   };
 
   const handleSelectChart = (chartConfig: any) => {
+    if (!chartConfig) {
+      console.warn('handleSelectChart called with invalid chartConfig:', chartConfig);
+      return;
+    }
     selectChart(chartConfig);
     handleAddToCanvas('chart', chartConfig);
   };
 
-  const runAnalysis = async () => {
-    if (!rawData || rawData.length === 0) return;
-
-    setIsAnalyzing(true);
-
-    try {
-      const pipeline = new AgentPipeline((agent, state) => {
-        updateAgentState(agent as keyof typeof agentStates, state as any);
-      });
-
-      const result = await pipeline.analyze(rawData);
-
-      setDataProfile(result.profile);
-      setPatterns(result.patterns);
-      setRecommendations(result.recommendations);
-      setHasAnalyzed(true);
-      setActiveTab('analysis'); // Auto-switch to analysis tab when complete
-    } catch (err) {
-      console.error('Analysis error:', err);
-    } finally {
-      setIsAnalyzing(false);
-    }
+  // Backend analysis is handled by the store, we just need to track when it's complete
+  const checkAnalysisComplete = () => {
+    const { profiler, recommender, validator } = agentStates;
+    return profiler === 'complete' && recommender === 'complete' && validator === 'complete';
   };
 
-  // Auto-start analysis when data is available
+  // Auto-switch to analysis tab when backend analysis completes
   useEffect(() => {
-    if (rawData && !isAnalyzing && !hasAnalyzed) {
-      const timer = setTimeout(() => {
-        runAnalysis();
-      }, 1000); // Give user time to see the upload success
-      return () => clearTimeout(timer);
+    if (checkAnalysisComplete() && !hasAnalyzed) {
+      setActiveTab('analysis');
+      setHasAnalyzed(true);
     }
-  }, [rawData, isAnalyzing, hasAnalyzed]);
+  }, [agentStates, hasAnalyzed]);
 
   const resetUpload = () => {
     setUploadStatus('idle');
     setFileName('');
     setError('');
     setRawData(null);
-    setIsAnalyzing(false);
     setHasAnalyzed(false);
   };
 
@@ -388,13 +378,13 @@ export default function DatasetPanel() {
                       <div
                         key={index}
                         className="p-3 border border-gray-200 rounded-lg hover:border-blue-300 cursor-pointer transition-colors"
-                        onClick={() => handleSelectChart(rec.config)}
+                        onClick={() => rec.config && handleSelectChart(rec.config)}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <BarChart3 className="h-4 w-4 text-blue-600" />
                             <span className="text-sm font-medium text-gray-900">
-                              {rec.config.title}
+                              {rec.config?.title || 'Untitled Chart'}
                             </span>
                           </div>
                           <span className="text-xs text-gray-500">

@@ -57,7 +57,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   updateViewport: (viewport) => {
     // Batch viewport updates for better performance
-    set({ viewport }, false, 'updateViewport');
+    set({ viewport });
   },
 
   resetViewport: () => set({ viewport: { x: 0, y: 0, zoom: 1 } }),
@@ -85,7 +85,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       canvasElements: state.canvasElements.map((element) =>
         element.id === id ? { ...element, ...updates } : element
       ),
-    }), false, 'updateElement');
+      selectedElements: []
+    }));
   },
 
   removeElement: (id) => {
@@ -102,7 +103,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ...element,
         selected: ids.includes(element.id),
       })),
-    }), false, 'selectElements');
+    }));
   },
 
   clearSelection: () => {
@@ -112,7 +113,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ...element,
         selected: false,
       })),
-    }), false, 'clearSelection');
+    }));
   },
 
   getElementById: (id) => {

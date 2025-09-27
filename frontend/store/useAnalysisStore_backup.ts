@@ -48,31 +48,29 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
 
   // New method to start analysis with the backend
   startAnalysis: async (data: Array<Record<string, any>>, filename?: string) => {
-    const { setCurrentDatasetId, setLoading, setError, updateAgentState } = get();
+    const { setLoading, setError, setCurrentDatasetId, updateAgentState } = get();
+
+    setLoading(true);
+    setError(null);
+    updateAgentState('profiler', 'idle');
+
+    updateAgentState('recommender', 'idle');
 
     try {
-      setLoading(true);
-      setError(null);
-      
-      // Reset agent states
-      updateAgentState('profiler', 'idle');
-      updateAgentState('recommender', 'idle');
-      updateAgentState('validator', 'idle');
+      const response = await backendAPI.analyzeDataset({
+        data,
+        filename: filename || 'dataset.csv',
+        file_type: 'csv'
+      });
 
-      const response = await backendAPI.analyzeDataset({ data, filename });
-      
-      if (response.success) {
-        setCurrentDatasetId(response.dataset_id);
-        
-        // Start polling for status updates
-        get().pollAnalysisStatus(response.dataset_id);
-      } else {
-        throw new Error(response.message || 'Analysis failed to start');
-      }
+      setCurrentDatasetId(response.dataset_id);
+
+      // Start polling for status updates
+      get().pollAnalysisStatus(response.dataset_id);
 
     } catch (error) {
-      console.error('Analysis failed to start:', error);
-      setError(error instanceof Error ? error.message : 'Failed to start analysis');
+      console.error('Analysis start failed:', error);
+      setError(error instanceof Error ? error.message : 'Analysis failed');
       setLoading(false);
     }
   },
@@ -88,15 +86,7 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
       if (status.progress) {
         updateAgentState('profiler', status.progress.profiler ? 'complete' : 'running');
         updateAgentState('recommender', status.progress.recommender ? 'complete' : status.progress.profiler ? 'running' : 'idle');
-        
-        // Fix validator logic: if status is still "processing" and recommender is done but validator isn't, then validator is running
-        if (status.progress.validator) {
-          updateAgentState('validator', 'complete');
-        } else if (status.progress.recommender && status.status === 'processing') {
-          updateAgentState('validator', 'running');
-        } else {
-          updateAgentState('validator', 'idle');
-        }
+        updateAgentState('validator', status.progress.validator ? 'complete' : status.progress.recommender ? 'running' : 'idle');
       }
 
       // If analysis is completed, load results
@@ -106,12 +96,9 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
       } else if (status.status === 'failed') {
         setError('Analysis failed');
         setLoading(false);
-      } else if (status.status === 'processing') {
+      } else {
         // Continue polling if still processing
         setTimeout(() => get().pollAnalysisStatus(datasetId), 2000);
-      } else {
-        // Unknown status, continue polling with longer interval
-        setTimeout(() => get().pollAnalysisStatus(datasetId), 5000);
       }
 
     } catch (error) {
@@ -133,13 +120,7 @@ export const useAnalysisStore = create<AnalysisStore>((set, get) => ({
       }
 
       if (results.data_profile) {
-        // Map backend data profile to frontend format
-        const mappedProfile: DataProfile = {
-          columns: [], // TODO: Map from backend format
-          rowCount: results.data_profile.statistical_summary?.row_count || 0,
-          dataQuality: 'medium' // TODO: Map from backend format
-        };
-        setDataProfile(mappedProfile);
+        setDataProfile(results.data_profile);
       }
 
     } catch (error) {

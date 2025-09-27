@@ -48,7 +48,7 @@ export default function CanvasPage() {
       case 'chart':
         if (selectedChart) {
           const recommendation = recommendations?.find(
-            rec => rec.config.title === selectedChart.title
+            rec => rec.config?.title === selectedChart?.title
           );
           addElement({
             type: 'chart',
