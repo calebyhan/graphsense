@@ -21,7 +21,11 @@ export default function DatasetPanel() {
     setDataProfile,
     setPatterns,
     setRecommendations,
-    startAnalysis
+    startAnalysis,
+    errorType,
+    showErrorNotification,
+    setShowErrorNotification,
+    retryAnalysis
   } = useAnalysisStore();
 
   const [activeTab, setActiveTab] = useState<'upload' | 'data' | 'analysis'>('upload');
@@ -374,7 +378,13 @@ export default function DatasetPanel() {
               {/* Agent Progress */}
               <div className="mb-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Analysis Progress</h4>
-                <AgentProgress agentStates={agentStates} />
+                <AgentProgress 
+                  agentStates={agentStates}
+                  errorType={errorType}
+                  showErrorNotification={showErrorNotification}
+                  onCloseErrorNotification={() => setShowErrorNotification(false)}
+                  onRetryAnalysis={retryAnalysis}
+                />
               </div>
 
               {/* Recommendations or Analysis Status */}

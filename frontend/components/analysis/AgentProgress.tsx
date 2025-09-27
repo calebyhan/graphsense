@@ -1,10 +1,15 @@
 'use client';
 
 import { AgentState } from '@/lib/types';
-import { CheckCircle, Loader2, Brain, Database, BarChart3, Shield } from 'lucide-react';
+import { CheckCircle, Loader2, Brain, Database, BarChart3, Shield, AlertTriangle, Clock } from 'lucide-react';
+import ErrorNotification, { ErrorType } from '@/components/common/ErrorNotification';
 
 interface AgentProgressProps {
   agentStates: AgentState;
+  errorType?: ErrorType | null;
+  showErrorNotification?: boolean;
+  onCloseErrorNotification?: () => void;
+  onRetryAnalysis?: () => void;
 }
 
 const agentInfo = {
@@ -28,9 +33,19 @@ const agentInfo = {
   }
 };
 
-export default function AgentProgress({ agentStates }: AgentProgressProps) {
-  const getAgentIcon = (state: string, agentKey: keyof AgentState) => {
+export default function AgentProgress({ 
+  agentStates, 
+  errorType, 
+  showErrorNotification = false,
+  onCloseErrorNotification,
+  onRetryAnalysis 
+}: AgentProgressProps) {
+  const getAgentIcon = (state: string, agentKey: keyof AgentState, hasError: boolean) => {
     const AgentIcon = agentInfo[agentKey].icon;
+
+    if (hasError && state === 'running') {
+      return <AlertTriangle className="h-5 w-5 text-red-500" />;
+    }
 
     switch (state) {
       case 'running':
@@ -42,7 +57,11 @@ export default function AgentProgress({ agentStates }: AgentProgressProps) {
     }
   };
 
-  const getStateColor = (state: string) => {
+  const getStateColor = (state: string, hasError: boolean) => {
+    if (hasError && state === 'running') {
+      return 'text-red-600';
+    }
+    
     switch (state) {
       case 'running':
         return 'text-blue-600';
@@ -57,9 +76,30 @@ export default function AgentProgress({ agentStates }: AgentProgressProps) {
   const completedCount = agentOrder.filter(key => agentStates[key] === 'complete').length;
   const currentlyRunning = agentOrder.find(key => agentStates[key] === 'running');
   const overallProgress = (completedCount / agentOrder.length) * 100;
+  
+  // Check if there's an error affecting the current running agent
+  const hasError = errorType && (errorType === 'timeout' || errorType === 'rate_limit' || errorType === 'general');
+  const errorMessage = errorType === 'rate_limit' 
+    ? 'AI service rate limited. Retrying automatically...' 
+    : errorType === 'timeout'
+    ? 'Analysis timeout detected. Agent may be stalled.'
+    : errorType === 'general'
+    ? 'Analysis error occurred.'
+    : null;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+    <>
+      {/* Error Notification */}
+      {errorType && showErrorNotification && (
+        <ErrorNotification
+          isVisible={showErrorNotification}
+          errorType={errorType}
+          onClose={() => onCloseErrorNotification?.()}
+          onRetry={onRetryAnalysis}
+        />
+      )}
+      
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-gray-900">
           3-Agent AI Pipeline
@@ -102,7 +142,7 @@ export default function AgentProgress({ agentStates }: AgentProgressProps) {
               )}
 
               <div className="flex-shrink-0 mt-0.5 relative z-10">
-                {getAgentIcon(state, agentKey)}
+                {getAgentIcon(state, agentKey, Boolean(hasError && currentlyRunning === agentKey))}
               </div>
 
               <div className="flex-1 min-w-0">
@@ -111,24 +151,41 @@ export default function AgentProgress({ agentStates }: AgentProgressProps) {
                     {agent.name}
                   </h4>
                   <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                    hasError && state === 'running' && currentlyRunning === agentKey ? 'bg-red-100 text-red-700' :
                     state === 'running' ? 'bg-blue-100 text-blue-700' :
                     state === 'complete' ? 'bg-green-100 text-green-700' :
                     'bg-gray-100 text-gray-600'
                   }`}>
-                    {state === 'running' ? 'Running...' :
-                     state === 'complete' ? 'Complete' :
-                     isNext ? 'Next' : 'Pending'}
+                    {hasError && state === 'running' && currentlyRunning === agentKey ? (
+                      errorType === 'rate_limit' ? 'Rate Limited' :
+                      errorType === 'timeout' ? 'Timeout' : 'Error'
+                    ) : (
+                      state === 'running' ? 'Running...' :
+                      state === 'complete' ? 'Complete' :
+                      isNext ? 'Next' : 'Pending'
+                    )}
                   </span>
                 </div>
 
                 <p className="text-sm text-gray-600">
-                  {state === 'running' ? agent.activeDescription : agent.description}
+                  {hasError && state === 'running' && currentlyRunning === agentKey 
+                    ? errorMessage
+                    : state === 'running' 
+                    ? agent.activeDescription 
+                    : agent.description
+                  }
                 </p>
 
                 {state === 'running' && (
                   <div className="mt-3">
-                    <div className="w-full bg-blue-200 rounded-full h-1.5">
-                      <div className="bg-blue-500 h-1.5 rounded-full animate-pulse w-2/3"></div>
+                    <div className={`w-full rounded-full h-1.5 ${
+                      hasError && currentlyRunning === agentKey ? 'bg-red-200' : 'bg-blue-200'
+                    }`}>
+                      <div className={`h-1.5 rounded-full w-2/3 ${
+                        hasError && currentlyRunning === agentKey 
+                          ? 'bg-red-500 animate-pulse' 
+                          : 'bg-blue-500 animate-pulse'
+                      }`}></div>
                     </div>
                   </div>
                 )}
@@ -149,5 +206,6 @@ export default function AgentProgress({ agentStates }: AgentProgressProps) {
         </div>
       )}
     </div>
+    </>
   );
 }

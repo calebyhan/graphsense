@@ -52,8 +52,21 @@ export class BackendAPIClient {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || `API request failed: ${response.status}`);
+        let errorMessage = `API request failed: ${response.status}`;
+        
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If can't parse JSON, use status-based message
+          if (response.status === 429) {
+            errorMessage = 'Rate limit exceeded. Please try again later.';
+          }
+        }
+        
+        const error = new Error(errorMessage);
+        (error as any).status = response.status;
+        throw error;
       }
 
       return await response.json();
@@ -71,8 +84,21 @@ export class BackendAPIClient {
       const response = await fetch(`${this.baseURL}/api/analysis/status/${datasetId}`);
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || `Status request failed: ${response.status}`);
+        let errorMessage = `Status request failed: ${response.status}`;
+        
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If can't parse JSON, use status-based message
+          if (response.status === 429) {
+            errorMessage = 'Rate limit exceeded. Please try again later.';
+          }
+        }
+        
+        const error = new Error(errorMessage);
+        (error as any).status = response.status;
+        throw error;
       }
 
       return await response.json();
@@ -90,8 +116,21 @@ export class BackendAPIClient {
       const response = await fetch(`${this.baseURL}/api/analysis/results/${datasetId}`);
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || `Results request failed: ${response.status}`);
+        let errorMessage = `Results request failed: ${response.status}`;
+        
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If can't parse JSON, use status-based message
+          if (response.status === 429) {
+            errorMessage = 'Rate limit exceeded. Please try again later.';
+          }
+        }
+        
+        const error = new Error(errorMessage);
+        (error as any).status = response.status;
+        throw error;
       }
 
       return await response.json();

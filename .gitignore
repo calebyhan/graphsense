@@ -54,9 +54,11 @@ dist/
 downloads/
 eggs/
 .eggs/
+# Only ignore Python distribution lib directories, not frontend source
 build/lib/
 dist/lib/
 *.egg-info/lib/
+!frontend/lib/
 lib64/
 parts/
 sdist/

@@ -13,7 +13,11 @@ export default function AnalysisSection() {
     updateAgentState,
     setDataProfile,
     setPatterns,
-    setRecommendations
+    setRecommendations,
+    errorType,
+    showErrorNotification,
+    setShowErrorNotification,
+    retryAnalysis
   } = useAnalysisStore();
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -116,7 +120,13 @@ export default function AnalysisSection() {
 
       {/* Agent Progress */}
       {(isAnalyzing || isComplete) && (
-        <AgentProgress agentStates={agentStates} />
+        <AgentProgress 
+          agentStates={agentStates}
+          errorType={errorType}
+          showErrorNotification={showErrorNotification}
+          onCloseErrorNotification={() => setShowErrorNotification(false)}
+          onRetryAnalysis={retryAnalysis}
+        />
       )}
     </div>
   );
