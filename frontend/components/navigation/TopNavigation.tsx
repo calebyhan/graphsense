@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Share, Download, History, Users, Settings, Edit3, Bell, ChevronDown, Sun, Moon, Brain } from 'lucide-react';
+import { Share, Download, History, Users, Settings, Edit3, Bell, ChevronDown, Sun, Moon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
@@ -35,7 +35,7 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode }: TopNavigationPro
       {/* Left Section - Project Name */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
-          <Brain className="h-6 w-6 text-indigo-600" />
+          <img src="/favicon.ico" alt="GraphSense" className="h-12 w-12 rounded-sm" />
           <div className="flex items-center gap-2">
             {isEditing ? (
               <input
