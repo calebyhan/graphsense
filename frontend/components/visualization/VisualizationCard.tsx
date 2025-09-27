@@ -221,7 +221,7 @@ export function VisualizationCard({
       default:
         return (
           <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-            {type.charAt(0).toUpperCase() + type.slice(1)} Chart
+            {type ? (type.charAt(0).toUpperCase() + type.slice(1)) : 'Chart'} Chart
           </div>
         );
     }
