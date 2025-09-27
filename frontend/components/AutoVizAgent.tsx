@@ -65,7 +65,7 @@ export default function AutoVizAgent() {
   
   // Canvas state
   const { viewport, updateViewport } = useCanvasStore();
-  const { rawData, dataProfile } = useAnalysisStore();
+  const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading } = useAnalysisStore();
   
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -146,16 +146,34 @@ export default function AutoVizAgent() {
     }
   }, [isDarkMode]);
 
+  // Sync recommendations from store
+  React.useEffect(() => {
+    if (storeRecommendations && storeRecommendations.length > 0) {
+      const formattedRecommendations = storeRecommendations.map((rec, index) => {
+        const chartType = rec.chart_type || 'chart';
+        return {
+          id: `rec-${index}`,
+          type: chartType as any,
+          name: chartType ? (chartType.charAt(0).toUpperCase() + chartType.slice(1)) : 'Chart',
+          confidence: rec.confidence || 85,
+          reasoning: rec.reasoning || `Great for your ${chartType} visualization needs`,
+          description: rec.description || `Shows data using ${chartType} format`,
+          bestFor: rec.best_for || ['Data visualization'],
+          config: rec.config
+        };
+      });
+      setRecommendations(formattedRecommendations);
+    }
+  }, [storeRecommendations]);
+
+  // Sync analysis state
+  React.useEffect(() => {
+    setIsAnalyzing(isLoading);
+  }, [isLoading]);
+
   // Handle dataset selection from DataPanel
   const handleDatasetSelect = useCallback(async (dataset: Dataset) => {
     setSelectedDataset(dataset);
-    setIsAnalyzing(true);
-    
-    // Simulate backend analysis
-    setTimeout(() => {
-      setRecommendations(mockRecommendations);
-      setIsAnalyzing(false);
-    }, 2000);
   }, []);
 
   // Handle drag & drop from DataPanel to Canvas
@@ -210,7 +228,7 @@ export default function AutoVizAgent() {
   ) => {
     const newViz: Visualization = {
       id: `viz-${Date.now()}`,
-      title: `${type.charAt(0).toUpperCase() + type.slice(1)} Chart`,
+      title: type ? `${type.charAt(0).toUpperCase() + type.slice(1)} Chart` : 'Chart',
       type,
       dataSource: dataset.name,
       position,
@@ -273,11 +291,13 @@ export default function AutoVizAgent() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Data Panel - Left Sidebar */}
-        <DataPanel 
-          datasets={mockDatasets}
-          selectedDataset={selectedDataset}
-          onDatasetSelect={handleDatasetSelect}
-        />
+        <div className="flex flex-col">
+          <DataPanel
+            datasets={mockDatasets}
+            selectedDataset={selectedDataset}
+            onDatasetSelect={handleDatasetSelect}
+          />
+        </div>
 
         {/* Canvas Area - Center */}
         <div className="flex-1 relative overflow-hidden">

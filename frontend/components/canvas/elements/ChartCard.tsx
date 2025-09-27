@@ -33,7 +33,7 @@ export default function ChartCard({ config, chartType, recommendation, title }: 
     }
 
     // Fallback to chart type
-    return `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`;
+    return chartType ? `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart` : 'Chart';
   };
 
   return (
