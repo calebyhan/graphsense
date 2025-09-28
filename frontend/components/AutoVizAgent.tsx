@@ -108,12 +108,31 @@ export default function AutoVizAgent() {
     if (storeRecommendations && storeRecommendations.length > 0) {
       const formattedRecommendations = storeRecommendations.map((rec: any, index) => {
         const chartType = rec.chart_type || rec.type || 'chart';
+        
+        // Extract reasoning text from reasoning array
+        let reasoningText = `Great for your ${chartType} visualization needs`;
+        if (rec.reasoning && Array.isArray(rec.reasoning) && rec.reasoning.length > 0) {
+          // Get the reasoning text from the first reasoning object
+          const firstReasoning = rec.reasoning[0];
+          if (typeof firstReasoning === 'string') {
+            reasoningText = firstReasoning;
+          } else if (typeof firstReasoning === 'object' && firstReasoning !== null) {
+            reasoningText = firstReasoning.reasoning || reasoningText;
+          }
+        } else if (typeof rec.reasoning === 'string') {
+          reasoningText = rec.reasoning;
+        } else if (typeof rec.reasoning === 'object' && rec.reasoning !== null && 'reasoning' in rec.reasoning) {
+          reasoningText = String(rec.reasoning.reasoning);
+        } else if (rec.justification && typeof rec.justification === 'string') {
+          reasoningText = rec.justification;
+        }
+        
         return {
           id: `rec-${index}`,
           type: chartType as any,
           name: chartType ? (chartType.charAt(0).toUpperCase() + chartType.slice(1)) : 'Chart',
           confidence: rec.confidence || 85,
-          reasoning: rec.reasoning || rec.justification || `Great for your ${chartType} visualization needs`,
+          reasoning: reasoningText,
           description: rec.description || `Shows data using ${chartType} format`,
           bestFor: rec.best_for || rec.bestFor || ['Data visualization'],
           config: rec.config
@@ -149,7 +168,7 @@ export default function AutoVizAgent() {
 
     if (rawData && !isLoading && !isCreating) {
       // Check if dataset already exists to avoid duplicates
-      const existingDataset = datasets.find(d => d.data === rawData);
+      const existingDataset = datasets.find((d: Dataset) => d.data === rawData);
       if (existingDataset) {
         console.log('✅ Dataset already exists, selecting it:', existingDataset);
         setSelectedDataset(existingDataset);

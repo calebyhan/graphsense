@@ -55,6 +55,34 @@ export function VisualizationPanel({
   
   const { viewport, updateViewport } = useCanvasStore();
 
+  // Helper function to safely extract reasoning text
+  const getReasoningText = (reasoning: any): string => {
+    if (typeof reasoning === 'string') {
+      return reasoning;
+    }
+    
+    if (Array.isArray(reasoning) && reasoning.length > 0) {
+      const firstReasoning = reasoning[0];
+      if (typeof firstReasoning === 'string') {
+        return firstReasoning;
+      }
+      if (typeof firstReasoning === 'object' && firstReasoning !== null) {
+        return firstReasoning.reasoning || 'AI-generated recommendation';
+      }
+    }
+    
+    if (typeof reasoning === 'object' && reasoning !== null) {
+      // If it's an object, try to extract the reasoning field
+      if ('reasoning' in reasoning) {
+        return String(reasoning.reasoning);
+      }
+      // As a last resort, don't render the object directly
+      return 'AI-generated recommendation';
+    }
+    
+    return 'AI-generated recommendation';
+  };
+
   // Auto-switch between tabs based on analysis state
   useEffect(() => {
     const isAnalysisComplete = Object.values(agentStates).every(state => state === 'complete');
@@ -259,7 +287,9 @@ export function VisualizationPanel({
                   
                   <div className="flex items-start gap-1 text-xs text-gray-500 dark:text-gray-400 mb-2">
                     <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                    <span className="line-clamp-2">{rec.reasoning}</span>
+                    <span className="line-clamp-2">
+                      {getReasoningText(rec.reasoning)}
+                    </span>
                   </div>
                   
                   <div className="flex flex-wrap gap-1">
