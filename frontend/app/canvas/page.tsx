@@ -3,6 +3,7 @@
 import React from 'react';
 import AutoVizAgent from '@/components/AutoVizAgent';
 import DataLoader from '@/components/canvas/DataLoader';
+import { CanvasDebugTools } from '@/components/debug/CanvasDebugTools';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 export default function CanvasPage() {
@@ -22,6 +23,9 @@ export default function CanvasPage() {
       
       {/* Data Loader */}
       <DataLoader />
+
+      {/* Debug Tools - Only in development */}
+      {process.env.NODE_ENV === 'development' && <CanvasDebugTools />}
 
     </>
   );

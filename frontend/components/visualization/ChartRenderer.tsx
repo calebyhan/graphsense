@@ -21,8 +21,10 @@ import {
   Area,
   Treemap,
 } from 'recharts';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import * as d3 from 'd3';
+import { useChartPerformance } from '@/hooks/usePerformance';
+import { PerformanceIndicator } from '@/components/common/PerformanceIndicator';
 
 type ChartType = 'line' | 'bar' | 'scatter' | 'pie' | 'histogram' | 'box_plot' | 'heatmap' | 'area' | 'treemap' | 'sankey';
 
@@ -36,12 +38,85 @@ const COLORS = [
   '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1'
 ];
 
+// Performance optimization constants
+const MAX_POINTS_SCATTER = 1000;
+const MAX_POINTS_LINE = 2000;
+const MAX_POINTS_BAR = 500;
+const MAX_POINTS_HEATMAP = 10000;
+const SAMPLE_SIZE_DETECTION = 100; // For field type detection
+
+// Intelligent data sampling function
+const sampleData = (data: any[], maxPoints: number, chartType: string) => {
+  if (!data || data.length <= maxPoints) return data;
+  
+  console.log(`🎯 Sampling ${data.length} points down to ${maxPoints} for ${chartType} chart`);
+  
+  // For time-series data, prefer systematic sampling
+  if (chartType === 'line' || chartType === 'area') {
+    const step = Math.floor(data.length / maxPoints);
+    return data.filter((_, index) => index % step === 0).slice(0, maxPoints);
+  }
+  
+  // For other charts, use random sampling
+  const indices = new Set<number>();
+  while (indices.size < maxPoints) {
+    indices.add(Math.floor(Math.random() * data.length));
+  }
+  return Array.from(indices).sort((a, b) => a - b).map(i => data[i]);
+};
+
+// Memoized field detection
+const detectFieldTypes = (data: any[], sampleSize: number = SAMPLE_SIZE_DETECTION) => {
+  if (!data || data.length === 0) return { numeric: [], categorical: [] };
+  
+  const sample = data.slice(0, Math.min(sampleSize, data.length));
+  const keys = Object.keys(sample[0] || {});
+  
+  const numeric = keys.filter(key => {
+    const values = sample.map(row => row[key]);
+    const numericValues = values.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+    return numericValues.length > values.length * 0.7;
+  });
+  
+  const categorical = keys.filter(key => !numeric.includes(key));
+  
+  return { numeric, categorical };
+};
+
 // D3.js Chart Components
-const D3Histogram = ({ config }: { config: ChartConfig }) => {
+const D3Histogram = memo(({ config }: { config: ChartConfig }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Memoize data processing for performance
+  const processedData = useMemo(() => {
+    if (!config.data || config.data.length === 0) return null;
+    
+    // Sample data for large datasets
+    const sampledData = sampleData(config.data, MAX_POINTS_LINE, 'histogram');
+    
+    // Auto-detect numeric field for histogram
+    let valueField = config.value || config.yAxis || config.xAxis || config.chartSpecificConfig?.value;
+    
+    if (!valueField) {
+      const { numeric } = detectFieldTypes(sampledData);
+      valueField = numeric[0];
+      console.log('📊 Histogram auto-detected field:', valueField);
+    }
+    
+    if (!valueField) return null;
+    
+    const numericData = sampledData.map(d => +d[valueField!]).filter(d => !isNaN(d));
+    
+    return {
+      data: numericData,
+      valueField,
+      originalLength: config.data.length,
+      sampledLength: sampledData.length
+    };
+  }, [config.data, config.value, config.yAxis, config.xAxis, config.chartSpecificConfig?.value]);
+
   useEffect(() => {
-    if (!svgRef.current || !config.data) return;
+    if (!svgRef.current || !processedData) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -50,47 +125,21 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
     const width = 600 - margin.left - margin.right;
     const height = 300 - margin.bottom - margin.top;
 
-    // Auto-detect numeric field for histogram
-    let valueField = config.value || config.yAxis || config.xAxis || config.chartSpecificConfig?.value;
+    const { data: numericData } = processedData;
     
-    if (!valueField) {
-      const sampleData = config.data?.[0];
-      if (sampleData) {
-        const numericFields = Object.keys(sampleData).filter(key => {
-          const value = sampleData[key];
-          return !isNaN(parseFloat(value)) && isFinite(value);
-        });
-        valueField = numericFields[0];
-        console.log('📊 Histogram auto-detected field:', valueField, 'from', numericFields);
-      }
-    }
-    
-    if (!valueField) {
+    if (numericData.length === 0) {
       svg.append("text")
         .attr("x", 300)
         .attr("y", 150)
         .attr("text-anchor", "middle")
-        .text("Histogram requires a numeric field");
+        .text("No valid numeric data for histogram");
       return;
     }
 
-    const data = config.data
-      .map(d => +d[valueField])
-      .filter(d => !isNaN(d) && isFinite(d));
-
-    if (data.length === 0) {
-      svg.append("text")
-        .attr("x", 300)
-        .attr("y", 150)
-        .attr("text-anchor", "middle")
-        .text("No numeric data available");
-      return;
-    }
-
-    const bins = config.bins || Math.min(30, Math.max(10, Math.ceil(Math.sqrt(data.length))));
+    const bins = config.bins || Math.min(30, Math.max(10, Math.ceil(Math.sqrt(numericData.length))));
 
     const x = d3.scaleLinear()
-      .domain(d3.extent(data) as [number, number])
+      .domain(d3.extent(numericData) as [number, number])
       .range([0, width]);
 
     const histogram = d3.histogram()
@@ -98,7 +147,7 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
       .domain(x.domain() as [number, number])
       .thresholds(bins);
 
-    const binData = histogram(data);
+    const binData = histogram(numericData);
 
     const y = d3.scaleLinear()
       .domain([0, d3.max(binData, d => d.length)!])
@@ -134,7 +183,7 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
       .attr("y", 35)
       .attr("text-anchor", "middle")
       .attr("fill", "black")
-      .text(valueField);
+      .text(processedData.valueField);
 
     g.append("g")
       .call(d3.axisLeft(y))
@@ -148,8 +197,8 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
 
     // Add statistics overlay if requested
     if (config.chartSpecificConfig?.showStats) {
-      const mean = d3.mean(data)!;
-      const std = d3.deviation(data)!;
+      const mean = d3.mean(numericData)!;
+      const std = d3.deviation(numericData)!;
 
       // Mean line
       g.append("line")
@@ -189,10 +238,27 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
         .attr("font-size", "12px")
         .text(`Mean: ${mean.toFixed(2)}`);
     }
-  }, [config]);
+  }, [processedData]);
 
-  return <svg ref={svgRef} width={600} height={300} />;
-};
+  if (!processedData) {
+    return (
+      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <p className="text-gray-500">No valid numeric data for histogram</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <svg ref={svgRef} width={600} height={300} />
+      {processedData.originalLength > processedData.sampledLength && (
+        <div className="absolute top-2 right-2 bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+          Showing {processedData.sampledLength.toLocaleString()} of {processedData.originalLength.toLocaleString()} points
+        </div>
+      )}
+    </div>
+  );
+});
 
 const D3BoxPlot = ({ config }: { config: ChartConfig }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -855,23 +921,32 @@ const D3Sankey = ({ config }: { config: ChartConfig }) => {
   return <svg ref={svgRef} width={600} height={300} />;
 };
 
-export default function ChartRenderer({ config, chartType }: ChartRendererProps) {
-  // Debug logging for chart rendering
-  console.log('🎨 ChartRenderer called:', { 
-    chartType, 
-    hasConfig: !!config, 
-    hasData: !!config?.data, 
-    dataLength: config?.data?.length,
-    configKeys: config ? Object.keys(config) : [],
-    sampleData: config?.data?.slice(0, 2),
-    fullConfig: config,
-    xAxis: config?.xAxis,
-    yAxis: config?.yAxis,
-    chartSpecificConfig: config?.chartSpecificConfig
+const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
+  // Use performance optimization hook
+  const {
+    processedData,
+    metrics,
+    performanceInfo
+  } = useChartPerformance({
+    chartType,
+    data: config.data,
+    enableSampling: true,
+    preserveOutliers: chartType === 'box_plot' || chartType === 'histogram'
   });
 
-  if (!config.data || config.data.length === 0) {
-    console.warn('⚠️ ChartRenderer: No data available', { config, chartType });
+  // Memoized processed config
+  const processedConfig = useMemo(() => {
+    if (!processedData) return null;
+    
+    return {
+      ...config,
+      data: processedData,
+      originalDataLength: performanceInfo?.originalSize || 0,
+      sampledDataLength: performanceInfo?.processedSize || 0
+    };
+  }, [config, processedData, performanceInfo]);
+
+  if (!processedConfig) {
     return (
       <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
         <p className="text-gray-500">No data available for visualization</p>
@@ -879,15 +954,15 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
     );
   }
 
-  const renderChart = () => {
+  const renderChart = useCallback(() => {
     switch (chartType) {
       case 'line':
         // Auto-detect fields for line chart  
-        let lineXField = config.xAxis || config.chartSpecificConfig?.xAxis;
-        let lineYField = config.yAxis || config.chartSpecificConfig?.yAxis;
+        let lineXField = processedConfig.xAxis || processedConfig.chartSpecificConfig?.xAxis;
+        let lineYField = processedConfig.yAxis || processedConfig.chartSpecificConfig?.yAxis;
         
         if (!lineXField || !lineYField) {
-          const sampleData = config.data?.[0];
+          const sampleData = processedConfig.data?.[0];
           if (sampleData) {
             const fields = Object.keys(sampleData);
             const numericFields = fields.filter(key => {
@@ -1409,24 +1484,56 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
           </div>
         );
     }
-  };
+  }, [chartType, processedConfig]);
 
   // D3 charts need to be rendered directly, not wrapped in ResponsiveContainer
   const isD3Chart = ['histogram', 'box_plot', 'heatmap', 'sankey'].includes(chartType);
   
   if (isD3Chart) {
     return (
-      <div className="w-full h-80 flex items-center justify-center">
-        {renderChart()}
+      <div className="w-full h-80 flex flex-col">
+        {/* Performance indicator for D3 charts */}
+        {metrics && performanceInfo && (
+          <div className="mb-2">
+            <PerformanceIndicator
+              metrics={metrics}
+              originalSize={performanceInfo.originalSize}
+              processedSize={performanceInfo.processedSize}
+              className="text-xs"
+              showDetails={false}
+            />
+          </div>
+        )}
+        
+        <div className="flex-1 flex items-center justify-center">
+          {renderChart()}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-80">
-      <ResponsiveContainer width="100%" height="100%">
-        {renderChart()}
-      </ResponsiveContainer>
+    <div className="w-full h-80 flex flex-col">
+      {/* Performance indicator */}
+      {metrics && performanceInfo && (
+        <div className="mb-2">
+          <PerformanceIndicator
+            metrics={metrics}
+            originalSize={performanceInfo.originalSize}
+            processedSize={performanceInfo.processedSize}
+            className="text-xs"
+            showDetails={false}
+          />
+        </div>
+      )}
+      
+      <div className="flex-1 relative">
+        <ResponsiveContainer width="100%" height="100%">
+          {renderChart()}
+        </ResponsiveContainer>
+      </div>
     </div>
   );
-}
+});
+
+export default ChartRenderer;

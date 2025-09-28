@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, memo } from 'react';
 import { BarChart3, Info } from 'lucide-react';
 import ChartRenderer from '@/components/visualization/ChartRenderer';
 import ExportButton from '../ExportButton';
@@ -12,7 +12,7 @@ interface ChartCardProps {
   title?: string;
 }
 
-export default function ChartCard({ config, chartType, recommendation, title }: ChartCardProps) {
+const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
 
   // Debug logging for ChartCard
@@ -98,4 +98,6 @@ export default function ChartCard({ config, chartType, recommendation, title }: 
       )}
     </div>
   );
-}
+});
+
+export default ChartCard;

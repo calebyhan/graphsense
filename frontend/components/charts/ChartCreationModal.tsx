@@ -47,7 +47,7 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
   // Build dataset attributes when data changes
   useEffect(() => {
     if (parsedData) {
-      const attributes = DatasetAttributeBuilder.buildDatasetAttributes(parsedData, dataProfile);
+      const attributes = DatasetAttributeBuilder.buildDatasetAttributes(parsedData, dataProfile || undefined);
       setDatasetAttributes(attributes);
     }
   }, [parsedData, dataProfile]);
@@ -96,9 +96,17 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
   const handleAddToCanvas = () => {
     if (!previewConfig) return;
 
+    // Position chart in viewport center
+    const { viewport } = useCanvasStore.getState();
+    const viewportCenter = useCanvasStore.getState().getViewportCenterPosition();
+    console.log('🎯 ChartCreationModal: Positioning chart', {
+      viewport,
+      viewportCenter,
+      previewConfig
+    });
     const newElement = {
       type: 'chart' as const,
-      position: { x: 100, y: 100 },
+      position: viewportCenter,
       size: { width: 400, height: 300 },
       data: {
         config: previewConfig,
@@ -108,23 +116,30 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
     };
 
     addElement(newElement);
+    console.log('ChartCreationModal: Chart added to canvas at position:', viewportCenter);
     onClose();
   };
 
   const getRequiredFields = (chartType: string) => {
-    // Use the new parameter requirements from ChartParameterExtractor
-    const requirements = ChartParameterExtractor.CHART_PARAMETER_REQUIREMENTS[chartType as ChartType];
-    if (requirements) {
-      return {
-        required: requirements.required,
-        optional: requirements.optional
-      };
-    }
-    return { required: ['xAxis', 'yAxis'], optional: [] };
+    // Define chart parameter requirements directly since CHART_PARAMETER_REQUIREMENTS doesn't exist
+    const requirementsMap: Record<string, { required: string[], optional: string[] }> = {
+      'line': { required: ['xAxis', 'yAxis'], optional: ['color'] },
+      'bar': { required: ['xAxis', 'yAxis'], optional: ['color'] },
+      'scatter': { required: ['xAxis', 'yAxis'], optional: ['color'] },
+      'pie': { required: ['category', 'value'], optional: ['color'] },
+      'area': { required: ['xAxis', 'yAxis'], optional: ['color'] },
+      'heatmap': { required: ['xAxis', 'yAxis', 'value'], optional: ['color'] },
+      'histogram': { required: ['value'], optional: [] },
+      'box_plot': { required: ['value'], optional: [] },
+      'treemap': { required: ['category', 'value'], optional: [] },
+      'sankey': { required: ['source', 'target'], optional: ['value'] }
+    };
+    
+    return requirementsMap[chartType] || { required: ['xAxis', 'yAxis'], optional: [] };
   };
 
   const requiredFields = getRequiredFields(selectedChartType);
-  const isConfigValid = requiredFields.required.every(field =>
+  const isConfigValid = requiredFields.required.every((field: string) =>
     chartConfig[field as keyof ChartConfig]
   );
 

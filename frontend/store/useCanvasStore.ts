@@ -41,6 +41,7 @@ interface CanvasStore {
   // Utility actions
   getElementById: (id: string) => CanvasElement | undefined;
   getSelectedElements: () => CanvasElement[];
+  getViewportCenterPosition: () => { x: number; y: number };
 }
 
 export const useCanvasStore = create<CanvasStore>((set, get) => ({
@@ -113,5 +114,22 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   getSelectedElements: () => {
     const { canvasElements, selectedElements } = get();
     return canvasElements.filter((element) => selectedElements.includes(element.id));
+  },
+
+  getViewportCenterPosition: () => {
+    const { viewport } = get();
+    // Return the center of the current viewport with small random offset to prevent stacking
+    // Canvas transform: translate(centerX, centerY) translate(viewport.x, -viewport.y) scale(zoom)
+    // Elements at world position (0,0) appear at screen center
+    const offsetRange = 50; // pixels
+    const randomOffsetX = (Math.random() - 0.5) * offsetRange;
+    const randomOffsetY = (Math.random() - 0.5) * offsetRange;
+    
+    // For elements to appear in viewport center, they should be at world position (0,0)
+    // The viewport shows the world region around (-viewport.x, viewport.y)
+    return {
+      x: -viewport.x / viewport.zoom + randomOffsetX, // World position for screen center
+      y: viewport.y / viewport.zoom + randomOffsetY   // World position for screen center
+    };
   },
 }));

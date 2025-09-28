@@ -171,7 +171,7 @@ export default function AutoVizAgent() {
         hasStoreRecommendations: !!storeRecommendations,
         storeRecommendationsLength: storeRecommendations?.length || 0,
         hasRawData: !!rawData,
-        rawDataLength: rawData?.length || 0,
+        rawDataLength: rawData ? (rawData as any[]).length : 0,
         sampleStoreRecommendation: storeRecommendations?.[0]
       });
     }
@@ -303,9 +303,11 @@ export default function AutoVizAgent() {
                         `${recommendation.config.yAxis} vs ${recommendation.config.xAxis}` : null) ||
                       `${type} Visualization`;
 
+    // Use viewport-aware positioning if no specific position provided
+    const finalPosition = position || useCanvasStore.getState().getViewportCenterPosition();
     const canvasElement = {
       type: 'chart' as const,
-      position,
+      position: finalPosition,
       size: { width: 500, height: 400 },
       data: {
         config: {
@@ -318,7 +320,12 @@ export default function AutoVizAgent() {
       }
     };
 
-    console.log('🎯 Adding to canvas store:', canvasElement);
+    console.log('🎯 AutoVizAgent: Adding to canvas store:', {
+      canvasElement,
+      viewport,
+      finalPosition,
+      rawPosition: position
+    });
     addElement(canvasElement);
   }, [addElement]);
 

@@ -27,9 +27,17 @@ export default function RecommendationsPanel() {
                         `${recommendation.config.value} by ${recommendation.config.category}` : null) ||
                       `${recommendation.chartType} Visualization`;
 
+    // Position chart in viewport center
+    const { viewport } = useCanvasStore.getState();
+    const viewportCenter = useCanvasStore.getState().getViewportCenterPosition();
+    console.log('🎯 RecommendationsPanel: Positioning chart', {
+      viewport,
+      viewportCenter,
+      recommendation
+    });
     const newElement = {
       type: 'chart' as const,
-      position: { x: 100, y: 100 },
+      position: viewportCenter,
       size: { width: 500, height: 400 },
       data: {
         config: {
@@ -43,7 +51,7 @@ export default function RecommendationsPanel() {
     };
 
     addElement(newElement);
-    console.log('RecommendationsPanel: Chart added to canvas successfully');
+    console.log('RecommendationsPanel: Chart added to canvas at position:', viewportCenter);
   };
 
   if (!recommendations || recommendations.length === 0) {
