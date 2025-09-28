@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Upload, Database, Search, Filter, FileText, BarChart3, Calendar, MapPin } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Upload, Database, Search, Filter, FileText, BarChart3, Calendar, MapPin, AlertCircle, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -9,46 +9,103 @@ import { Card } from '@/components/ui/card';
 import { Dataset } from '@/components/AutoVizAgent';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
-import { FileParser } from '@/lib/utils/fileParser';
+import { useDatasetManager } from '@/hooks/useDatasetManager';
+import { useAuthContext } from '@/components/providers/AuthProvider';
+import { ProcessingStatus } from '@/lib/services/datasetService';
 
 interface DataPanelProps {
-  datasets: Dataset[];
   selectedDataset: Dataset | null;
   onDatasetSelect: (dataset: Dataset) => void;
 }
 
-export function DataPanel({ datasets, selectedDataset, onDatasetSelect }: DataPanelProps) {
+export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedDataset, setDraggedDataset] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string>('');
-  const { setRawData, startAnalysis } = useAnalysisStore();
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
 
-  const handleFileSelect = async (files: FileList | null) => {
+  // Use database-integrated dataset manager
+  const {
+    datasets,
+    createDatasetWithLifecycle,
+    isLoading: isDatasetsLoading,
+    createWithLifecycleError,
+    error: datasetError
+  } = useDatasetManager({
+    onDatasetCreated: (dataset) => {
+      console.log('🎉 Dataset created and persisted to database:', dataset);
+      onDatasetSelect(dataset);
+      setUploadError('');
+      setUploadProgress(0);
+      setProcessingStatus(null);
+    }
+  });
+
+  const { setRawData, startAnalysis } = useAnalysisStore();
+  const { isAuthenticated } = useAuthContext();
+
+  const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
+    // Check authentication
+    if (!isAuthenticated) {
+      setUploadError('Please sign in to upload datasets');
+      return;
+    }
+
     setUploadError('');
+    setUploadProgress(0);
+    setProcessingStatus('pending');
+
     const file = files[0];
 
     try {
-      const result = await FileParser.parseFile(file);
-
-      if (result.error || result.data.length === 0) {
-        setUploadError(result.error || 'No data found in the file');
+      // Validate file size (100MB limit)
+      const maxSize = 100 * 1024 * 1024; // 100MB
+      if (file.size > maxSize) {
+        setUploadError('File size exceeds 100MB limit');
+        setProcessingStatus(null);
         return;
       }
 
-      const sizeError = FileParser.validateDataSize(result.data);
-      if (sizeError) {
-        setUploadError(sizeError);
-        return;
-      }
-
-      setRawData(result.data);
-      await startAnalysis(result.data, file.name);
+      // Use the lifecycle-based dataset creation
+      createDatasetWithLifecycle({
+        file,
+        onProgress: (progress) => {
+          setUploadProgress(progress);
+        },
+        onStatusChange: (status) => {
+          setProcessingStatus(status);
+          if (status === 'completed') {
+            // Also update the analysis store for backward compatibility
+            if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+              file.text().then(text => {
+                const lines = text.split('\n').filter(line => line.trim());
+                if (lines.length > 1) {
+                  const headers = lines[0].split(',').map(h => h.trim());
+                  const data = lines.slice(1).map(line => {
+                    const values = line.split(',');
+                    const row: Record<string, any> = {};
+                    headers.forEach((header, index) => {
+                      row[header] = values[index] || '';
+                    });
+                    return row;
+                  });
+                  setRawData(data);
+                  startAnalysis(data, file.name);
+                }
+              }).catch(console.error);
+            }
+          }
+        }
+      });
     } catch (error) {
+      console.error('Upload failed:', error);
       setUploadError(error instanceof Error ? error.message : 'Failed to process file');
+      setProcessingStatus('failed');
     }
-  };
+  }, [isAuthenticated, createDatasetWithLifecycle, setRawData, startAnalysis]);
 
   const { openFileDialog, fileInputProps } = useFileUpload({
     accept: '.csv,.json,.xlsx,.xls,.tsv,.txt',
@@ -67,9 +124,36 @@ export function DataPanel({ datasets, selectedDataset, onDatasetSelect }: DataPa
     handleFileSelect(files);
   };
 
-  const filteredDatasets = datasets.filter(dataset =>
+  const filteredDatasets = (datasets || []).filter(dataset =>
     dataset.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Show processing status icon
+  const getProcessingStatusIcon = (status?: ProcessingStatus) => {
+    switch (status) {
+      case 'pending':
+        return <Clock className="w-4 h-4 text-yellow-500" />;
+      case 'processing':
+        return <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />;
+      case 'completed':
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'failed':
+        return <AlertCircle className="w-4 h-4 text-red-500" />;
+      default:
+        return null;
+    }
+  };
+
+  // Get status color for progress bar
+  const getStatusColor = (status?: ProcessingStatus) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-500';
+      case 'processing': return 'bg-blue-500';
+      case 'completed': return 'bg-green-500';
+      case 'failed': return 'bg-red-500';
+      default: return 'bg-gray-300';
+    }
+  };
 
   const handleDragStart = (e: React.DragEvent, dataset: Dataset) => {
     setDraggedDataset(dataset.id);
@@ -122,10 +206,51 @@ export function DataPanel({ datasets, selectedDataset, onDatasetSelect }: DataPa
           <p className="text-xs text-gray-500 dark:text-gray-400">CSV, JSON, Excel (max 100MB)</p>
         </div>
 
-        {/* Upload Error */}
-        {uploadError && (
-          <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
-            <p className="text-xs text-red-600 dark:text-red-400">{uploadError}</p>
+        {/* Upload Status */}
+        {(uploadError || createWithLifecycleError || processingStatus) && (
+          <div className="mt-3 space-y-2">
+            {/* Error Display */}
+            {(uploadError || createWithLifecycleError) && (
+              <div className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {uploadError || createWithLifecycleError?.message}
+                </p>
+              </div>
+            )}
+
+            {/* Processing Status */}
+            {processingStatus && !uploadError && !createWithLifecycleError && (
+              <div className="p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+                <div className="flex items-center gap-2 mb-1">
+                  {getProcessingStatusIcon(processingStatus)}
+                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                    {processingStatus === 'pending' && 'Preparing upload...'}
+                    {processingStatus === 'processing' && 'Processing file...'}
+                    {processingStatus === 'completed' && 'Upload completed!'}
+                    {processingStatus === 'failed' && 'Upload failed'}
+                  </p>
+                </div>
+
+                {/* Progress Bar */}
+                {(processingStatus === 'processing' || processingStatus === 'pending') && (
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all duration-300 ${getStatusColor(processingStatus)}`}
+                      style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Authentication Warning */}
+        {!isAuthenticated && (
+          <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+            <p className="text-xs text-yellow-600 dark:text-yellow-400">
+              Sign in to persist your datasets across sessions
+            </p>
           </div>
         )}
       </div>
@@ -145,6 +270,23 @@ export function DataPanel({ datasets, selectedDataset, onDatasetSelect }: DataPa
 
       {/* Dataset Library */}
       <div className="flex-1 overflow-y-auto p-4">
+        {/* Loading State */}
+        {isDatasetsLoading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+            <span className="ml-2 text-sm text-gray-500">Loading datasets...</span>
+          </div>
+        )}
+
+        {/* Database Error */}
+        {datasetError && (
+          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md mb-4">
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Failed to load datasets: {datasetError.message}
+            </p>
+          </div>
+        )}
+
         <div className="space-y-3">
           {filteredDatasets.map((dataset) => (
             <Card
@@ -168,9 +310,12 @@ export function DataPanel({ datasets, selectedDataset, onDatasetSelect }: DataPa
                     {getTypeIcon(dataset.type)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                      {dataset.name}
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                        {dataset.name}
+                      </h4>
+                      {dataset.processingStatus && getProcessingStatusIcon(dataset.processingStatus)}
+                    </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {dataset.columns} cols • {dataset.rows.toLocaleString()} rows • {dataset.size}
                     </p>

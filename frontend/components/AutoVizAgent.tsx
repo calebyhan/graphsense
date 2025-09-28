@@ -30,6 +30,7 @@ export interface Dataset {
   preview: string[];
   lastModified: string;
   data?: any[];
+  processingStatus?: 'pending' | 'processing' | 'completed' | 'failed';
 }
 
 export interface Visualization {
@@ -305,7 +306,6 @@ export default function AutoVizAgent() {
         {/* Data Panel - Left Sidebar */}
         <div className="flex flex-col">
           <DataPanel
-            datasets={datasets}
             selectedDataset={selectedDataset}
             onDatasetSelect={handleDatasetSelect}
           />
