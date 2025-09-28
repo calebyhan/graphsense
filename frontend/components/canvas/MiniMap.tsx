@@ -39,15 +39,18 @@ export function MiniMap({
   // Calculate viewport rectangle in minimap coordinates (Cartesian system)
   const miniMapCenterX = miniMapSize.width / 2;
   const miniMapCenterY = miniMapSize.height / 2;
-  
+
   // Extract zoom from viewportPosition, default to 1
   const zoom = viewportPosition.zoom || 1;
-  
+
+  // The canvas uses Cartesian coordinates with center at viewport origin
+  // Canvas transform: translate(centerX, centerY) translate(viewport.x, viewport.y) scale(zoom)
+  // For minimap, we need to show where the viewport center is relative to canvas center
   const viewportRect = {
-    x: Math.max(0, Math.min(miniMapSize.width - (viewportSize.width * scaleX / zoom), 
+    x: Math.max(0, Math.min(miniMapSize.width - (viewportSize.width * scaleX / zoom),
         miniMapCenterX + (viewportPosition.x * scaleX) - (viewportSize.width * scaleX / zoom) / 2)),
-    y: Math.max(0, Math.min(miniMapSize.height - (viewportSize.height * scaleY / zoom), 
-        miniMapCenterY + (viewportPosition.y * scaleY) - (viewportSize.height * scaleY / zoom) / 2)), // Canvas Y is inverted in transform
+    y: Math.max(0, Math.min(miniMapSize.height - (viewportSize.height * scaleY / zoom),
+        miniMapCenterY - (viewportPosition.y * scaleY) - (viewportSize.height * scaleY / zoom) / 2)), // Invert Y for canvas coordinate system
     width: Math.min(miniMapSize.width, viewportSize.width * scaleX / zoom),
     height: Math.min(miniMapSize.height, viewportSize.height * scaleY / zoom)
   };
@@ -56,14 +59,14 @@ export function MiniMap({
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
-    
+
     // Convert click position to canvas coordinates
     // In minimap: center is at (miniMapCenterX, miniMapCenterY)
-    // Canvas transform: translate(centerX, centerY) translate(viewport.x, -viewport.y)
-    // So viewport coordinates are: viewport.x = world.x, viewport.y = -world.y
+    // Canvas transform: translate(centerX, centerY) translate(viewport.x, viewport.y) scale(zoom)
+    // The minimap Y needs to be inverted to match the canvas coordinate system
     const canvasX = (clickX - miniMapCenterX) / scaleX; // Direct mapping
-    const canvasY = (clickY - miniMapCenterY) / scaleY; // Direct mapping
-    
+    const canvasY = -(clickY - miniMapCenterY) / scaleY; // Invert Y to match canvas coordinate system
+
     onViewportChange({ x: canvasX, y: canvasY });
   };
 
@@ -141,10 +144,10 @@ export function MiniMap({
                   key={viz.id}
                   className="absolute bg-indigo-500 rounded-sm opacity-70 border border-indigo-600 hover:opacity-90 transition-opacity"
                   style={{
-                    left: Math.max(0, Math.min(miniMapSize.width - Math.max(viz.width * scaleX, 4), 
+                    left: Math.max(0, Math.min(miniMapSize.width - Math.max(viz.width * scaleX, 4),
                           miniMapCenterX + (viz.x * scaleX))),
-                    top: Math.max(0, Math.min(miniMapSize.height - Math.max(viz.height * scaleY, 4), 
-                          miniMapCenterY + (viz.y * scaleY))), // Direct mapping to match canvas positions
+                    top: Math.max(0, Math.min(miniMapSize.height - Math.max(viz.height * scaleY, 4),
+                          miniMapCenterY - (viz.y * scaleY))), // Invert Y coordinate to match canvas coordinate system
                     width: Math.max(viz.width * scaleX, 4),
                     height: Math.max(viz.height * scaleY, 4)
                   }}

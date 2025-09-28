@@ -255,18 +255,17 @@ export default function AutoVizAgent() {
     recommendation: ChartRecommendation
   ) => {
     if (!selectedDataset) return;
-    
-    // Place in center of current viewport
-    const centerX = (typeof window !== 'undefined' ? window.innerWidth / 2 : 800) / viewport.zoom - viewport.x / viewport.zoom;
-    const centerY = (typeof window !== 'undefined' ? window.innerHeight / 2 : 600) / viewport.zoom - viewport.y / viewport.zoom;
-    
+
+    // Use the viewport-aware positioning from canvas store
+    const centerPosition = useCanvasStore.getState().getViewportCenterPosition();
+
     createVisualization(
-      selectedDataset, 
-      { x: centerX - 200, y: centerY - 150 }, 
+      selectedDataset,
+      { x: centerPosition.x - 250, y: centerPosition.y - 200 },
       recommendation.type,
       recommendation
     );
-  }, [selectedDataset, viewport]);
+  }, [selectedDataset]);
 
   // Auto-Viz function
   const handleAutoViz = useCallback(async () => {

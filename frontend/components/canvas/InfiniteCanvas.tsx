@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
 function useOptimizedRaf<T extends (...args: any[]) => void>(func: T): T {
@@ -99,11 +99,10 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     const currentViewport = viewportRef.current;
     const newViewport = {
       x: currentViewport.x + deltaX,
-      y: currentViewport.y - deltaY, // Y inverted: pulling down moves canvas down
+      y: currentViewport.y + deltaY, // CSS coords: +y is down
       zoom: currentViewport.zoom
     };
 
-    // Update ref immediately for smooth feedback
     viewportRef.current = newViewport;
     setLocalViewport(newViewport);
     updateViewportRef.current(newViewport);
@@ -118,18 +117,22 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     }
   }, [selectedTool]);
 
-  // Helper: screen <-> Cartesian (origin at canvas center; +Y up)
+  // Helper: screen <-> Cartesian using CSS coordinates (+Y down)
   const screenToCartesian = useCallback((screenX: number, screenY: number) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     const centerX = rect.width / 2;
     const centerY = rect.height / 2;
-    return { x: screenX - centerX, y: centerY - screenY };
+    // +y down to match CSS transforms
+    return { x: screenX - centerX, y: screenY - centerY };
   }, []);
 
   // Create refs for animation functions to avoid closure issues
   const animateZoomRef = useRef<((targetZoom: number, centerPoint?: { x: number; y: number } | null) => void) | null>(null);
   const screenToCartesianRef = useRef(screenToCartesian);
+  useEffect(() => {
+    screenToCartesianRef.current = screenToCartesian;
+  }, [screenToCartesian]);
 
   // Optimized zoom animation using requestAnimationFrame and refs
   const animateZoom = useCallback((targetZoom: number, centerPoint: { x: number; y: number } | null = null) => {
@@ -177,7 +180,6 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     zoomAnimationId.current = requestAnimationFrame(animate);
   }, []);
 
-  // Update ref after animateZoom is defined
   useEffect(() => {
     animateZoomRef.current = animateZoom;
   }, [animateZoom]);
@@ -228,15 +230,15 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         zoomIndicatorTimeout.current = window.setTimeout(() => setIsZooming(false), 100);
       }
     } else {
-      // Regular pan (make signs consistent with mouse-drag behavior)
+      // Regular pan (natural trackpad feel: content follows finger)
       const sensitivity = 1;
       const deltaX = e.deltaX * sensitivity;
       const deltaY = e.deltaY * sensitivity;
 
       const newViewport = {
         ...currentViewport,
-        x: currentViewport.x - deltaX, // scroll right -> pan canvas left
-        y: currentViewport.y - deltaY  // scroll down -> move view down (inverted to match drag behavior)
+        x: currentViewport.x - deltaX, // scroll right -> move content right (finger), so viewport x decreases
+        y: currentViewport.y - deltaY  // scroll down -> move content down, viewport y decreases
       };
 
       viewportRef.current = newViewport;
@@ -360,7 +362,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         canvasRef.current.style.cursor = 'default';
         break;
       case 'drag':
-        canvasRef.current.style.cursor = 'grab';
+        canvasRef.current.style.cursor = isDragging.current ? 'grabbing' : 'grab';
         break;
       default:
         canvasRef.current.style.cursor = 'crosshair';
@@ -443,7 +445,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       const deltaX = t.clientX - lastMousePos.current.x;
       const deltaY = t.clientY - lastMousePos.current.y;
 
-      const nv = { x: currentViewport.x + deltaX, y: currentViewport.y - deltaY, zoom: currentViewport.zoom };
+      const nv = { x: currentViewport.x + deltaX, y: currentViewport.y + deltaY, zoom: currentViewport.zoom }; // +y down
       viewportRef.current = nv;
       setLocalViewport(nv);
       throttledViewportUpdate(nv);
@@ -531,7 +533,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       style={{
-        cursor: selectedTool === 'drag' ? 'grab' : (isDragging.current ? 'grabbing' : 'default'),
+        cursor: selectedTool === 'drag' ? (isDragging.current ? 'grabbing' : 'grab') : 'default',
         touchAction: 'none',
         userSelect: 'none',
         contain: 'layout style paint',
