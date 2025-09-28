@@ -128,7 +128,7 @@ export function ZoomDebugger() {
               onClick={() => setIsVisible(false)}
               className="text-xs"
             >
-              ✕
+              ×
             </Button>
           </div>
         </div>

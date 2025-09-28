@@ -16,7 +16,7 @@ export default function ChartCard({ config, chartType, recommendation, title }: 
   const chartRef = useRef<HTMLDivElement>(null);
 
   // Debug logging for ChartCard
-  console.log('📊 ChartCard rendered:', { 
+  console.log('ChartCard rendered:', { 
     chartType, 
     hasConfig: !!config, 
     configKeys: config ? Object.keys(config) : [],

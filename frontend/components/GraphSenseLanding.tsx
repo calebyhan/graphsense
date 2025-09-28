@@ -50,7 +50,7 @@ export default function GraphSenseLanding() {
           <footer className="border-t border-border py-8">
             <div className="mx-auto max-w-6xl px-6 text-center">
               <p className="font-mono text-sm text-muted-foreground">
-                GraphSense — Built with ❤️ for VTHacks25
+                GraphSense — Built with love for VTHacks25
               </p>
             </div>
           </footer>

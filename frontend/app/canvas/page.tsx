@@ -6,13 +6,13 @@ import DataLoader from '@/components/canvas/DataLoader';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 export default function CanvasPage() {
-  console.log('🎨 CanvasPage component loading...');
+  console.log('CanvasPage component loading...');
   
   // Enable keyboard shortcuts
   useKeyboardShortcuts();
 
   React.useEffect(() => {
-    console.log('🎨 CanvasPage mounted successfully');
+    console.log('CanvasPage mounted successfully');
   }, []);
 
   return (

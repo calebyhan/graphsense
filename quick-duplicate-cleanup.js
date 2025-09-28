@@ -2,7 +2,7 @@
 // Run this in browser console on localhost:3000
 
 (async function quickCleanup() {
-  console.log('🧹 Quick duplicate cleanup...');
+  console.log('Quick duplicate cleanup...');
   
   try {
     // Fetch all datasets
@@ -10,7 +10,7 @@
     const data = await response.json();
     const datasets = data.datasets || [];
     
-    console.log(`📊 Found ${datasets.length} datasets`);
+    console.log(`Found ${datasets.length} datasets`);
     
     // Group by filename
     const grouped = {};
@@ -25,11 +25,11 @@
       .filter(([filename, datasets]) => datasets.length > 1)
       .map(([filename, datasets]) => ({ filename, datasets }));
     
-    console.log(`🔍 Found ${duplicates.length} sets of duplicates`);
+    console.log(`Found ${duplicates.length} sets of duplicates`);
     
     // Remove duplicates (keep the one with data, remove empty ones)
     for (const { filename, datasets } of duplicates) {
-      console.log(`\n📁 Processing duplicates for: ${filename}`);
+      console.log(`\nProcessing duplicates for: ${filename}`);
       
       // Sort by data completeness (prefer datasets with actual data)
       const sorted = datasets.sort((a, b) => {
@@ -42,22 +42,22 @@
       const toKeep = sorted[0];
       const toRemove = sorted.slice(1);
       
-      console.log(`✅ Keeping: ${toKeep.id} (${toKeep.metadata?.row_count || 0} rows)`);
+      console.log(`Keeping: ${toKeep.id} (${toKeep.metadata?.row_count || 0} rows)`);
       
       for (const dataset of toRemove) {
-        console.log(`🗑️ Removing: ${dataset.id} (${dataset.metadata?.row_count || 0} rows)`);
+        console.log(`Removing: ${dataset.id} (${dataset.metadata?.row_count || 0} rows)`);
         try {
           await fetch(`http://localhost:8000/api/datasets/${dataset.id}`, { method: 'DELETE' });
-          console.log(`✅ Deleted ${dataset.id}`);
+          console.log(`Deleted ${dataset.id}`);
         } catch (error) {
-          console.error(`❌ Failed to delete ${dataset.id}:`, error);
+          console.error(`Failed to delete ${dataset.id}:`, error);
         }
       }
     }
     
-    console.log('✅ Cleanup complete!');
+    console.log('Cleanup complete!');
     
   } catch (error) {
-    console.error('❌ Cleanup failed:', error);
+    console.error('Cleanup failed:', error);
   }
 })();

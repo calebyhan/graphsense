@@ -36,7 +36,7 @@ export class DataTransformer {
     const xAxis = data_mapping?.x_axis;
     const yAxis = data_mapping?.y_axis;
     
-    console.log('🔄 DataTransformer: Transforming data', {
+    console.log('DataTransformer: Transforming data', {
       chartType,
       dataMapping: data_mapping,
       rawDataLength: rawData?.length || 0,
@@ -91,7 +91,7 @@ export class DataTransformer {
         
       default:
         // Fallback: return raw data with basic structure
-        console.log('⚠️ Unknown chart type, using fallback:', chartType);
+        console.log('Unknown chart type, using fallback:', chartType);
         transformedData = rawData.slice(0, 100);
     }
 
@@ -107,7 +107,7 @@ export class DataTransformer {
       bins: chartType === 'histogram' ? 20 : undefined,
     };
 
-    console.log('✅ DataTransformer: Transformation complete', {
+    console.log('DataTransformer: Transformation complete', {
       title,
       dataLength: transformedData.length,
       xAxis,

@@ -35,12 +35,12 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
     error: datasetError
   } = useDatasetManager({
     onDatasetCreated: (dataset) => {
-      console.log('🎉 Dataset created and persisted to database:', dataset);
+      console.log('Dataset created and persisted to database:', dataset);
       onDatasetSelect(dataset);
       
       // Note: Don't start analysis here - let the selection effect handle it
       // This prevents duplicate analysis requests
-      console.log('📊 Dataset will be analyzed when selected');
+      console.log('Dataset will be analyzed when selected');
       
       setUploadError('');
       setUploadProgress(0);
@@ -53,7 +53,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
 
   // Debug logging and dataset management
   React.useEffect(() => {
-    console.log('🔍 DataPanel Debug:', {
+    console.log('DataPanel Debug:', {
       datasetsLength: datasets.length,
       datasets: datasets.map(d => ({ id: d.id, name: d.name, hasData: !!d.data && d.data.length > 0 })),
       isDatasetsLoading,
@@ -65,11 +65,11 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
   // Load dataset data into analysis store when manually selected
   React.useEffect(() => {
     if (selectedDataset && selectedDataset.data && selectedDataset.data.length > 0) {
-      console.log('📊 Loading selected dataset into analysis store:', selectedDataset.name);
+      console.log('Loading selected dataset into analysis store:', selectedDataset.name);
       setRawData(selectedDataset.data);
 
       // Note: Analysis is now handled by AutoVizAgent to prevent duplicate calls
-      console.log('📊 Analysis will be triggered by AutoVizAgent');
+      console.log('Analysis will be triggered by AutoVizAgent');
     }
   }, [selectedDataset, setRawData]);
 
@@ -101,7 +101,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
           setProcessingStatus(status);
         },
         onDatasetCreated: (dataset: Dataset) => {
-          console.log('📊 Dataset created:', dataset.name);
+          console.log('Dataset created:', dataset.name);
           // Set the data - AutoVizAgent will handle analysis
           if (dataset.data && dataset.data.length > 0) {
             setRawData(dataset.data);

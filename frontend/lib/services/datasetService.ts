@@ -59,7 +59,7 @@ export class DatasetService {
     
     // Only throw if we actually found a duplicate (ignore query errors for now)
     if (existing && !checkError) {
-      console.log('⚠️ Dataset with filename already exists:', filename, 'ID:', existing.id);
+      console.log('Dataset with filename already exists:', filename, 'ID:', existing.id);
       throw new Error(`Dataset with filename "${filename}" already exists`);
     }
     
@@ -95,7 +95,7 @@ export class DatasetService {
       throw error;
     }
 
-    console.log('✅ Dataset created with pending status:', data.id);
+    console.log('Dataset created with pending status:', data.id);
     return data;
   }
 
@@ -152,7 +152,7 @@ export class DatasetService {
       throw error;
     }
 
-    console.log(`✅ Dataset ${datasetId} status updated to: ${status}`);
+    console.log(`Dataset ${datasetId} status updated to: ${status}`);
   }
 
   /**
@@ -210,7 +210,7 @@ export class DatasetService {
       throw error;
     }
 
-    console.log('✅ Dataset updated with processed data:', datasetId);
+    console.log('Dataset updated with processed data:', datasetId);
   }
 
   /**
@@ -259,7 +259,7 @@ export class DatasetService {
       throw error;
     }
 
-    console.log(`📊 Found ${data?.length || 0} datasets for user:`, userId || 'null (dev mode)');
+    console.log(`Found ${data?.length || 0} datasets for user:`, userId || 'null (dev mode)');
     return data || [];
   }
 
@@ -287,7 +287,7 @@ export class DatasetService {
       throw error;
     }
 
-    console.log('✅ Dataset deleted:', datasetId);
+    console.log('Dataset deleted:', datasetId);
   }
 
   /**
@@ -371,6 +371,6 @@ export class DatasetService {
       throw error;
     }
 
-    console.log('✅ Dataset metadata updated:', datasetId);
+    console.log('Dataset metadata updated:', datasetId);
   }
 }

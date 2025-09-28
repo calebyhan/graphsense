@@ -49,7 +49,7 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
   retryAttempts: 0,
 
   setRawData: (data) => {
-    console.log('📊 setRawData called:', {
+    console.log('setRawData called:', {
       hasData: !!data,
       dataLength: data?.length || 0,
       sampleRow: data?.[0]
@@ -131,7 +131,7 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
     if (typeof window !== 'undefined') {
       const lastAnalysis = (window as any)[`analysis-${analysisKey}`];
       if (lastAnalysis && (currentTime - lastAnalysis) < 10000) { // 10 second cooldown
-        console.log('⚠️ Analysis already in progress or recently completed for:', filename);
+        console.log('Analysis already in progress or recently completed for:', filename);
         return;
       }
       (window as any)[`analysis-${analysisKey}`] = currentTime;
@@ -139,7 +139,7 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
 
     // Don't start if already loading
     if (isLoading) {
-      console.log('⚠️ Analysis already in progress, skipping duplicate request');
+      console.log('Analysis already in progress, skipping duplicate request');
       return;
     }
 
@@ -152,7 +152,7 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
       updateAgentState('recommender', 'idle');
       updateAgentState('validator', 'idle');
 
-      console.log('🚀 Starting analysis for:', filename, 'with', data.length, 'rows', datasetId ? `(using existing dataset: ${datasetId})` : '(creating new dataset)');
+      console.log('Starting analysis for:', filename, 'with', data.length, 'rows', datasetId ? `(using existing dataset: ${datasetId})` : '(creating new dataset)');
       const response = await backendAPI.analyzeDataset({
         data,
         filename,
@@ -169,7 +169,7 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
       }
 
     } catch (error) {
-      console.error('❌ Analysis failed to start:', error);
+      console.error('Analysis failed to start:', error);
       setError(error instanceof Error ? error.message : 'Failed to start analysis');
       setLoading(false);
       
@@ -292,11 +292,11 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
     try {
       const results = await backendAPI.getAnalysisResults(datasetId);
 
-      console.log('📊 Analysis results loaded:', results);
+      console.log('Analysis results loaded:', results);
 
       if (results.recommendations) {
         setRecommendations(results.recommendations);
-        console.log('✅ Recommendations set:', results.recommendations);
+        console.log('Recommendations set:', results.recommendations);
       }
 
       if (results.data_profile) {
@@ -307,20 +307,20 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
           dataQuality: 'medium' // TODO: Map from backend format
         };
         setDataProfile(mappedProfile);
-        console.log('✅ Data profile set:', mappedProfile);
+        console.log('Data profile set:', mappedProfile);
       }
 
       // IMPORTANT: Trigger dataset creation by ensuring rawData is still available
       // The rawData should already be set from the initial upload, but let's make sure
       const currentState = get();
       if (currentState.rawData) {
-        console.log('✅ Raw data is available for dataset creation:', {
+        console.log('Raw data is available for dataset creation:', {
           rawDataLength: currentState.rawData.length,
           hasRecommendations: !!currentState.recommendations,
           hasDataProfile: !!currentState.dataProfile
         });
       } else {
-        console.warn('⚠️ Raw data is missing - dataset creation may not work');
+        console.warn('Raw data is missing - dataset creation may not work');
       }
 
     } catch (error) {

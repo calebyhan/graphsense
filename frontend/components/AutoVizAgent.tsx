@@ -66,7 +66,7 @@ export interface ChartRecommendation {
 }
 
 export default function AutoVizAgent() {
-  console.log('🚀 AutoVizAgent component mounting...');
+  console.log('AutoVizAgent component mounting...');
   
   // State management
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
@@ -84,7 +84,7 @@ export default function AutoVizAgent() {
   
   // Debug logging for state changes
   React.useEffect(() => {
-    console.log('🔍 AutoVizAgent state changed:', {
+    console.log('AutoVizAgent state changed:', {
       hasRawData: !!rawData,
       rawDataLength: rawData?.length,
       hasDataProfile: !!dataProfile,
@@ -101,16 +101,16 @@ export default function AutoVizAgent() {
 
   // Mount effect
   React.useEffect(() => {
-    console.log('✅ AutoVizAgent mounted successfully');
+    console.log('AutoVizAgent mounted successfully');
     return () => {
-      console.log('❌ AutoVizAgent unmounting');
+      console.log('AutoVizAgent unmounting');
     };
   }, []);
 
   // Sync recommendations from store and process them with our new system
   React.useEffect(() => {
     if (storeRecommendations && storeRecommendations.length > 0 && rawData) {
-      console.log('🔄 Processing recommendations with new parameter extraction system:', {
+      console.log('Processing recommendations with new parameter extraction system:', {
         recommendationsCount: storeRecommendations.length,
         rawDataLength: rawData.length,
         sampleRecommendation: storeRecommendations[0]
@@ -123,11 +123,11 @@ export default function AutoVizAgent() {
         dataProfile
       );
 
-      console.log('✅ Processed recommendations:', processedRecommendations);
+      console.log('Processed recommendations:', processedRecommendations);
 
       // Debug: Check if data is properly embedded in configs
       processedRecommendations.forEach((rec, index) => {
-        console.log(`🔍 Recommendation ${index} data check:`, {
+        console.log(`Recommendation ${index} data check:`, {
           chartType: rec.chartType,
           hasConfig: !!rec.config,
           hasData: !!rec.config?.data,
@@ -151,11 +151,11 @@ export default function AutoVizAgent() {
         config: rec.config
       }));
 
-            console.log('📊 Final formatted recommendations:', formattedRecommendations);
+            console.log('Final formatted recommendations:', formattedRecommendations);
 
             // Debug: Check if data is still present after formatting
             formattedRecommendations.forEach((rec, index) => {
-              console.log(`🔍 Formatted recommendation ${index} data check:`, {
+              console.log(`Formatted recommendation ${index} data check:`, {
                 chartType: rec.chartType,
                 hasConfig: !!rec.config,
                 hasData: !!rec.config?.data,
@@ -166,8 +166,8 @@ export default function AutoVizAgent() {
 
             setRecommendations(formattedRecommendations);
     } else if (storeRecommendations && storeRecommendations.length > 0 && !rawData) {
-      console.warn('⚠️ Recommendations available but no raw data for processing');
-      console.warn('🔍 Debug - Store state:', {
+      console.warn('Recommendations available but no raw data for processing');
+      console.warn('Debug - Store state:', {
         hasStoreRecommendations: !!storeRecommendations,
         storeRecommendationsLength: storeRecommendations?.length || 0,
         hasRawData: !!rawData,
@@ -184,7 +184,7 @@ export default function AutoVizAgent() {
 
   // Auto-select dataset when analysis data is available (only if no manual selection)
   React.useEffect(() => {
-    console.log('🎯 Auto-selection effect triggered:', {
+    console.log('Auto-selection effect triggered:', {
       hasRawData: !!rawData,
       rawDataLength: rawData?.length,
       hasSelectedDataset: !!selectedDataset,
@@ -212,7 +212,7 @@ export default function AutoVizAgent() {
       });
 
       if (matchingDataset) {
-        console.log('✅ Auto-selecting matching dataset:', matchingDataset.name);
+        console.log('Auto-selecting matching dataset:', matchingDataset.name);
         setSelectedDataset(matchingDataset);
         // Note: Don't start analysis here - let the selection effect handle it
       }
@@ -221,15 +221,15 @@ export default function AutoVizAgent() {
 
   // Handle dataset selection from DataPanel
   const handleDatasetSelect = useCallback(async (dataset: Dataset) => {
-    console.log('🎯 Dataset selected in AutoVizAgent:', dataset.name, 'with data length:', dataset.data?.length);
+    console.log('Dataset selected in AutoVizAgent:', dataset.name, 'with data length:', dataset.data?.length);
     setSelectedDataset(dataset);
 
     // Start analysis if dataset has data
     if (dataset.data && dataset.data.length > 0) {
-      console.log('🚀 Starting analysis for selected dataset:', dataset.name);
+      console.log('Starting analysis for selected dataset:', dataset.name);
       startAnalysis(dataset.data, dataset.name, dataset.id);
     } else {
-      console.warn('⚠️ Selected dataset has no data:', dataset.name);
+      console.warn('Selected dataset has no data:', dataset.name);
     }
   }, [startAnalysis]);
 
@@ -283,7 +283,7 @@ export default function AutoVizAgent() {
     type: Visualization['type'] = 'bar',
     recommendation?: ChartRecommendation
   ) => {
-    console.log('🎨 createVisualization called:', {
+    console.log('createVisualization called:', {
       type,
       hasRecommendation: !!recommendation,
       hasConfig: !!recommendation?.config,
@@ -332,7 +332,7 @@ export default function AutoVizAgent() {
       }
     };
 
-    console.log('🎯 Adding to canvas store:', canvasElement);
+    console.log('Adding to canvas store:', canvasElement);
     addElement(canvasElement);
   }, [addElement]);
 

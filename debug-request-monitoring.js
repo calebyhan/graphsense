@@ -21,7 +21,7 @@ window.fetch = function(...args) {
     };
     
     requestLog.push(logEntry);
-    console.log(`🌐 ${method} ${url}`, logEntry);
+    console.log(`${method} ${url}`, logEntry);
   }
   
   return originalFetch.apply(this, args);
@@ -33,7 +33,7 @@ const originalConsoleLog = console.log;
 
 // Helper function to show request summary
 function showRequestSummary() {
-  console.log('\n📊 REQUEST SUMMARY:');
+  console.log('\nREQUEST SUMMARY:');
   console.log('==================');
   
   const postRequests = requestLog.filter(r => r.method === 'POST');
@@ -49,7 +49,7 @@ function showRequestSummary() {
     console.log(`  ${i+1}. ${req.url} at ${req.timestamp}`);
   });
   
-  console.log('\n🎯 EXPECTED:');
+  console.log('\nEXPECTED:');
   console.log('- 1 POST to /api/analysis/analyze');
   console.log('- 3-4 database updates (not visible in browser, happens on backend)');
 }
@@ -57,12 +57,12 @@ function showRequestSummary() {
 // Clear log function
 function clearRequestLog() {
   requestLog = [];
-  console.log('🧹 Request log cleared');
+  console.log('Request log cleared');
 }
 
 // Auto-show summary after uploads
 setTimeout(() => {
-  console.log('\n📋 Request monitoring active!');
+  console.log('\nRequest monitoring active!');
   console.log('Upload a file, then run: showRequestSummary()');
   console.log('To clear log: clearRequestLog()');
 }, 1000);
