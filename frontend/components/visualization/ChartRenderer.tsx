@@ -50,15 +50,27 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
     const width = 600 - margin.left - margin.right;
     const height = 300 - margin.bottom - margin.top;
 
-    // Use the new parameter structure
-    const valueField = config.value || config.yAxis || config.xAxis;
+    // Auto-detect numeric field for histogram
+    let valueField = config.value || config.yAxis || config.xAxis || config.chartSpecificConfig?.value;
+    
+    if (!valueField) {
+      const sampleData = config.data?.[0];
+      if (sampleData) {
+        const numericFields = Object.keys(sampleData).filter(key => {
+          const value = sampleData[key];
+          return !isNaN(parseFloat(value)) && isFinite(value);
+        });
+        valueField = numericFields[0];
+        console.log('📊 Histogram auto-detected field:', valueField, 'from', numericFields);
+      }
+    }
     
     if (!valueField) {
       svg.append("text")
         .attr("x", 300)
         .attr("y", 150)
         .attr("text-anchor", "middle")
-        .text("Histogram requires a value field");
+        .text("Histogram requires a numeric field");
       return;
     }
 
@@ -186,7 +198,18 @@ const D3BoxPlot = ({ config }: { config: ChartConfig }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    if (!svgRef.current || !config.data) return;
+    console.log('📦 D3BoxPlot useEffect called:', { 
+      hasSvgRef: !!svgRef.current, 
+      hasData: !!config.data, 
+      dataLength: config?.data?.length,
+      config: config,
+      sampleData: config?.data?.slice(0, 3)
+    });
+
+    if (!svgRef.current || !config.data) {
+      console.warn('⚠️ D3BoxPlot: Missing svgRef or data');
+      return;
+    }
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -195,7 +218,30 @@ const D3BoxPlot = ({ config }: { config: ChartConfig }) => {
     const width = 600 - margin.left - margin.right;
     const height = 300 - margin.bottom - margin.top;
 
-    const data = config.data.map(d => +d[config.yAxis!]).sort(d3.ascending);
+    // Auto-detect yAxis field if not provided
+    let yAxisField = config.yAxis;
+    if (!yAxisField && config.data && config.data.length > 0) {
+      const dataKeys = Object.keys(config.data[0]);
+      console.log('🔍 D3BoxPlot auto-detecting yAxis field from keys:', dataKeys);
+      
+      // Find the first numeric column
+      yAxisField = dataKeys.find(key => {
+        const sampleValues = config.data.slice(0, 10).map(row => row[key]);
+        const numericValues = sampleValues.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+        return numericValues.length > sampleValues.length * 0.7; // At least 70% numeric
+      });
+      
+      console.log('📊 D3BoxPlot auto-detected yAxis field:', yAxisField);
+    }
+
+    if (!yAxisField) {
+      console.error('❌ D3BoxPlot: No suitable numeric field found for yAxis');
+      return;
+    }
+
+    console.log('✅ D3BoxPlot proceeding with yAxis field:', yAxisField);
+
+    const data = config.data.map(d => +d[yAxisField!]).sort(d3.ascending);
 
     const q1 = d3.quantile(data, 0.25)!;
     const median = d3.quantile(data, 0.5)!;
@@ -249,7 +295,7 @@ const D3BoxPlot = ({ config }: { config: ChartConfig }) => {
 
     g.append("g")
       .attr("transform", `translate(0,${height})`)
-      .call(d3.axisBottom(d3.scaleBand().domain([config.yAxis!]).range([center - 50, center + 50])));
+      .call(d3.axisBottom(d3.scaleBand().domain([yAxisField!]).range([center - 50, center + 50])));
 
     g.append("g")
       .call(d3.axisLeft(y));
@@ -282,10 +328,47 @@ const D3Heatmap = ({ config }: { config: ChartConfig }) => {
     const width = 600 - margin.left - margin.right;
     const height = 300 - margin.bottom - margin.top;
 
-    // Use the new parameter structure
-    const xField = config.rowField || config.xAxis;
-    const yField = config.colField || config.yAxis;
-    const valueField = config.valueField || config.value || config.yAxis;
+    // Auto-detect fields if not provided
+    let xField = config.rowField || config.xAxis;
+    let yField = config.colField || config.yAxis;
+    let valueField = config.valueField || config.value;
+
+    if ((!xField || !yField || !valueField) && config.data && config.data.length > 0) {
+      const dataKeys = Object.keys(config.data[0]);
+      console.log('🔍 D3Heatmap auto-detecting fields from keys:', dataKeys);
+      
+      // Auto-detect xField (first categorical/string field)
+      if (!xField) {
+        xField = dataKeys.find(key => {
+          const sampleValues = config.data.slice(0, 10).map(row => row[key]);
+          const numericValues = sampleValues.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+          return numericValues.length < sampleValues.length * 0.5; // Less than 50% numeric (categorical)
+        }) || dataKeys[0];
+        console.log('🎯 Auto-detected xField:', xField);
+      }
+      
+      // Auto-detect yField (second categorical/string field, different from xField)
+      if (!yField) {
+        yField = dataKeys.find(key => {
+          if (key === xField) return false;
+          const sampleValues = config.data.slice(0, 10).map(row => row[key]);
+          const numericValues = sampleValues.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+          return numericValues.length < sampleValues.length * 0.5; // Less than 50% numeric (categorical)
+        }) || dataKeys[1] || dataKeys[0];
+        console.log('🎯 Auto-detected yField:', yField);
+      }
+      
+      // Auto-detect valueField (first numeric field, different from x and y)
+      if (!valueField) {
+        valueField = dataKeys.find(key => {
+          if (key === xField || key === yField) return false;
+          const sampleValues = config.data.slice(0, 10).map(row => row[key]);
+          const numericValues = sampleValues.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+          return numericValues.length > sampleValues.length * 0.7; // At least 70% numeric
+        }) || dataKeys.find(key => key !== xField && key !== yField) || dataKeys[2] || dataKeys[1];
+        console.log('🎯 Auto-detected valueField:', valueField);
+      }
+    }
 
     console.log('🔍 D3Heatmap field mapping:', { 
       xField, 
@@ -632,7 +715,51 @@ const D3Sankey = ({ config }: { config: ChartConfig }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    if (!svgRef.current || !config.data || !config.source || !config.target) return;
+    console.log('🔗 D3Sankey useEffect called:', { 
+      hasSvgRef: !!svgRef.current, 
+      hasData: !!config.data, 
+      dataLength: config?.data?.length,
+      config: config,
+      sampleData: config?.data?.slice(0, 3)
+    });
+
+    // Auto-detect source and target fields if not provided
+    let sourceField = config.source;
+    let targetField = config.target;
+    let weightField = config.weight || config.value || config.valueField;
+
+    if ((!sourceField || !targetField) && config.data && config.data.length > 0) {
+      const dataKeys = Object.keys(config.data[0]);
+      console.log('🔍 D3Sankey auto-detecting fields from keys:', dataKeys);
+      
+      // For Sankey, we need at least 2 categorical fields and optionally 1 numeric field
+      const categoricalFields = dataKeys.filter(key => {
+        const sampleValues = config.data.slice(0, 10).map(row => row[key]);
+        const numericValues = sampleValues.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+        return numericValues.length < sampleValues.length * 0.5; // Less than 50% numeric (categorical)
+      });
+      
+      sourceField = sourceField || categoricalFields[0] || dataKeys[0];
+      targetField = targetField || categoricalFields[1] || dataKeys[1];
+      
+      if (!weightField) {
+        const numericFields = dataKeys.filter(key => {
+          const sampleValues = config.data.slice(0, 10).map(row => row[key]);
+          const numericValues = sampleValues.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+          return numericValues.length > sampleValues.length * 0.7; // At least 70% numeric
+        });
+        weightField = numericFields[0] || 'value';
+      }
+      
+      console.log('🎯 D3Sankey auto-detected fields:', { sourceField, targetField, weightField });
+    }
+
+    if (!svgRef.current || !config.data || !sourceField || !targetField) {
+      console.warn('⚠️ D3Sankey: Missing required fields or data');
+      return;
+    }
+
+    console.log('✅ D3Sankey proceeding with fields:', { sourceField, targetField, weightField });
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -644,9 +771,9 @@ const D3Sankey = ({ config }: { config: ChartConfig }) => {
     // Create a simplified Sankey-like diagram using rectangles and paths
     // Group data by source and target
     const links = config.data.map(d => ({
-      source: d[config.source!],
-      target: d[config.target!],
-      value: +(d[config.weight || config.value || 'value'] || 1)
+      source: d[sourceField!],
+      target: d[targetField!],
+      value: +(d[weightField!] || 1)
     }));
 
     // Get unique nodes
@@ -736,7 +863,11 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
     hasData: !!config?.data, 
     dataLength: config?.data?.length,
     configKeys: config ? Object.keys(config) : [],
-    sampleData: config?.data?.slice(0, 2)
+    sampleData: config?.data?.slice(0, 2),
+    fullConfig: config,
+    xAxis: config?.xAxis,
+    yAxis: config?.yAxis,
+    chartSpecificConfig: config?.chartSpecificConfig
   });
 
   if (!config.data || config.data.length === 0) {
@@ -751,11 +882,43 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
   const renderChart = () => {
     switch (chartType) {
       case 'line':
+        // Auto-detect fields for line chart  
+        let lineXField = config.xAxis || config.chartSpecificConfig?.xAxis;
+        let lineYField = config.yAxis || config.chartSpecificConfig?.yAxis;
+        
+        if (!lineXField || !lineYField) {
+          const sampleData = config.data?.[0];
+          if (sampleData) {
+            const fields = Object.keys(sampleData);
+            const numericFields = fields.filter(key => {
+              const value = sampleData[key];
+              return !isNaN(parseFloat(value)) && isFinite(value);
+            });
+            
+            // For line charts, both axes typically need to be numeric or X can be categorical
+            lineXField = lineXField || fields[0]; // First field for X
+            lineYField = lineYField || numericFields[0]; // First numeric field for Y
+          }
+        }
+        
+        if (!lineXField || !lineYField) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="text-center">
+                <p className="text-gray-500 mb-2">Line chart requires both X and Y axis fields</p>
+                <p className="text-xs text-gray-400">
+                  Available fields: {Object.keys(config.data?.[0] || {}).join(', ')}
+                </p>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <LineChart data={config.data}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
-              dataKey={config.xAxis}
+              dataKey={lineXField}
               tick={{ fontSize: 12 }}
               angle={-45}
               textAnchor="end"
@@ -763,13 +926,13 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
             />
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip
-              labelFormatter={(label) => `${config.xAxis}: ${label}`}
-              formatter={(value: any, name: string) => [value, config.yAxis]}
+              labelFormatter={(label) => `${lineXField}: ${label}`}
+              formatter={(value: any, name: string) => [value, lineYField]}
             />
             <Legend />
             <Line
               type="monotone"
-              dataKey={config.yAxis}
+              dataKey={lineYField}
               stroke={COLORS[0]}
               strokeWidth={2}
               dot={{ fill: COLORS[0], strokeWidth: 2, r: 4 }}
@@ -779,11 +942,80 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
         );
 
       case 'bar':
+        // Auto-detect fields for bar chart
+        let barXField = config.xAxis || config.chartSpecificConfig?.xAxis || config.category;
+        let barYField = config.yAxis || config.chartSpecificConfig?.yAxis || config.value;
+        
+        if (!barXField || !barYField) {
+          const sampleData = config.data?.[0];
+          if (sampleData) {
+            const fields = Object.keys(sampleData);
+            const numericFields = fields.filter(key => {
+              const value = sampleData[key];
+              return !isNaN(parseFloat(value)) && isFinite(value);
+            });
+            const textFields = fields.filter(key => {
+              const value = sampleData[key];
+              return typeof value === 'string' && isNaN(parseFloat(value));
+            });
+            
+            console.log('🔍 Bar chart auto-detecting fields:', { 
+              numericFields, 
+              textFields, 
+              allFields: fields 
+            });
+            
+            // For bar charts, X should be categorical, Y should be numeric
+            barXField = barXField || textFields[0] || fields[0]; // First text field or any field
+            barYField = barYField || numericFields[0]; // First numeric field
+            
+            // If no numeric field found, try to count occurrences
+            if (!barYField && barXField) {
+              console.log('📊 No numeric field found, will aggregate by count');
+              barYField = 'count';
+            }
+          }
+        }
+        
+        console.log('📊 Bar chart using fields:', { 
+          xField: barXField, 
+          yField: barYField,
+          dataLength: config.data?.length 
+        });
+        
+        if (!barXField) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="text-center">
+                <p className="text-gray-500 mb-2">Bar chart requires at least a category field</p>
+                <p className="text-xs text-gray-400">
+                  Available fields: {Object.keys(config.data?.[0] || {}).join(', ')}
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        // Aggregate data if using count
+        let barData = config.data;
+        if (barYField === 'count') {
+          const counts: Record<string, number> = {};
+          config.data.forEach(item => {
+            const key = item[barXField];
+            counts[key] = (counts[key] || 0) + 1;
+          });
+          barData = Object.entries(counts).map(([key, count]) => ({
+            [barXField]: key,
+            count: count
+          }));
+          console.log('📊 Aggregated bar data:', barData.slice(0, 5));
+        }
+
         return (
-          <BarChart data={config.data}>
+          <BarChart data={barData}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
-              dataKey={config.xAxis}
+              dataKey={barXField}
               tick={{ fontSize: 12 }}
               angle={-45}
               textAnchor="end"
@@ -791,12 +1023,12 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
             />
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip
-              labelFormatter={(label) => `${config.xAxis}: ${label}`}
-              formatter={(value: any, name: string) => [value, config.yAxis]}
+              labelFormatter={(label) => `${barXField}: ${label}`}
+              formatter={(value: any, name: string) => [value, barYField]}
             />
             <Legend />
             <Bar
-              dataKey={config.yAxis}
+              dataKey={barYField}
               fill={COLORS[1]}
               radius={[4, 4, 0, 0]}
             />
@@ -804,38 +1036,194 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
         );
 
       case 'scatter':
+        // Try to get axis fields from config or chartSpecificConfig
+        let xField = config.xAxis || config.chartSpecificConfig?.xAxis || config.chartSpecificConfig?.x;
+        let yField = config.yAxis || config.chartSpecificConfig?.yAxis || config.chartSpecificConfig?.y;
+        
+        // Auto-detect numeric fields if axis fields are not specified
+        if (!xField || !yField) {
+          const sampleData = config.data?.[0];
+          if (sampleData) {
+            const numericFields = Object.keys(sampleData).filter(key => {
+              const value = sampleData[key];
+              return !isNaN(parseFloat(value)) && isFinite(value);
+            });
+            
+            console.log('🔍 Auto-detecting numeric fields:', numericFields);
+            
+            // For location data, prioritize longitude/latitude
+            if (numericFields.includes('longitude') && numericFields.includes('latitude')) {
+              xField = xField || 'longitude';
+              yField = yField || 'latitude';
+            } else if (numericFields.length >= 2) {
+              xField = xField || numericFields[0];
+              yField = yField || numericFields[1];
+            }
+          }
+        }
+        
+        console.log('🎯 Rendering scatter chart with config:', {
+          xAxis: xField,
+          yAxis: yField,
+          dataLength: config.data?.length,
+          samplePoint: config.data?.[0],
+          hasXData: xField && config.data?.some(d => d[xField] !== undefined),
+          hasYData: yField && config.data?.some(d => d[yField] !== undefined),
+          autoDetected: !config.xAxis && !config.yAxis
+        });
+        
+        if (!xField || !yField) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="text-center">
+                <p className="text-gray-500 mb-2">Scatter plot requires both X and Y axis fields</p>
+                <p className="text-xs text-gray-400">
+                  Available fields: {Object.keys(config.data?.[0] || {}).join(', ')}
+                </p>
+              </div>
+            </div>
+          );
+        }
+        
+        // Transform data to ensure numeric values for scatter plot
+        const scatterData = config.data?.map((item, index) => ({
+          ...item,
+          x: parseFloat(item[xField]) || 0,
+          y: parseFloat(item[yField]) || 0,
+          name: item[xField] || `Point ${index + 1}`
+        })).filter(item => !isNaN(item.x) && !isNaN(item.y));
+
+        console.log('📊 Scatter data transformed:', {
+          originalLength: config.data?.length,
+          transformedLength: scatterData?.length,
+          sample: scatterData?.slice(0, 3)
+        });
+
+        if (!scatterData || scatterData.length === 0) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <p className="text-gray-500">No numeric data available for scatter plot</p>
+            </div>
+          );
+        }
+
         return (
-          <ScatterChart data={config.data}>
+          <ScatterChart
+            width={600}
+            height={400}
+            data={scatterData}
+            margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
+          >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
-              dataKey={config.xAxis}
               type="number"
+              dataKey="x"
+              name={xField}
               tick={{ fontSize: 12 }}
             />
             <YAxis
-              dataKey={config.yAxis}
               type="number"
+              dataKey="y"
+              name={yField}
               tick={{ fontSize: 12 }}
             />
             <Tooltip
-              formatter={(value: any, name: string) => [value, name]}
-              labelFormatter={() => ''}
+              cursor={{ strokeDasharray: '3 3' }}
+              formatter={(value: any, name: string) => [
+                typeof value === 'number' ? value.toFixed(2) : value, 
+                name === 'x' ? xField : yField
+              ]}
             />
             <Scatter
-              dataKey={config.yAxis}
+              name={`${yField} vs ${xField}`}
+              dataKey="y"
               fill={COLORS[2]}
             />
           </ScatterChart>
         );
 
       case 'pie':
-        const pieData = config.data.slice(0, 10); // Limit to 10 slices for readability
+        // Auto-detect fields for pie chart
+        let pieCategoryField = config.category || config.chartSpecificConfig?.category || config.xAxis;
+        let pieValueField = config.value || config.chartSpecificConfig?.value || config.yAxis;
+        
+        if (!pieCategoryField || !pieValueField) {
+          const sampleData = config.data?.[0];
+          if (sampleData) {
+            const fields = Object.keys(sampleData);
+            const numericFields = fields.filter(key => {
+              const value = sampleData[key];
+              return !isNaN(parseFloat(value)) && isFinite(value);
+            });
+            const textFields = fields.filter(key => {
+              const value = sampleData[key];
+              return typeof value === 'string' && isNaN(parseFloat(value));
+            });
+            
+            console.log('🥧 Pie chart auto-detecting fields:', { 
+              numericFields, 
+              textFields, 
+              allFields: fields 
+            });
+            
+            // For pie charts, category should be text, value should be numeric
+            pieCategoryField = pieCategoryField || textFields[0] || fields[0];
+            pieValueField = pieValueField || numericFields[0];
+            
+            // If no numeric field, use count
+            if (!pieValueField && pieCategoryField) {
+              console.log('🥧 No numeric field found, will aggregate by count');
+              pieValueField = 'count';
+            }
+          }
+        }
+        
+        console.log('🥧 Pie chart using fields:', { 
+          categoryField: pieCategoryField, 
+          valueField: pieValueField 
+        });
+        
+        if (!pieCategoryField) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="text-center">
+                <p className="text-gray-500 mb-2">Pie chart requires a category field</p>
+                <p className="text-xs text-gray-400">
+                  Available fields: {Object.keys(config.data?.[0] || {}).join(', ')}
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        // Aggregate data if using count or if we have a value field
+        let pieData = config.data;
+        if (pieValueField === 'count' || pieValueField) {
+          const aggregated: Record<string, number> = {};
+          config.data.forEach(item => {
+            const key = item[pieCategoryField];
+            if (pieValueField === 'count') {
+              aggregated[key] = (aggregated[key] || 0) + 1;
+            } else {
+              const value = parseFloat(item[pieValueField]) || 0;
+              aggregated[key] = (aggregated[key] || 0) + value;
+            }
+          });
+          pieData = Object.entries(aggregated).map(([key, value]) => ({
+            [pieCategoryField]: key,
+            [pieValueField]: value
+          }));
+        }
+        
+        // Limit to 10 slices for readability
+        pieData = pieData.slice(0, 10);
+        
         return (
           <PieChart>
             <Pie
               data={pieData}
-              dataKey={config.value}
-              nameKey={config.category}
+              dataKey={pieValueField}
+              nameKey={pieCategoryField}
               cx="50%"
               cy="50%"
               outerRadius={80}
@@ -853,11 +1241,50 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
         );
 
       case 'area':
+        // Auto-detect fields for area chart
+        let areaXField = config.xAxis || config.chartSpecificConfig?.xAxis;
+        let areaYField = config.yAxis || config.chartSpecificConfig?.yAxis || config.value;
+        
+        if (!areaXField || !areaYField) {
+          const sampleData = config.data?.[0];
+          if (sampleData) {
+            const fields = Object.keys(sampleData);
+            const numericFields = fields.filter(key => {
+              const value = sampleData[key];
+              return !isNaN(parseFloat(value)) && isFinite(value);
+            });
+            
+            console.log('📈 Area chart auto-detecting fields:', { numericFields, allFields: fields });
+            
+            // For area charts, X can be categorical or numeric, Y should be numeric
+            areaXField = areaXField || fields[0];
+            areaYField = areaYField || numericFields[0];
+          }
+        }
+        
+        console.log('📈 Area chart using fields:', { 
+          xField: areaXField, 
+          yField: areaYField 
+        });
+        
+        if (!areaXField || !areaYField) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="text-center">
+                <p className="text-gray-500 mb-2">Area chart requires both X and Y axis fields</p>
+                <p className="text-xs text-gray-400">
+                  Available fields: {Object.keys(config.data?.[0] || {}).join(', ')}
+                </p>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <AreaChart data={config.data}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
-              dataKey={config.xAxis}
+              dataKey={areaXField}
               tick={{ fontSize: 12 }}
               angle={-45}
               textAnchor="end"
@@ -865,13 +1292,13 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
             />
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip
-              labelFormatter={(label) => `${config.xAxis}: ${label}`}
-              formatter={(value: any, name: string) => [value, config.yAxis]}
+              labelFormatter={(label) => `${areaXField}: ${label}`}
+              formatter={(value: any, name: string) => [value, areaYField]}
             />
             <Legend />
             <Area
               type="monotone"
-              dataKey={config.yAxis || 'value'}
+              dataKey={areaYField}
               stroke={COLORS[6]}
               fill={COLORS[6]}
               fillOpacity={0.6}
@@ -880,21 +1307,76 @@ export default function ChartRenderer({ config, chartType }: ChartRendererProps)
         );
 
       case 'treemap':
-        // Prepare treemap data
-        const categoryField = config.category || config.hierarchyField || config.xAxis;
-        const valueField = config.value || config.yAxis;
+        // Auto-detect fields for treemap
+        let treemapCategoryField = config.category || config.hierarchyField || config.xAxis || config.chartSpecificConfig?.category;
+        let treemapValueField = config.value || config.yAxis || config.chartSpecificConfig?.value;
         
-        if (!categoryField || !valueField) {
+        if (!treemapCategoryField || !treemapValueField) {
+          const sampleData = config.data?.[0];
+          if (sampleData) {
+            const fields = Object.keys(sampleData);
+            const numericFields = fields.filter(key => {
+              const value = sampleData[key];
+              return !isNaN(parseFloat(value)) && isFinite(value);
+            });
+            const textFields = fields.filter(key => {
+              const value = sampleData[key];
+              return typeof value === 'string' && isNaN(parseFloat(value));
+            });
+            
+            console.log('🌳 Treemap auto-detecting fields:', { 
+              numericFields, 
+              textFields, 
+              allFields: fields 
+            });
+            
+            // For treemaps, category should be text, value should be numeric
+            treemapCategoryField = treemapCategoryField || textFields[0] || fields[0];
+            treemapValueField = treemapValueField || numericFields[0];
+            
+            // If no numeric field, use count
+            if (!treemapValueField && treemapCategoryField) {
+              console.log('🌳 No numeric field found, will aggregate by count');
+              treemapValueField = 'count';
+            }
+          }
+        }
+        
+        console.log('🌳 Treemap using fields:', { 
+          categoryField: treemapCategoryField, 
+          valueField: treemapValueField 
+        });
+        
+        if (!treemapCategoryField) {
           return (
             <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-              <p className="text-gray-500">Treemap requires category and value fields</p>
+              <div className="text-center">
+                <p className="text-gray-500 mb-2">Treemap requires a category field</p>
+                <p className="text-xs text-gray-400">
+                  Available fields: {Object.keys(config.data?.[0] || {}).join(', ')}
+                </p>
+              </div>
             </div>
           );
         }
         
-        const treemapData = config.data.map((item, index) => ({
-          name: item[categoryField],
-          size: +item[valueField] || 0,
+        // Aggregate data if using count or prepare treemap data
+        let treemapRawData = config.data;
+        if (treemapValueField === 'count') {
+          const counts: Record<string, number> = {};
+          config.data.forEach(item => {
+            const key = item[treemapCategoryField];
+            counts[key] = (counts[key] || 0) + 1;
+          });
+          treemapRawData = Object.entries(counts).map(([key, count]) => ({
+            [treemapCategoryField]: key,
+            count: count
+          }));
+        }
+        
+        const treemapData = treemapRawData.map((item, index) => ({
+          name: item[treemapCategoryField],
+          size: +item[treemapValueField] || 0,
           fill: COLORS[index % COLORS.length]
         }));
 

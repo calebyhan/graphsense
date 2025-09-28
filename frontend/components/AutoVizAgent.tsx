@@ -125,6 +125,18 @@ export default function AutoVizAgent() {
 
       console.log('✅ Processed recommendations:', processedRecommendations);
 
+      // Debug: Check if data is properly embedded in configs
+      processedRecommendations.forEach((rec, index) => {
+        console.log(`🔍 Recommendation ${index} data check:`, {
+          chartType: rec.chartType,
+          hasConfig: !!rec.config,
+          hasData: !!rec.config?.data,
+          dataLength: rec.config?.data?.length,
+          configKeys: rec.config ? Object.keys(rec.config) : [],
+          sampleDataRow: rec.config?.data?.[0]
+        });
+      });
+
       // Convert to the format expected by the UI
       const formattedRecommendations = processedRecommendations.map((rec, index) => ({
         id: `rec-${index}`,
@@ -140,9 +152,28 @@ export default function AutoVizAgent() {
       }));
 
             console.log('📊 Final formatted recommendations:', formattedRecommendations);
+
+            // Debug: Check if data is still present after formatting
+            formattedRecommendations.forEach((rec, index) => {
+              console.log(`🔍 Formatted recommendation ${index} data check:`, {
+                chartType: rec.chartType,
+                hasConfig: !!rec.config,
+                hasData: !!rec.config?.data,
+                dataLength: rec.config?.data?.length,
+                configKeys: rec.config ? Object.keys(rec.config) : []
+              });
+            });
+
             setRecommendations(formattedRecommendations);
     } else if (storeRecommendations && storeRecommendations.length > 0 && !rawData) {
       console.warn('⚠️ Recommendations available but no raw data for processing');
+      console.warn('🔍 Debug - Store state:', {
+        hasStoreRecommendations: !!storeRecommendations,
+        storeRecommendationsLength: storeRecommendations?.length || 0,
+        hasRawData: !!rawData,
+        rawDataLength: rawData?.length || 0,
+        sampleStoreRecommendation: storeRecommendations?.[0]
+      });
     }
   }, [storeRecommendations, rawData, dataProfile]);
 

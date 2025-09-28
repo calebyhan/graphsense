@@ -48,7 +48,14 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
   showErrorNotification: false,
   retryAttempts: 0,
 
-  setRawData: (data) => set({ rawData: data, parsedData: data }),
+  setRawData: (data) => {
+    console.log('📊 setRawData called:', {
+      hasData: !!data,
+      dataLength: data?.length || 0,
+      sampleRow: data?.[0]
+    });
+    set({ rawData: data, parsedData: data });
+  },
 
   updateAgentState: (agent, state) =>
     set((prev) => {
