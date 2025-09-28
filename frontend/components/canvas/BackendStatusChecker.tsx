@@ -181,7 +181,7 @@ export default function BackendStatusChecker() {
   };
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center justify-center">
       {/* Circular Status Indicator with Pulsating Ring */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
