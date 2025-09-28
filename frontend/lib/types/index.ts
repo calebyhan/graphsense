@@ -31,19 +31,114 @@ export interface ChartRecommendation {
   config: ChartConfig;
 }
 
-export interface ChartConfig {
+// Comprehensive dataset object with all possible chart attributes
+export interface DatasetAttributes {
+  // Core data
+  data: any[];
+  columns: ColumnProfile[];
+  
+  // Basic mappings (for simple charts)
   xAxis?: string;
   yAxis?: string;
   category?: string;
   value?: string;
+  
+  // Advanced mappings (for complex charts)
   color?: string;
   size?: string;
+  opacity?: string;
+  shape?: string;
+  
+  // Flow/Network chart attributes
   source?: string;
   target?: string;
+  weight?: string;
+  
+  // Hierarchical data attributes
+  hierarchyField?: string;
+  parentField?: string;
+  childrenField?: string;
+  
+  // Statistical chart attributes
+  bins?: number;
+  bandwidth?: number;
+  
+  // Multi-dimensional attributes
+  facetRow?: string;
+  facetCol?: string;
+  groupBy?: string;
+  
+  // Time series attributes
+  timeField?: string;
+  timeFormat?: string;
+  timeAggregation?: 'hour' | 'day' | 'week' | 'month' | 'year';
+  
+  // Geographical attributes
+  latitude?: string;
+  longitude?: string;
+  geoField?: string;
+  
+  // Matrix/Heatmap attributes
+  rowField?: string;
+  colField?: string;
+  valueField?: string;
+  
+  // Custom attributes for specialized charts
+  customAttributes?: Record<string, any>;
+}
+
+// Enhanced ChartConfig that extracts relevant attributes from DatasetAttributes
+export interface ChartConfig {
   title: string;
   data: any[];
-  bins?: number; // For histogram
-  hierarchyField?: string; // For treemap
+  
+  // Core mappings
+  xAxis?: string;
+  yAxis?: string;
+  category?: string;
+  value?: string;
+  
+  // Visual mappings
+  color?: string;
+  size?: string;
+  opacity?: string;
+  shape?: string;
+  
+  // Flow/Network
+  source?: string;
+  target?: string;
+  weight?: string;
+  
+  // Hierarchical
+  hierarchyField?: string;
+  parentField?: string;
+  
+  // Statistical
+  bins?: number;
+  bandwidth?: number;
+  
+  // Multi-dimensional
+  facetRow?: string;
+  facetCol?: string;
+  groupBy?: string;
+  
+  // Time series
+  timeField?: string;
+  timeFormat?: string;
+  timeAggregation?: 'hour' | 'day' | 'week' | 'month' | 'year';
+  
+  // Geographical
+  latitude?: string;
+  longitude?: string;
+  geoField?: string;
+  
+  // Matrix/Heatmap
+  rowField?: string;
+  colField?: string;
+  valueField?: string;
+  
+  // Chart-specific configurations
+  chartSpecificConfig?: Record<string, any>;
 }
 
 export interface AnalysisResult {

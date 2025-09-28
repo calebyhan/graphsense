@@ -11,7 +11,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface VisualizationCardProps {
   id: string;
   title: string;
-  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap';
+  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
   dataSource: string;
   lastUpdated: string;
   position: { x: number; y: number };

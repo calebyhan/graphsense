@@ -13,6 +13,12 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useDatasetManager } from '@/hooks/useDatasetManager';
+import { RecommendationProcessor } from '@/lib/services/recommendationProcessor';
+import { DatasetAttributeBuilder } from '@/lib/services/datasetAttributeBuilder';
+import CanvasElement from '@/components/canvas/CanvasElement';
+import ChartCard from '@/components/canvas/elements/ChartCard';
+import DatasetCard from '@/components/canvas/elements/DatasetCard';
+import MapCard from '@/components/canvas/elements/MapCard';
 
 export interface Dataset {
   id: string;
@@ -36,7 +42,7 @@ export interface Dataset {
 export interface Visualization {
   id: string;
   title: string;
-  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap';
+  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
   dataSource: string;
   position: { x: number; y: number };
   size: { width: number; height: number };
@@ -48,10 +54,12 @@ export interface Visualization {
 
 export interface ChartRecommendation {
   id: string;
-  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap';
+  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
+  chartType?: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
   name: string;
   confidence: number;
   reasoning: string;
+  justification?: string;
   description: string;
   bestFor: string[];
   config?: any;
@@ -71,8 +79,8 @@ export default function AutoVizAgent() {
   const { datasets } = useDatasetManager();
   
   // Canvas state
-  const { viewport, updateViewport } = useCanvasStore();
-  const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading } = useAnalysisStore();
+  const { viewport, updateViewport, canvasElements, addElement } = useCanvasStore();
+  const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, setRecommendations: setStoreRecommendations } = useAnalysisStore();
   
   // Debug logging for state changes
   React.useEffect(() => {
@@ -99,44 +107,44 @@ export default function AutoVizAgent() {
     };
   }, []);
 
-  // Sync recommendations from store
+  // Sync recommendations from store and process them with our new system
   React.useEffect(() => {
-    if (storeRecommendations && storeRecommendations.length > 0) {
-      const formattedRecommendations = storeRecommendations.map((rec: any, index) => {
-        const chartType = rec.chart_type || rec.type || 'chart';
-        
-        // Extract reasoning text from reasoning array
-        let reasoningText = `Great for your ${chartType} visualization needs`;
-        if (rec.reasoning && Array.isArray(rec.reasoning) && rec.reasoning.length > 0) {
-          // Get the reasoning text from the first reasoning object
-          const firstReasoning = rec.reasoning[0];
-          if (typeof firstReasoning === 'string') {
-            reasoningText = firstReasoning;
-          } else if (typeof firstReasoning === 'object' && firstReasoning !== null) {
-            reasoningText = firstReasoning.reasoning || reasoningText;
-          }
-        } else if (typeof rec.reasoning === 'string') {
-          reasoningText = rec.reasoning;
-        } else if (typeof rec.reasoning === 'object' && rec.reasoning !== null && 'reasoning' in rec.reasoning) {
-          reasoningText = String(rec.reasoning.reasoning);
-        } else if (rec.justification && typeof rec.justification === 'string') {
-          reasoningText = rec.justification;
-        }
-        
-        return {
-          id: `rec-${index}`,
-          type: chartType as any,
-          name: chartType ? (chartType.charAt(0).toUpperCase() + chartType.slice(1)) : 'Chart',
-          confidence: rec.confidence || 85,
-          reasoning: reasoningText,
-          description: rec.description || `Shows data using ${chartType} format`,
-          bestFor: rec.best_for || rec.bestFor || ['Data visualization'],
-          config: rec.config
-        };
+    if (storeRecommendations && storeRecommendations.length > 0 && rawData) {
+      console.log('🔄 Processing recommendations with new parameter extraction system:', {
+        recommendationsCount: storeRecommendations.length,
+        rawDataLength: rawData.length,
+        sampleRecommendation: storeRecommendations[0]
       });
-      setRecommendations(formattedRecommendations);
+
+      // Use our new RecommendationProcessor to enhance recommendations
+      const processedRecommendations = RecommendationProcessor.processRecommendations(
+        storeRecommendations,
+        rawData,
+        dataProfile
+      );
+
+      console.log('✅ Processed recommendations:', processedRecommendations);
+
+      // Convert to the format expected by the UI
+      const formattedRecommendations = processedRecommendations.map((rec, index) => ({
+        id: `rec-${index}`,
+        type: rec.chartType,
+        chartType: rec.chartType, // Add this for compatibility
+        name: rec.chartType.charAt(0).toUpperCase() + rec.chartType.slice(1),
+        confidence: rec.confidence,
+        reasoning: rec.justification,
+        justification: rec.justification, // Add this for compatibility
+        description: `Shows data using ${rec.chartType} format`,
+        bestFor: ['Data visualization'],
+        config: rec.config
+      }));
+
+            console.log('📊 Final formatted recommendations:', formattedRecommendations);
+            setRecommendations(formattedRecommendations);
+    } else if (storeRecommendations && storeRecommendations.length > 0 && !rawData) {
+      console.warn('⚠️ Recommendations available but no raw data for processing');
     }
-  }, [storeRecommendations]);
+  }, [storeRecommendations, rawData, dataProfile]);
 
   // Sync analysis state
   React.useEffect(() => {
@@ -233,6 +241,15 @@ export default function AutoVizAgent() {
     type: Visualization['type'] = 'bar',
     recommendation?: ChartRecommendation
   ) => {
+    console.log('🎨 createVisualization called:', {
+      type,
+      hasRecommendation: !!recommendation,
+      hasConfig: !!recommendation?.config,
+      hasData: !!recommendation?.config?.data,
+      dataLength: recommendation?.config?.data?.length,
+      configKeys: recommendation?.config ? Object.keys(recommendation.config) : []
+    });
+
     const newViz: Visualization = {
       id: `viz-${Date.now()}`,
       title: type ? `${type.charAt(0).toUpperCase() + type.slice(1)} Chart` : 'Chart',
@@ -245,9 +262,34 @@ export default function AutoVizAgent() {
       config: recommendation?.config
     };
     
+    // Add to local state for backward compatibility
     setVisualizations(prev => [...prev, newViz]);
     setSelectedVizId(newViz.id);
-  }, []);
+
+    // CRITICAL: Also add to canvas store so it actually renders
+    const chartTitle = recommendation?.config?.title || 
+                      (recommendation?.config?.xAxis && recommendation?.config?.yAxis ? 
+                        `${recommendation.config.yAxis} vs ${recommendation.config.xAxis}` : null) ||
+                      `${type} Visualization`;
+
+    const canvasElement = {
+      type: 'chart' as const,
+      position,
+      size: { width: 500, height: 400 },
+      data: {
+        config: {
+          ...recommendation?.config,
+          title: chartTitle
+        },
+        chartType: type,
+        recommendation: recommendation,
+        title: chartTitle
+      }
+    };
+
+    console.log('🎯 Adding to canvas store:', canvasElement);
+    addElement(canvasElement);
+  }, [addElement]);
 
   // Visualization management
   const handleVisualizationSelect = useCallback((id: string) => {
@@ -330,6 +372,7 @@ export default function AutoVizAgent() {
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
             >
+              {/* Render local visualizations */}
               {visualizations.map((viz) => (
                 <VisualizationCard
                   key={viz.id}
@@ -346,6 +389,34 @@ export default function AutoVizAgent() {
                   onSizeChange={handleVisualizationSizeChange}
                   onDelete={handleVisualizationDelete}
                 />
+              ))}
+
+              {/* Render canvas store elements */}
+              {canvasElements.map((element) => (
+                <CanvasElement key={element.id} element={element}>
+                  {element.type === 'chart' && (
+                    <ChartCard
+                      config={element.data?.config}
+                      chartType={element.data?.chartType || 'bar'}
+                      recommendation={element.data?.recommendation}
+                      title={element.data?.title}
+                    />
+                  )}
+                  {element.type === 'dataset' && (
+                    <DatasetCard
+                      data={element.data?.data || []}
+                      dataProfile={element.data?.dataProfile}
+                      title={element.data?.title || 'Dataset'}
+                    />
+                  )}
+                  {element.type === 'map' && (
+                    <MapCard
+                      data={element.data?.data || []}
+                      title={element.data?.title || 'Map'}
+                      config={element.data?.config}
+                    />
+                  )}
+                </CanvasElement>
               ))}
             </div>
           </InfiniteCanvas>

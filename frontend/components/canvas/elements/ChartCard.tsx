@@ -7,13 +7,24 @@ import ExportButton from '../ExportButton';
 
 interface ChartCardProps {
   config: any;
-  chartType: 'line' | 'bar' | 'scatter' | 'pie' | 'heatmap';
+  chartType: 'line' | 'bar' | 'scatter' | 'pie' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey' | 'area';
   recommendation?: any;
   title?: string;
 }
 
 export default function ChartCard({ config, chartType, recommendation, title }: ChartCardProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+
+  // Debug logging for ChartCard
+  console.log('📊 ChartCard rendered:', { 
+    chartType, 
+    hasConfig: !!config, 
+    configKeys: config ? Object.keys(config) : [],
+    hasData: !!config?.data,
+    dataLength: config?.data?.length,
+    title,
+    sampleConfig: config
+  });
 
   // Generate intelligent title for chart
   const getChartTitle = () => {
