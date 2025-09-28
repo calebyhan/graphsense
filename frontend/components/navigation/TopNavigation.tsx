@@ -9,9 +9,10 @@ import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
 interface TopNavigationProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
+  isTransitioning?: boolean;
 }
 
-export function TopNavigation({ isDarkMode, onToggleDarkMode }: TopNavigationProps) {
+export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false }: TopNavigationProps) {
   const [projectName, setProjectName] = useState('Auto Viz Analysis');
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(projectName);
@@ -57,7 +58,7 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode }: TopNavigationPro
                 </h1>
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-110 rounded transition-all duration-300 cursor-pointer"
                 >
                   <Edit3 className="w-3 h-3 text-gray-400" />
                 </button>
@@ -81,9 +82,14 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode }: TopNavigationPro
           variant="ghost"
           size="sm"
           onClick={onToggleDarkMode}
-          className="h-8 w-8 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-300"
+          disabled={isTransitioning}
+          className={`h-8 w-8 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer ${
+            isTransitioning ? 'opacity-70 pointer-events-none' : ''
+          }`}
         >
-          {isDarkMode ? (
+          {isTransitioning ? (
+            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          ) : isDarkMode ? (
             <Sun className="w-4 h-4 text-yellow-500" />
           ) : (
             <Moon className="w-4 h-4 text-gray-600" />
@@ -91,19 +97,27 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode }: TopNavigationPro
         </Button>
 
         {/* Notifications */}
-        <Button variant="ghost" size="sm" className="relative">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="relative hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
+        >
           <Bell className="w-4 h-4" />
           <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
         </Button>
 
         {/* Version History */}
-        <Button variant="ghost" size="sm">
+        <Button 
+          variant="ghost" 
+          size="sm"
+          className="hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
+        >
           <History className="w-4 h-4" />
         </Button>
 
         {/* Share Button */}
         <div className="relative">
-          <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
+          <Button className="bg-indigo-600 hover:bg-indigo-700 hover:scale-105 text-white transition-all duration-300 cursor-pointer">
             <Share className="w-4 h-4 mr-2" />
             Share
             <ChevronDown className="w-3 h-3 ml-1" />
@@ -112,7 +126,10 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode }: TopNavigationPro
 
         {/* Export Options */}
         <div className="relative">
-          <Button variant="outline">
+          <Button 
+            variant="outline"
+            className="hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
+          >
             <Download className="w-4 h-4 mr-2" />
             Export
             <ChevronDown className="w-3 h-3 ml-1" />

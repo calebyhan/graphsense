@@ -115,13 +115,51 @@
     @apply border-border outline-ring/50;
   }
 
+  html {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: ui-sans-serif, system-ui, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
+
 
   .font-mono {
     font-family: ui-monospace, 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Noto Sans Mono', 'Droid Sans Mono', 'Liberation Mono', monospace;
+  }
+
+  /* Enhanced theme transition utilities */
+  .theme-transition {
+    transition: 
+      background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      fill 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      stroke 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Theme transitioning state */
+  .theme-transitioning * {
+    transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease !important;
+  }
+
+  /* Smooth theme transition for glass effects */
+  .glass-effect {
+    backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 
+      background 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark .glass-effect {
+    background: rgba(30, 41, 59, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
   }
 }
 

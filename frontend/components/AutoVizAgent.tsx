@@ -11,6 +11,7 @@ import { TopNavigation } from '@/components/navigation/TopNavigation';
 import { VisualizationCard } from '@/components/visualization/VisualizationCard';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { useThemeTransition } from '@/hooks/useThemeTransition';
 
 export interface Dataset {
   id: string;
@@ -59,7 +60,6 @@ export default function AutoVizAgent() {
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const [selectedVizId, setSelectedVizId] = useState<string | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [recommendations, setRecommendations] = useState<ChartRecommendation[]>([]);
   
@@ -67,17 +67,10 @@ export default function AutoVizAgent() {
   const { viewport, updateViewport } = useCanvasStore();
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading } = useAnalysisStore();
   
+  // Theme transition hook
+  const { isDarkMode, isTransitioning, toggleTheme } = useThemeTransition();
+  
   const canvasRef = useRef<HTMLDivElement>(null);
-
-
-  // Dark mode effect
-  React.useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
 
   // Sync recommendations from store
   React.useEffect(() => {
@@ -219,7 +212,8 @@ export default function AutoVizAgent() {
       {/* Top Navigation */}
       <TopNavigation 
         isDarkMode={isDarkMode}
-        onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+        onToggleDarkMode={toggleTheme}
+        isTransitioning={isTransitioning}
       />
 
       <div className="flex-1 flex overflow-hidden">
