@@ -5,7 +5,9 @@ import { X, BarChart3, LineChart, Circle, PieChart, Activity, BarChart2, TreePin
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import ChartRenderer from '@/components/visualization/ChartRenderer';
-import { ChartConfig } from '@/lib/types';
+import { ChartConfig, DatasetAttributes } from '@/lib/types';
+import { ChartParameterExtractor, ChartType } from '@/lib/services/chartParameterExtractor';
+import { DatasetAttributeBuilder } from '@/lib/services/datasetAttributeBuilder';
 
 interface ChartCreationModalProps {
   isOpen: boolean;
@@ -26,7 +28,7 @@ const chartTypes = [
 ] as const;
 
 export default function ChartCreationModal({ isOpen, onClose }: ChartCreationModalProps) {
-  const { parsedData } = useAnalysisStore();
+  const { parsedData, dataProfile } = useAnalysisStore();
   const { addElement } = useCanvasStore();
 
   const [selectedChartType, setSelectedChartType] = useState<string>('bar');
@@ -40,6 +42,26 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
     data: []
   });
   const [previewConfig, setPreviewConfig] = useState<ChartConfig | null>(null);
+  const [datasetAttributes, setDatasetAttributes] = useState<DatasetAttributes | null>(null);
+
+  // Build dataset attributes when data changes
+  useEffect(() => {
+    if (parsedData) {
+      const attributes = DatasetAttributeBuilder.buildDatasetAttributes(parsedData, dataProfile);
+      setDatasetAttributes(attributes);
+    }
+  }, [parsedData, dataProfile]);
+
+  // Auto-configure chart when type or attributes change
+  useEffect(() => {
+    if (datasetAttributes && selectedChartType) {
+      const autoConfig = ChartParameterExtractor.extractChartConfig(
+        selectedChartType as ChartType,
+        datasetAttributes
+      );
+      setChartConfig(autoConfig);
+    }
+  }, [datasetAttributes, selectedChartType]);
 
   const columns = parsedData ? Object.keys(parsedData[0] || {}) : [];
   const numericColumns = columns.filter(col => {
@@ -90,28 +112,15 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
   };
 
   const getRequiredFields = (chartType: string) => {
-    switch (chartType) {
-      case 'line':
-      case 'bar':
-      case 'area':
-        return { required: ['xAxis', 'yAxis'], optional: ['color'] };
-      case 'scatter':
-        return { required: ['xAxis', 'yAxis'], optional: ['color', 'size'] };
-      case 'pie':
-        return { required: ['category', 'value'], optional: [] };
-      case 'histogram':
-        return { required: ['value'], optional: ['bins'] };
-      case 'box_plot':
-        return { required: ['category', 'value'], optional: [] };
-      case 'heatmap':
-        return { required: ['xAxis', 'yAxis'], optional: ['value'] };
-      case 'treemap':
-        return { required: ['category', 'value'], optional: ['hierarchyField'] };
-      case 'sankey':
-        return { required: ['source', 'target', 'value'], optional: [] };
-      default:
-        return { required: ['xAxis', 'yAxis'], optional: [] };
+    // Use the new parameter requirements from ChartParameterExtractor
+    const requirements = ChartParameterExtractor.CHART_PARAMETER_REQUIREMENTS[chartType as ChartType];
+    if (requirements) {
+      return {
+        required: requirements.required,
+        optional: requirements.optional
+      };
     }
+    return { required: ['xAxis', 'yAxis'], optional: [] };
   };
 
   const requiredFields = getRequiredFields(selectedChartType);

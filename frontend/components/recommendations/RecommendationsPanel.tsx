@@ -10,7 +10,14 @@ export default function RecommendationsPanel() {
   const { addElement } = useCanvasStore();
 
   const handleAddToCanvas = (recommendation: any) => {
-    console.log('RecommendationsPanel: Adding to canvas', recommendation);
+    console.log('🎯 RecommendationsPanel: Adding to canvas', recommendation);
+    console.log('🔍 Recommendation config details:', {
+      hasConfig: !!recommendation.config,
+      hasData: !!recommendation.config?.data,
+      dataLength: recommendation.config?.data?.length,
+      configKeys: recommendation.config ? Object.keys(recommendation.config) : [],
+      sampleData: recommendation.config?.data?.slice(0, 2)
+    });
     
     // Ensure we have a title for the chart
     const chartTitle = recommendation.config?.title || 
