@@ -48,12 +48,12 @@ const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardP
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="chart-card h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <BarChart3 className="h-4 w-4 text-blue-500" />
-          <span className="text-sm font-medium text-gray-900">
+          <BarChart3 className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">
             {getChartTitle()}
           </span>
         </div>
@@ -71,9 +71,9 @@ const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardP
         {config ? (
           <ChartRenderer config={config} chartType={chartType} />
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-500">
+          <div className="h-full flex items-center justify-center text-muted-foreground">
             <div className="text-center">
-              <BarChart3 className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+              <BarChart3 className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
               <p className="text-sm">No chart data</p>
             </div>
           </div>
@@ -82,14 +82,14 @@ const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardP
 
       {/* Recommendation Info */}
       {recommendation && (
-        <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+        <div className="mt-3 p-2 bg-accent border border-border rounded text-xs">
           <div className="flex items-start gap-1">
-            <Info className="h-3 w-3 text-blue-500 mt-0.5 flex-shrink-0" />
+            <Info className="h-3 w-3 text-primary mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium text-blue-900 mb-1">
+              <p className="font-medium text-foreground mb-1">
                 Confidence: {recommendation.confidence}%
               </p>
-              <p className="text-blue-800 line-clamp-2">
+              <p className="text-muted-foreground line-clamp-2">
                 {recommendation.justification}
               </p>
             </div>

@@ -1,0 +1,110 @@
+
+> frontend@0.1.0 dev
+> next dev
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/ethantran/code/vthacks25/package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * /Users/ethantran/code/vthacks25/frontend/package-lock.json
+
+   ▲ Next.js 15.5.4
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.10.235:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 1342ms
+ ○ Compiling /canvas ...
+ ✓ Compiled /canvas in 2.9s (4267 modules)
+🎨 CanvasPage component loading...
+🚀 AutoVizAgent component mounting...
+ GET /canvas 200 in 3457ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 1294ms (2215 modules)
+ GET /favicon.ico 200 in 1408ms
+ ○ Compiling / ...
+ ✓ Compiled / in 835ms (4330 modules)
+ GET / 200 in 1111ms
+🎨 CanvasPage component loading...
+🚀 AutoVizAgent component mounting...
+ GET /canvas 200 in 266ms
+🎨 CanvasPage component loading...
+🚀 AutoVizAgent component mounting...
+ GET /canvas 200 in 45ms
+🎨 CanvasPage component loading...
+🚀 AutoVizAgent component mounting...
+ GET /canvas 200 in 114ms
+ GET /favicon.ico 200 in 126ms
+ ✓ Compiled in 1466ms (4302 modules)
+ GET /canvas 200 in 149ms
+ GET /canvas 200 in 14ms
+ ✓ Compiled in 323ms (4302 modules)
+ GET /canvas 200 in 105ms
+ GET /canvas 200 in 22ms
+ ✓ Compiled in 653ms (4302 modules)
+ GET /canvas 200 in 86ms
+ GET /canvas 200 in 29ms
+ ✓ Compiled in 364ms (4302 modules)
+ GET /canvas 200 in 69ms
+ GET /canvas 200 in 22ms
+ ✓ Compiled in 300ms (4302 modules)
+ GET /canvas 200 in 37ms
+ GET /canvas 200 in 12ms
+🎨 CanvasPage component loading...
+🚀 AutoVizAgent component mounting...
+ GET /canvas 200 in 457ms
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 872ms (2215 modules)
+ GET /favicon.ico 200 in 958ms
+ ✓ Compiled in 799ms (4319 modules)
+ GET /canvas 200 in 97ms
+ GET /canvas 200 in 21ms
+ ✓ Compiled in 430ms (4319 modules)
+ GET /canvas 200 in 68ms
+ GET /canvas 200 in 15ms
+ ✓ Compiled in 396ms (4319 modules)
+ GET /canvas 200 in 41ms
+ GET /canvas 200 in 11ms
+ ✓ Compiled in 518ms (4302 modules)
+ GET /canvas 200 in 172ms
+ GET /canvas 200 in 17ms
+ ✓ Compiled in 695ms (4302 modules)
+ GET /canvas 200 in 68ms
+ GET /canvas 200 in 13ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 859ms (4293 modules)
+ GET /canvas 404 in 1256ms
+🎨 CanvasPage component loading...
+🚀 AutoVizAgent component mounting...
+ ⨯ ReferenceError: Cannot access 'animateZoom' before initialization
+    at InfiniteCanvas (components/canvas/InfiniteCanvas.tsx:121:33)
+  119 |
+  120 |   // Create refs for animation functions to avoid closure issues
+> 121 |   const animateZoomRef = useRef(animateZoom);
+      |                                 ^
+  122 |   const screenToCartesianRef = useRef(screenToCartesian);
+  123 |
+  124 |   useEffect(() => { {
+  digest: '1999353433'
+}
+ GET /canvas 500 in 432ms
+ ✓ Compiled /favicon.ico in 274ms (2216 modules)
+ GET /favicon.ico 200 in 383ms
+🎨 CanvasPage component loading...
+🚀 AutoVizAgent component mounting...
+ ⨯ ReferenceError: Cannot access 'animateZoom' before initialization
+    at InfiniteCanvas (components/canvas/InfiniteCanvas.tsx:121:33)
+  119 |
+  120 |   // Create refs for animation functions to avoid closure issues
+> 121 |   const animateZoomRef = useRef(animateZoom);
+      |                                 ^
+  122 |   const screenToCartesianRef = useRef(screenToCartesian);
+  123 |
+  124 |   useEffect(() => { {
+  digest: '1999353433'
+}
+ GET /canvas 500 in 325ms
+ GET /favicon.ico 200 in 18ms
+[?25h

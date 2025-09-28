@@ -62,22 +62,16 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
     });
   }, [datasets, isDatasetsLoading, datasetError, isAuthenticated]);
 
-  // Load dataset data into analysis store when manually selected 
+  // Load dataset data into analysis store when manually selected
   React.useEffect(() => {
     if (selectedDataset && selectedDataset.data && selectedDataset.data.length > 0) {
       console.log('📊 Loading selected dataset into analysis store:', selectedDataset.name);
       setRawData(selectedDataset.data);
-      
-      // Only auto-start analysis if not currently processing an upload
-      // This prevents duplicate analysis calls during the upload flow
-      if (processingStatus !== 'completed' && processingStatus !== 'processing') {
-        console.log('🚀 Auto-starting analysis for manually selected dataset:', selectedDataset.name);
-        startAnalysis(selectedDataset.data, selectedDataset.name, selectedDataset.id);
-      } else {
-        console.log('⏳ Skipping auto-analysis (upload in progress or just completed)');
-      }
+
+      // Note: Analysis is now handled by AutoVizAgent to prevent duplicate calls
+      console.log('📊 Analysis will be triggered by AutoVizAgent');
     }
-  }, [selectedDataset, setRawData, startAnalysis, processingStatus]);
+  }, [selectedDataset, setRawData]);
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -107,11 +101,10 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
           setProcessingStatus(status);
         },
         onDatasetCreated: (dataset: Dataset) => {
-          console.log('📊 Dataset created, starting analysis:', dataset.name);
-          // Set the data and trigger analysis for the newly uploaded dataset
+          console.log('📊 Dataset created:', dataset.name);
+          // Set the data - AutoVizAgent will handle analysis
           if (dataset.data && dataset.data.length > 0) {
             setRawData(dataset.data);
-            startAnalysis(dataset.data, dataset.name, dataset.id);
           }
         }
       });

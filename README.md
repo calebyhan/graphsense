@@ -68,41 +68,7 @@ An AI-powered data visualization platform that automatically analyzes datasets a
 ```bash
 git clone <repository-url>
 cd vthacks25
-
-# Copy environment template
 cp .env.example .env
-```
-
-### 2. Configure Environment Variables
-
-Edit `.env` with your credentials:
-
-```bash
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_SERVICE_KEY=your_supabase_service_role_key
-
-# Google Gemini API
-GEMINI_API_KEY=your_gemini_api_key
-
-# Application URLs
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### 3. Setup Database
-
-```bash
-# Run the database schema in your Supabase SQL editor
-cat backend/database/schema.sql
-```
-
-### 4. Choose Your Setup Method
-
-#### Option A: Docker (Recommended)
-```bash
-# Build and start all services
 docker-compose up --build
 
 # Or run backend only (if running frontend locally)
