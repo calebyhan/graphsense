@@ -255,8 +255,11 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
     try {
       const results = await backendAPI.getAnalysisResults(datasetId);
 
+      console.log('📊 Analysis results loaded:', results);
+
       if (results.recommendations) {
         setRecommendations(results.recommendations);
+        console.log('✅ Recommendations set:', results.recommendations);
       }
 
       if (results.data_profile) {
@@ -267,6 +270,20 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
           dataQuality: 'medium' // TODO: Map from backend format
         };
         setDataProfile(mappedProfile);
+        console.log('✅ Data profile set:', mappedProfile);
+      }
+
+      // IMPORTANT: Trigger dataset creation by ensuring rawData is still available
+      // The rawData should already be set from the initial upload, but let's make sure
+      const currentState = get();
+      if (currentState.rawData) {
+        console.log('✅ Raw data is available for dataset creation:', {
+          rawDataLength: currentState.rawData.length,
+          hasRecommendations: !!currentState.recommendations,
+          hasDataProfile: !!currentState.dataProfile
+        });
+      } else {
+        console.warn('⚠️ Raw data is missing - dataset creation may not work');
       }
 
     } catch (error) {

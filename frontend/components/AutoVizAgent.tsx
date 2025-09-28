@@ -12,6 +12,7 @@ import { VisualizationCard } from '@/components/visualization/VisualizationCard'
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
+import { useDatasetManager } from '@/hooks/useDatasetManager';
 
 export interface Dataset {
   id: string;
@@ -56,22 +57,51 @@ export interface ChartRecommendation {
 }
 
 export default function AutoVizAgent() {
+  console.log('🚀 AutoVizAgent component mounting...');
+  
   // State management
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
-  const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const [selectedVizId, setSelectedVizId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [recommendations, setRecommendations] = useState<ChartRecommendation[]>([]);
   
+  // Dataset management with React Query
+  const { datasets, createDataset, isCreating } = useDatasetManager({
+    onDatasetCreated: (dataset) => {
+      setSelectedDataset(dataset);
+      console.log('Dataset created and selected:', dataset);
+    }
+  });
+  
   // Canvas state
   const { viewport, updateViewport } = useCanvasStore();
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading } = useAnalysisStore();
+  
+  // Debug logging for state changes
+  React.useEffect(() => {
+    console.log('🔍 AutoVizAgent state changed:', {
+      hasRawData: !!rawData,
+      rawDataLength: rawData?.length,
+      hasDataProfile: !!dataProfile,
+      isLoading,
+      agentStates,
+      datasetsCount: datasets.length
+    });
+  }, [rawData, dataProfile, isLoading, agentStates, datasets.length]);
   
   // Theme transition hook
   const { isDarkMode, isTransitioning, toggleTheme } = useThemeTransition();
   
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Mount effect
+  React.useEffect(() => {
+    console.log('✅ AutoVizAgent mounted successfully');
+    return () => {
+      console.log('❌ AutoVizAgent unmounting');
+    };
+  }, []);
 
   // Sync recommendations from store
   React.useEffect(() => {
@@ -98,39 +128,40 @@ export default function AutoVizAgent() {
     setIsAnalyzing(isLoading);
   }, [isLoading]);
 
-  // Create dataset entry when analysis completes
+  // Create dataset entry when analysis completes using React Query
   React.useEffect(() => {
-    if (rawData && dataProfile && !isLoading) {
-      const datasetId = `dataset-${Date.now()}`;
-      const newDataset: Dataset = {
-        id: datasetId,
-        name: `Dataset ${datasets.length + 1}`,
-        type: 'csv',
-        columns: Object.keys(rawData[0] || {}).length,
-        rows: rawData.length,
-        size: `${Math.round(JSON.stringify(rawData).length / 1024)}KB`,
-        lastModified: 'Just now',
-        dataTypes: {
-          numerical: dataProfile.column_types?.filter((col: any) => col.type === 'numeric').length || 0,
-          categorical: dataProfile.column_types?.filter((col: any) => col.type === 'categorical').length || 0,
-          temporal: dataProfile.column_types?.filter((col: any) => col.type === 'temporal').length || 0,
-          geographic: 0
-        },
-        preview: Object.keys(rawData[0] || {}).slice(0, 5),
-        data: rawData
-      };
+    console.log('🎯 Dataset creation effect triggered:', { 
+      hasRawData: !!rawData, 
+      rawDataLength: rawData?.length,
+      hasDataProfile: !!dataProfile, 
+      hasRecommendations: !!storeRecommendations,
+      isLoading,
+      isCreating,
+      datasetsLength: datasets.length,
+      dataProfileStructure: dataProfile,
+      conditions: {
+        hasRawData: !!rawData,
+        notLoading: !isLoading,
+        notCreating: !isCreating,
+        shouldCreate: !!rawData && !isLoading && !isCreating
+      }
+    });
 
-      // Only add if not already exists
-      setDatasets(prev => {
-        const exists = prev.some(d => d.data === rawData);
-        if (exists) return prev;
-        return [...prev, newDataset];
-      });
+    if (rawData && !isLoading && !isCreating) {
+      // Check if dataset already exists to avoid duplicates
+      const existingDataset = datasets.find(d => d.data === rawData);
+      if (existingDataset) {
+        console.log('✅ Dataset already exists, selecting it:', existingDataset);
+        setSelectedDataset(existingDataset);
+        return;
+      }
 
-      // Auto-select the new dataset
-      setSelectedDataset(newDataset);
+      console.log('🚀 Creating new dataset via React Query...');
+      createDataset(rawData, dataProfile);
+    } else {
+      console.log('❌ Dataset creation conditions not met');
     }
-  }, [rawData, dataProfile, isLoading, datasets.length]);
+  }, [rawData, dataProfile, storeRecommendations, isLoading, isCreating, datasets, createDataset]);
 
   // Handle dataset selection from DataPanel
   const handleDatasetSelect = useCallback(async (dataset: Dataset) => {
