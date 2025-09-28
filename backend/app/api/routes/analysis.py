@@ -46,50 +46,8 @@ async def analyze_dataset(
         dataset_id = str(uuid.uuid4())
         supabase = get_supabase_client()
 
-        # For testing: Create test user or use existing one
-        import os
-        
-        # Check if we're in a testing environment
-        environment = os.getenv('ENVIRONMENT', 'development')
-        
-        if environment in ['development', 'test']:
-            # For testing, try to use an existing user or create one
-            test_user_id = None
-            
-            try:
-                # Try to create a simple test user
-                result = supabase.auth.admin.create_user({
-                    "email": "test@test.com", 
-                    "password": "password123",
-                    "email_confirm": True
-                })
-                
-                if hasattr(result, 'user') and result.user:
-                    test_user_id = result.user.id
-                    logger.info(f"Created test user: {test_user_id}")
-                elif hasattr(result, 'data'):
-                    test_user_id = result.data.id  
-                    logger.info(f"Created test user: {test_user_id}")
-                    
-            except Exception as e:
-                # If creation fails, user might already exist - try to find it
-                logger.warning(f"User creation failed: {e}")
-                try:
-                    users = supabase.auth.admin.list_users()
-                    users_data = users.data if hasattr(users, 'data') else users
-                    if users_data and len(users_data) > 0:
-                        # Use the first available user for testing
-                        test_user_id = users_data[0].id
-                        logger.info(f"Using existing user for testing: {test_user_id}")
-                except Exception as list_err:
-                    logger.error(f"Could not list users: {list_err}")
-                    # Last resort: use NULL (this might fail if NOT NULL constraint exists)
-                    test_user_id = None
-            
-            user_id_to_use = test_user_id
-        else:
-            # Production: this would come from authentication
-            user_id_to_use = "00000000-0000-0000-0000-000000000000"  # This needs proper auth
+        # TODO: Replace with proper authentication
+        user_id_to_use = None  # Will need proper user authentication
         
         # Insert dataset record
         dataset_data = {
@@ -191,37 +149,8 @@ async def analyze_file_upload(
         # Create dataset record
         supabase = get_supabase_client()
         
-        # Get test user (same logic as above)
-        import os
-        environment = os.getenv('ENVIRONMENT', 'development')
-        
-        if environment in ['development', 'test']:
-            test_user_id = None
-            try:
-                result = supabase.auth.admin.create_user({
-                    "email": "test@test.com", 
-                    "password": "password123",
-                    "email_confirm": True
-                })
-                
-                if hasattr(result, 'user') and result.user:
-                    test_user_id = result.user.id
-                elif hasattr(result, 'data'):
-                    test_user_id = result.data.id  
-                    
-            except Exception as e:
-                logger.warning(f"User creation failed: {e}")
-                try:
-                    users = supabase.auth.admin.list_users()
-                    users_data = users.data if hasattr(users, 'data') else users
-                    if users_data and len(users_data) > 0:
-                        test_user_id = users_data[0].id
-                except Exception:
-                    test_user_id = None
-            
-            user_id_to_use = test_user_id
-        else:
-            user_id_to_use = "00000000-0000-0000-0000-000000000000"
+        # TODO: Replace with proper authentication
+        user_id_to_use = None  # Will need proper user authentication
         
         # Insert dataset record with streaming metadata
         dataset_data = {

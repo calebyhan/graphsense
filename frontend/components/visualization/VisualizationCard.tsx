@@ -23,38 +23,6 @@ interface VisualizationCardProps {
   onDelete: (id: string) => void;
 }
 
-// Mock data for different chart types
-const mockLineData = [
-  { month: 'Jan', sales: 4000, revenue: 2400 },
-  { month: 'Feb', sales: 3000, revenue: 1398 },
-  { month: 'Mar', sales: 2000, revenue: 9800 },
-  { month: 'Apr', sales: 2780, revenue: 3908 },
-  { month: 'May', sales: 1890, revenue: 4800 },
-  { month: 'Jun', sales: 2390, revenue: 3800 },
-];
-
-const mockBarData = [
-  { region: 'North', sales: 4000 },
-  { region: 'South', sales: 3000 },
-  { region: 'East', sales: 2000 },
-  { region: 'West', sales: 2780 },
-];
-
-const mockPieData = [
-  { name: 'Product A', value: 400, fill: '#4F46E5' },
-  { name: 'Product B', value: 300, fill: '#06B6D4' },
-  { name: 'Product C', value: 300, fill: '#10B981' },
-  { name: 'Product D', value: 200, fill: '#F59E0B' },
-];
-
-const mockScatterData = [
-  { x: 100, y: 200, z: 200 },
-  { x: 120, y: 100, z: 260 },
-  { x: 170, y: 300, z: 400 },
-  { x: 140, y: 250, z: 280 },
-  { x: 150, y: 400, z: 500 },
-  { x: 110, y: 280, z: 200 },
-];
 
 export function VisualizationCard({
   id,
@@ -125,7 +93,7 @@ export function VisualizationCard({
       case 'line':
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <LineChart data={mockLineData}>
+            <LineChart data={[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
               <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
               <YAxis stroke="#6B7280" fontSize={12} />
@@ -151,7 +119,7 @@ export function VisualizationCard({
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <BarChart data={mockBarData}>
+            <BarChart data={[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
               <XAxis dataKey="region" stroke="#6B7280" fontSize={12} />
               <YAxis stroke="#6B7280" fontSize={12} />
@@ -172,15 +140,15 @@ export function VisualizationCard({
           <ResponsiveContainer width="100%" height={chartHeight}>
             <PieChart>
               <Pie
-                data={mockPieData}
+                data={[]}
                 cx="50%"
                 cy="50%"
                 outerRadius={Math.min(chartHeight / 3, 80)}
                 dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
                 labelLine={false}
               >
-                {mockPieData.map((entry, index) => (
+                {[].map((entry: any, index) => (
                   <Cell key={`cell-${index}`} fill={entry.fill} />
                 ))}
               </Pie>
@@ -191,7 +159,7 @@ export function VisualizationCard({
       case 'scatter':
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <ScatterChart data={mockScatterData}>
+            <ScatterChart data={[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
               <XAxis dataKey="x" stroke="#6B7280" fontSize={12} />
               <YAxis dataKey="y" stroke="#6B7280" fontSize={12} />
@@ -203,7 +171,7 @@ export function VisualizationCard({
       case 'area':
         return (
           <ResponsiveContainer width="100%" height={chartHeight}>
-            <AreaChart data={mockLineData}>
+            <AreaChart data={[]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
               <XAxis dataKey="month" stroke="#6B7280" fontSize={12} />
               <YAxis stroke="#6B7280" fontSize={12} />

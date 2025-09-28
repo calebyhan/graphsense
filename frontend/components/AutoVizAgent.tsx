@@ -69,73 +69,6 @@ export default function AutoVizAgent() {
   
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Mock datasets for demo
-  const mockDatasets: Dataset[] = [
-    {
-      id: '1',
-      name: 'Sales_Q4_2024.csv',
-      type: 'csv',
-      size: '2.4 MB',
-      columns: 8,
-      rows: 15420,
-      dataTypes: { numerical: 5, categorical: 2, temporal: 1, geographic: 0 },
-      preview: ['Date', 'Region', 'Product', 'Sales', 'Revenue'],
-      lastModified: '2 hours ago'
-    },
-    {
-      id: '2',
-      name: 'Customer_Analytics.json',
-      type: 'json',
-      size: '1.8 MB',
-      columns: 12,
-      rows: 8930,
-      dataTypes: { numerical: 7, categorical: 3, temporal: 2, geographic: 0 },
-      preview: ['customer_id', 'age', 'location', 'purchase_value'],
-      lastModified: '1 day ago'
-    },
-    {
-      id: '3',
-      name: 'Market_Research.xlsx',
-      type: 'excel',
-      size: '5.2 MB',
-      columns: 15,
-      rows: 25680,
-      dataTypes: { numerical: 8, categorical: 4, temporal: 1, geographic: 2 },
-      preview: ['survey_id', 'demographics', 'responses', 'satisfaction'],
-      lastModified: '3 days ago'
-    }
-  ];
-
-  // Mock recommendations
-  const mockRecommendations: ChartRecommendation[] = [
-    {
-      id: '1',
-      type: 'line',
-      name: 'Line Chart',
-      confidence: 95,
-      reasoning: 'Perfect for showing trends over time with your temporal data',
-      description: 'Shows trends over time',
-      bestFor: ['Time series', 'Trends', 'Continuous data']
-    },
-    {
-      id: '2',
-      type: 'bar',
-      name: 'Bar Chart',
-      confidence: 88,
-      reasoning: 'Great for comparing categories in your dataset',
-      description: 'Compare categories',
-      bestFor: ['Comparisons', 'Categories', 'Rankings']
-    },
-    {
-      id: '3',
-      type: 'scatter',
-      name: 'Scatter Plot',
-      confidence: 72,
-      reasoning: 'Shows relationships between numerical variables',
-      description: 'Show relationships',
-      bestFor: ['Correlations', 'Relationships', 'Outliers']
-    }
-  ];
 
   // Dark mode effect
   React.useEffect(() => {
@@ -149,16 +82,16 @@ export default function AutoVizAgent() {
   // Sync recommendations from store
   React.useEffect(() => {
     if (storeRecommendations && storeRecommendations.length > 0) {
-      const formattedRecommendations = storeRecommendations.map((rec, index) => {
-        const chartType = rec.chart_type || 'chart';
+      const formattedRecommendations = storeRecommendations.map((rec: any, index) => {
+        const chartType = rec.chart_type || rec.type || 'chart';
         return {
           id: `rec-${index}`,
           type: chartType as any,
           name: chartType ? (chartType.charAt(0).toUpperCase() + chartType.slice(1)) : 'Chart',
           confidence: rec.confidence || 85,
-          reasoning: rec.reasoning || `Great for your ${chartType} visualization needs`,
+          reasoning: rec.reasoning || rec.justification || `Great for your ${chartType} visualization needs`,
           description: rec.description || `Shows data using ${chartType} format`,
-          bestFor: rec.best_for || ['Data visualization'],
+          bestFor: rec.best_for || rec.bestFor || ['Data visualization'],
           config: rec.config
         };
       });
@@ -293,7 +226,7 @@ export default function AutoVizAgent() {
         {/* Data Panel - Left Sidebar */}
         <div className="flex flex-col">
           <DataPanel
-            datasets={mockDatasets}
+            datasets={[]}
             selectedDataset={selectedDataset}
             onDatasetSelect={handleDatasetSelect}
           />
