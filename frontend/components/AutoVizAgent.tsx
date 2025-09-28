@@ -67,13 +67,8 @@ export default function AutoVizAgent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [recommendations, setRecommendations] = useState<ChartRecommendation[]>([]);
   
-  // Dataset management with React Query
-  const { datasets, createDataset, isCreating } = useDatasetManager({
-    onDatasetCreated: (dataset) => {
-      setSelectedDataset(dataset);
-      console.log('Dataset created and selected:', dataset);
-    }
-  });
+  // Dataset management with React Query (read-only for AutoVizAgent)
+  const { datasets } = useDatasetManager();
   
   // Canvas state
   const { viewport, updateViewport } = useCanvasStore();
@@ -148,40 +143,40 @@ export default function AutoVizAgent() {
     setIsAnalyzing(isLoading);
   }, [isLoading]);
 
-  // Create dataset entry when analysis completes using React Query
+  // Auto-select dataset when analysis data is available
   React.useEffect(() => {
-    console.log('🎯 Dataset creation effect triggered:', { 
+    console.log('🎯 Dataset selection effect triggered:', { 
       hasRawData: !!rawData, 
       rawDataLength: rawData?.length,
       hasDataProfile: !!dataProfile, 
-      hasRecommendations: !!storeRecommendations,
       isLoading,
-      isCreating,
-      datasetsLength: datasets.length,
-      dataProfileStructure: dataProfile,
-      conditions: {
-        hasRawData: !!rawData,
-        notLoading: !isLoading,
-        notCreating: !isCreating,
-        shouldCreate: !!rawData && !isLoading && !isCreating
-      }
+      datasetsLength: datasets.length
     });
 
-    if (rawData && !isLoading && !isCreating) {
-      // Check if dataset already exists to avoid duplicates
-      const existingDataset = datasets.find((d: Dataset) => d.data === rawData);
-      if (existingDataset) {
-        console.log('✅ Dataset already exists, selecting it:', existingDataset);
-        setSelectedDataset(existingDataset);
-        return;
+    // If we have raw data but no selected dataset, try to find/select the matching dataset
+    if (rawData && !selectedDataset && datasets.length > 0) {
+      const matchingDataset = datasets.find((d: Dataset) => {
+        if (!d.data || !rawData) return false;
+        
+        // Compare data length and structure
+        if (d.data.length !== rawData.length) return false;
+        
+        // Compare first row keys to ensure same structure
+        if (d.data.length > 0 && rawData.length > 0) {
+          const existingKeys = Object.keys(d.data[0] || {}).sort();
+          const newKeys = Object.keys(rawData[0] || {}).sort();
+          return JSON.stringify(existingKeys) === JSON.stringify(newKeys);
+        }
+        
+        return true;
+      });
+      
+      if (matchingDataset) {
+        console.log('✅ Auto-selecting matching dataset:', matchingDataset.name);
+        setSelectedDataset(matchingDataset);
       }
-
-      console.log('🚀 Creating new dataset via React Query...');
-      createDataset(rawData, dataProfile);
-    } else {
-      console.log('❌ Dataset creation conditions not met');
     }
-  }, [rawData, dataProfile, storeRecommendations, isLoading, isCreating, datasets, createDataset]);
+  }, [rawData, selectedDataset, datasets]); // Focus on selection, not creation
 
   // Handle dataset selection from DataPanel
   const handleDatasetSelect = useCallback(async (dataset: Dataset) => {

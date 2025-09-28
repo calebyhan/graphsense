@@ -31,10 +31,10 @@ export interface DatasetMetadata {
 
 export class DatasetService {
   /**
-   * Create a new dataset with pending status
+   * Create a new dataset with pending status (supports null userId for dev mode)
    */
   static async createDataset(params: {
-    userId: string;
+    userId: string | null;
     filename: string;
     fileSize: number;
     fileType: string;
@@ -212,32 +212,50 @@ export class DatasetService {
   }
 
   /**
-   * Get all datasets for a user
+   * Get all datasets for a user (or null user for dev mode)
    */
-  static async getUserDatasets(userId: string): Promise<Tables<'datasets'>[]> {
-    const { data, error } = await supabase
+  static async getUserDatasets(userId: string | null): Promise<Tables<'datasets'>[]> {
+    let query = supabase
       .from('datasets')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .select('*');
+      
+    if (userId === null) {
+      // Dev mode: get datasets where user_id is null
+      query = query.is('user_id', null);
+    } else {
+      // Normal mode: get datasets for specific user
+      query = query.eq('user_id', userId);
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error('Failed to fetch user datasets:', error);
       throw error;
     }
 
+    console.log(`📊 Found ${data?.length || 0} datasets for user:`, userId || 'null (dev mode)');
     return data || [];
   }
 
   /**
-   * Delete dataset and all related data
+   * Delete dataset and all related data (supports null userId for dev mode)
    */
-  static async deleteDataset(datasetId: string, userId: string): Promise<void> {
-    const { error } = await supabase
+  static async deleteDataset(datasetId: string, userId: string | null): Promise<void> {
+    let query = supabase
       .from('datasets')
       .delete()
-      .eq('id', datasetId)
-      .eq('user_id', userId);
+      .eq('id', datasetId);
+      
+    if (userId === null) {
+      // Dev mode: delete where user_id is null
+      query = query.is('user_id', null);
+    } else {
+      // Normal mode: delete for specific user
+      query = query.eq('user_id', userId);
+    }
+    
+    const { error } = await query;
 
     if (error) {
       console.error('Failed to delete dataset:', error);

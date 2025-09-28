@@ -23,7 +23,6 @@ interface CanvasStore {
   selectedTool: ToolType;
   canvasElements: CanvasElement[];
   selectedElements: string[];
-  isDatasetPanelOpen: boolean;
 
   // Viewport actions
   updateViewport: (viewport: Viewport) => void;
@@ -31,10 +30,6 @@ interface CanvasStore {
 
   // Tool actions
   setSelectedTool: (tool: ToolType) => void;
-
-  // Dataset panel actions
-  toggleDatasetPanel: () => void;
-  setDatasetPanelOpen: (open: boolean) => void;
 
   // Element actions
   addElement: (element: Omit<CanvasElement, 'id'>) => void;
@@ -53,7 +48,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selectedTool: 'pointer',
   canvasElements: [],
   selectedElements: [],
-  isDatasetPanelOpen: false,
 
   updateViewport: (viewport) => {
     // Batch viewport updates for better performance
@@ -63,10 +57,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   resetViewport: () => set({ viewport: { x: 0, y: 0, zoom: 1 } }),
 
   setSelectedTool: (tool) => set({ selectedTool: tool }),
-
-  toggleDatasetPanel: () => set((state) => ({ isDatasetPanelOpen: !state.isDatasetPanelOpen })),
-
-  setDatasetPanelOpen: (open) => set({ isDatasetPanelOpen: open }),
 
   addElement: (element) => {
     const id = `element_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

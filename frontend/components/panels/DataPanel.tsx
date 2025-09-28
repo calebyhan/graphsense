@@ -36,6 +36,14 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
     onDatasetCreated: (dataset) => {
       console.log('🎉 Dataset created and persisted to database:', dataset);
       onDatasetSelect(dataset);
+      
+      // Set raw data in analysis store to trigger visualization
+      if (dataset.data && dataset.data.length > 0) {
+        console.log('🔗 Setting raw data in analysis store:', dataset.data.length, 'rows');
+        setRawData(dataset.data);
+        startAnalysis(dataset.data, dataset.name);
+      }
+      
       setUploadError('');
       setUploadProgress(0);
       setProcessingStatus(null);
@@ -45,14 +53,19 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
   const { setRawData, startAnalysis } = useAnalysisStore();
   const { isAuthenticated } = useAuthContext();
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log('🔍 DataPanel Debug:', {
+      datasetsLength: datasets.length,
+      datasets: datasets.map(d => ({ id: d.id, name: d.name })),
+      isDatasetsLoading,
+      datasetError: datasetError?.message,
+      isAuthenticated
+    });
+  }, [datasets, isDatasetsLoading, datasetError, isAuthenticated]);
+
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-
-    // Check authentication
-    if (!isAuthenticated) {
-      setUploadError('Please sign in to upload datasets');
-      return;
-    }
 
     setUploadError('');
     setUploadProgress(0);
@@ -77,27 +90,8 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
         },
         onStatusChange: (status) => {
           setProcessingStatus(status);
-          if (status === 'completed') {
-            // Also update the analysis store for backward compatibility
-            if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
-              file.text().then(text => {
-                const lines = text.split('\n').filter(line => line.trim());
-                if (lines.length > 1) {
-                  const headers = lines[0].split(',').map(h => h.trim());
-                  const data = lines.slice(1).map(line => {
-                    const values = line.split(',');
-                    const row: Record<string, any> = {};
-                    headers.forEach((header, index) => {
-                      row[header] = values[index] || '';
-                    });
-                    return row;
-                  });
-                  setRawData(data);
-                  startAnalysis(data, file.name);
-                }
-              }).catch(console.error);
-            }
-          }
+          // Note: Dataset lifecycle handles data processing internally
+          // No need to manually parse and set raw data here
         }
       });
     } catch (error) {
@@ -105,7 +99,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
       setUploadError(error instanceof Error ? error.message : 'Failed to process file');
       setProcessingStatus('failed');
     }
-  }, [isAuthenticated, createDatasetWithLifecycle, setRawData, startAnalysis]);
+  }, [createDatasetWithLifecycle, setRawData, startAnalysis]);
 
   const { openFileDialog, fileInputProps } = useFileUpload({
     accept: '.csv,.json,.xlsx,.xls,.tsv,.txt',
@@ -245,14 +239,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
           </div>
         )}
 
-        {/* Authentication Warning */}
-        {!isAuthenticated && (
-          <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
-            <p className="text-xs text-yellow-600 dark:text-yellow-400">
-              Sign in to persist your datasets across sessions
-            </p>
-          </div>
-        )}
+
       </div>
 
       {/* Search and Filter */}

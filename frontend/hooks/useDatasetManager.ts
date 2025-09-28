@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import Papa from 'papaparse';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { Tables, TablesInsert } from '@/lib/supabase/types';
 import { Dataset } from '@/components/AutoVizAgent';
@@ -32,9 +33,9 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
   // Query to get datasets from Supabase
   const { data: datasets = [], isLoading, error } = useQuery({
-    queryKey: ['datasets', user?.id],
+    queryKey: ['datasets', user?.id || 'dev-user'],
     queryFn: async (): Promise<Dataset[]> => {
-      console.log('📁 Loading datasets...');
+      console.log('📁 Loading datasets... User:', user?.id || 'dev-user (null treated as dev)');
 
       // Check if Supabase is properly configured
       if (!isSupabaseConfigured()) {
@@ -42,16 +43,13 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         return loadDatasetsFromLocalStorage();
       }
 
-      // Ensure user is authenticated
-      const currentUser = await ensureAuth();
-      if (!currentUser) {
-        console.log('No authenticated user, returning empty dataset list');
-        return [];
-      }
+      // For dev purposes, use null user_id to get datasets without authentication
+      const userId = user?.id || null;
+      console.log('🔐 Using user ID for dataset query:', userId || 'null (dev mode)');
 
       // Fetch datasets using the service
       try {
-        const dbDatasets = await DatasetService.getUserDatasets(currentUser.id);
+        const dbDatasets = await DatasetService.getUserDatasets(userId);
 
         // Transform database datasets to frontend format
         const transformedDatasets: Dataset[] = dbDatasets.map((dbDataset: DatabaseDataset) => {
@@ -88,7 +86,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         throw new Error(dbError.userMessage);
       }
     },
-    enabled: !!user, // Only run query when user is available
+    enabled: true, // Always enabled now that we support null user IDs for dev mode
     initialData: [],
     retry: 1,
     staleTime: 30000, // Cache for 30 seconds
@@ -101,18 +99,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
       console.log('🔥 Creating dataset with lifecycle for file:', file.name);
 
-      // Ensure user is authenticated
-      const currentUser = await ensureAuth();
-      if (!currentUser) {
-        throw new Error('Authentication required to create dataset');
-      }
+      // Get user ID (null for dev mode)
+      const userId = user?.id || null;
+      console.log('🔥 Creating dataset for user:', userId || 'null (dev mode)');
 
       // Step 1: Create dataset with pending status
       onStatusChange?.('pending');
       onProgress?.(10);
 
       const dbDataset = await DatasetService.createDataset({
-        userId: currentUser.id,
+        userId,
         filename: file.name,
         fileSize: file.size,
         fileType: file.type || 'text/csv',
@@ -190,7 +186,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       console.log('🎉 Dataset created with lifecycle:', newDataset);
 
       // Update React Query cache
-      queryClient.setQueryData(['datasets', user?.id], (oldData: Dataset[] | undefined) => {
+      queryClient.setQueryData(['datasets', user?.id || 'dev-user'], (oldData: Dataset[] | undefined) => {
         const current = oldData || [];
         const exists = current.some(d => d.id === newDataset.id);
         if (!exists) {
@@ -200,7 +196,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       });
 
       // Invalidate and refetch datasets query
-      queryClient.invalidateQueries({ queryKey: ['datasets', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
 
       // Call callback if provided
       options.onDatasetCreated?.(newDataset);
@@ -230,11 +226,9 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         throw new Error('No raw data provided');
       }
 
-      // Ensure user is authenticated
-      const currentUser = await ensureAuth();
-      if (!currentUser) {
-        throw new Error('Authentication required to create dataset');
-      }
+      // Get user ID (null for dev mode)
+      const userId = user?.id || null;
+      console.log('🔥 Creating legacy dataset for user:', userId || 'null (dev mode)');
 
       // Analyze the data
       const dataAnalysis = analyzeData(rawData);
@@ -242,7 +236,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
       // Create dataset with completed status since we have all the data
       const dbDataset = await DatasetService.createDataset({
-        userId: currentUser.id,
+        userId,
         filename: filename || `Dataset-${Date.now()}.csv`,
         fileSize: dataSize,
         fileType: 'csv',
@@ -314,25 +308,24 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       console.log('🗑️ Removing dataset:', datasetId);
 
       // Ensure user is authenticated
-      const currentUser = await ensureAuth();
-      if (!currentUser) {
-        throw new Error('Authentication required to delete dataset');
-      }
+      // Get user ID (null for dev mode)
+      const userId = user?.id || null;
+      console.log('🗑️ Deleting dataset for user:', userId || 'null (dev mode)');
 
       // Delete using service (handles cascade deletion)
-      await DatasetService.deleteDataset(datasetId, currentUser.id);
+      await DatasetService.deleteDataset(datasetId, userId);
 
       console.log('✅ Dataset deleted successfully');
       return datasetId;
     },
     onSuccess: (deletedId) => {
       // Update React Query cache
-      queryClient.setQueryData(['datasets'], (oldData: Dataset[] | undefined) => {
+      queryClient.setQueryData(['datasets', user?.id || 'dev-user'], (oldData: Dataset[] | undefined) => {
         return (oldData || []).filter(d => d.id !== deletedId);
       });
 
       // Invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ['datasets'] });
+      queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
       queryClient.invalidateQueries({ queryKey: ['visualizations'] });
 
       console.log('✅ Dataset removed from cache:', deletedId);
@@ -361,16 +354,14 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
   // Function to update dataset status
   const updateDatasetStatus = useCallback(async (datasetId: string, status: ProcessingStatus, errorMessage?: string) => {
-    const currentUser = await ensureAuth();
-    if (!currentUser) {
-      throw new Error('Authentication required');
-    }
+    const userId = user?.id || null;
+    console.log('📊 Updating dataset status for user:', userId || 'null (dev mode)');
 
     await DatasetService.updateProcessingStatus(datasetId, status, errorMessage);
 
     // Invalidate cache to refetch data
-    queryClient.invalidateQueries({ queryKey: ['datasets', currentUser.id] });
-  }, [ensureAuth, queryClient]);
+    queryClient.invalidateQueries({ queryKey: ['datasets', userId || 'dev-user'] });
+  }, [user?.id, queryClient]);
 
   return {
     datasets,
@@ -412,24 +403,41 @@ function formatDate(dateString: string): string {
 }
 
 function parseCSVText(text: string): Array<Record<string, any>> {
-  const lines = text.split('\n').filter(line => line.trim());
-  if (lines.length === 0) return [];
-
-  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-  const data: Array<Record<string, any>> = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-    if (values.length === headers.length) {
-      const row: Record<string, any> = {};
-      headers.forEach((header, index) => {
-        row[header] = values[index];
-      });
-      data.push(row);
-    }
+  if (!text || text.trim().length === 0) {
+    console.warn('parseCSVText: Empty or null text provided');
+    return [];
   }
 
-  return data;
+  try {
+    const results = Papa.parse(text, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (header: string) => header.trim(),
+      transform: (value: string) => value.trim()
+    });
+
+    if (results.errors.length > 0) {
+      console.warn('parseCSVText: CSV parsing errors:', results.errors);
+      // Don't throw here - just log warnings for minor issues
+      const criticalErrors = results.errors.filter(err => 
+        err.type === 'Delimiter' || err.type === 'Quotes'
+      );
+      if (criticalErrors.length > 0) {
+        throw new Error(`CSV parsing error: ${criticalErrors.map(e => e.message).join(', ')}`);
+      }
+    }
+
+    if (!results.data || results.data.length === 0) {
+      console.warn('parseCSVText: No data found after parsing');
+      return [];
+    }
+
+    console.log('parseCSVText: Successfully parsed', results.data.length, 'rows');
+    return results.data as Array<Record<string, any>>;
+  } catch (error) {
+    console.error('parseCSVText: Failed to parse CSV:', error);
+    throw new Error(`Failed to parse CSV file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 function analyzeData(rawData: Array<Record<string, any>>): {
