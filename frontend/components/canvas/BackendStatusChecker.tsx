@@ -30,7 +30,7 @@ interface BackendStatus {
 export default function BackendStatusChecker() {
   const [status, setStatus] = useState<BackendStatus>({ status: 'unknown' });
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(typeof window !== 'undefined' ? navigator.onLine : true);
 
   const checkBackendHealth = async (): Promise<BackendStatus> => {
     const startTime = Date.now();
