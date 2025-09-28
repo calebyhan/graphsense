@@ -9,6 +9,7 @@ export interface AnalysisRequest {
   data: Array<Record<string, any>>;
   filename?: string;
   file_type?: string;
+  dataset_id?: string;  // If provided, use existing dataset instead of creating new one
   options?: Record<string, any>;
 }
 

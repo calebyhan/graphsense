@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { Upload, Database, Search, Filter, FileText, BarChart3, Calendar, MapPin, AlertCircle, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { Upload, Database, Search, Filter, FileText, BarChart3, Calendar, MapPin, AlertCircle, CheckCircle, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -25,10 +25,11 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
 
-  // Use database-integrated dataset manager
+  // Use database-integrated dataset manager with refresh capability
   const {
     datasets,
     createDatasetWithLifecycle,
+    refreshDatasets,
     isLoading: isDatasetsLoading,
     createWithLifecycleError,
     error: datasetError
@@ -37,12 +38,9 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
       console.log('🎉 Dataset created and persisted to database:', dataset);
       onDatasetSelect(dataset);
       
-      // Set raw data in analysis store to trigger visualization
-      if (dataset.data && dataset.data.length > 0) {
-        console.log('🔗 Setting raw data in analysis store:', dataset.data.length, 'rows');
-        setRawData(dataset.data);
-        startAnalysis(dataset.data, dataset.name);
-      }
+      // Note: Don't start analysis here - let the selection effect handle it
+      // This prevents duplicate analysis requests
+      console.log('📊 Dataset will be analyzed when selected');
       
       setUploadError('');
       setUploadProgress(0);
@@ -53,16 +51,33 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
   const { setRawData, startAnalysis } = useAnalysisStore();
   const { isAuthenticated } = useAuthContext();
 
-  // Debug logging
+  // Debug logging and dataset management
   React.useEffect(() => {
     console.log('🔍 DataPanel Debug:', {
       datasetsLength: datasets.length,
-      datasets: datasets.map(d => ({ id: d.id, name: d.name })),
+      datasets: datasets.map(d => ({ id: d.id, name: d.name, hasData: !!d.data && d.data.length > 0 })),
       isDatasetsLoading,
       datasetError: datasetError?.message,
       isAuthenticated
     });
   }, [datasets, isDatasetsLoading, datasetError, isAuthenticated]);
+
+  // Load dataset data into analysis store when manually selected 
+  React.useEffect(() => {
+    if (selectedDataset && selectedDataset.data && selectedDataset.data.length > 0) {
+      console.log('📊 Loading selected dataset into analysis store:', selectedDataset.name);
+      setRawData(selectedDataset.data);
+      
+      // Only auto-start analysis if not currently processing an upload
+      // This prevents duplicate analysis calls during the upload flow
+      if (processingStatus !== 'completed' && processingStatus !== 'processing') {
+        console.log('🚀 Auto-starting analysis for manually selected dataset:', selectedDataset.name);
+        startAnalysis(selectedDataset.data, selectedDataset.name, selectedDataset.id);
+      } else {
+        console.log('⏳ Skipping auto-analysis (upload in progress or just completed)');
+      }
+    }
+  }, [selectedDataset, setRawData, startAnalysis, processingStatus]);
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -90,8 +105,14 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
         },
         onStatusChange: (status) => {
           setProcessingStatus(status);
-          // Note: Dataset lifecycle handles data processing internally
-          // No need to manually parse and set raw data here
+        },
+        onDatasetCreated: (dataset: Dataset) => {
+          console.log('📊 Dataset created, starting analysis:', dataset.name);
+          // Set the data and trigger analysis for the newly uploaded dataset
+          if (dataset.data && dataset.data.length > 0) {
+            setRawData(dataset.data);
+            startAnalysis(dataset.data, dataset.name, dataset.id);
+          }
         }
       });
     } catch (error) {
@@ -99,7 +120,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
       setUploadError(error instanceof Error ? error.message : 'Failed to process file');
       setProcessingStatus('failed');
     }
-  }, [createDatasetWithLifecycle, setRawData, startAnalysis]);
+  }, [createDatasetWithLifecycle]);
 
   const { openFileDialog, fileInputProps } = useFileUpload({
     accept: '.csv,.json,.xlsx,.xls,.tsv,.txt',
@@ -186,7 +207,18 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
 
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3">Data Sources</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Data Sources</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refreshDatasets()}
+            className="h-8 w-8 p-0"
+            title="Refresh datasets"
+          >
+            <RefreshCw className={`h-4 w-4 ${isDatasetsLoading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
 
         {/* Import Zone */}
         <div
@@ -261,7 +293,17 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
         {isDatasetsLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
-            <span className="ml-2 text-sm text-gray-500">Loading datasets...</span>
+            <span className="ml-2 text-sm text-gray-500">Loading datasets from database...</span>
+          </div>
+        )}
+
+        {/* Dataset count info */}
+        {!isDatasetsLoading && datasets.length > 0 && (
+          <div className="mb-3 text-xs text-gray-600 dark:text-gray-400">
+            {datasets.length} dataset{datasets.length !== 1 ? 's' : ''} loaded
+            {filteredDatasets.length !== datasets.length && (
+              <span> • {filteredDatasets.length} shown</span>
+            )}
           </div>
         )}
 
@@ -361,11 +403,26 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
           ))}
         </div>
 
-        {filteredDatasets.length === 0 && (
+        {filteredDatasets.length === 0 && !isDatasetsLoading && (
           <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
             <Database className="w-12 h-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No datasets found</p>
-            <p className="text-xs">Try adjusting your search or upload new data</p>
+            <p className="text-sm">
+              {datasets.length === 0 ? 'No datasets available' : 'No datasets match your search'}
+            </p>
+            <p className="text-xs">
+              {datasets.length === 0 ? 'Upload new data to get started' : 'Try adjusting your search or upload new data'}
+            </p>
+            {datasets.length === 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refreshDatasets()} 
+                className="mt-3"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh from Database
+              </Button>
+            )}
           </div>
         )}
       </div>

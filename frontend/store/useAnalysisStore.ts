@@ -113,8 +113,28 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
   },
 
   // New method to start analysis with the backend
-  startAnalysis: async (data: Array<Record<string, any>>, filename?: string) => {
-    const { setCurrentDatasetId, setLoading, setError, updateAgentState } = get();
+  startAnalysis: async (data: Array<Record<string, any>>, filename?: string, datasetId?: string) => {
+    const { setCurrentDatasetId, setLoading, setError, updateAgentState, currentDatasetId, isLoading } = get();
+
+    // Prevent duplicate analysis requests
+    const analysisKey = `${filename}-${data.length}-${JSON.stringify(data[0] || {})}`;
+    const currentTime = Date.now();
+    
+    // Check if analysis is already running or recently completed for this data
+    if (typeof window !== 'undefined') {
+      const lastAnalysis = (window as any)[`analysis-${analysisKey}`];
+      if (lastAnalysis && (currentTime - lastAnalysis) < 10000) { // 10 second cooldown
+        console.log('⚠️ Analysis already in progress or recently completed for:', filename);
+        return;
+      }
+      (window as any)[`analysis-${analysisKey}`] = currentTime;
+    }
+
+    // Don't start if already loading
+    if (isLoading) {
+      console.log('⚠️ Analysis already in progress, skipping duplicate request');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -125,7 +145,12 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
       updateAgentState('recommender', 'idle');
       updateAgentState('validator', 'idle');
 
-      const response = await backendAPI.analyzeDataset({ data, filename });
+      console.log('🚀 Starting analysis for:', filename, 'with', data.length, 'rows', datasetId ? `(using existing dataset: ${datasetId})` : '(creating new dataset)');
+      const response = await backendAPI.analyzeDataset({
+        data,
+        filename,
+        ...(datasetId && { dataset_id: datasetId })
+      });
       
       if (response.success) {
         setCurrentDatasetId(response.dataset_id);
@@ -137,9 +162,14 @@ export const useAnalysisStore = create<ExtendedAnalysisStore>((set, get) => ({
       }
 
     } catch (error) {
-      console.error('Analysis failed to start:', error);
+      console.error('❌ Analysis failed to start:', error);
       setError(error instanceof Error ? error.message : 'Failed to start analysis');
       setLoading(false);
+      
+      // Clear the analysis key on error so it can be retried
+      if (typeof window !== 'undefined') {
+        delete (window as any)[`analysis-${analysisKey}`];
+      }
     }
   },
 

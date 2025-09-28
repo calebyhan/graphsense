@@ -32,6 +32,7 @@ export interface DatasetMetadata {
 export class DatasetService {
   /**
    * Create a new dataset with pending status (supports null userId for dev mode)
+   * Includes duplicate prevention by checking for existing datasets with the same filename
    */
   static async createDataset(params: {
     userId: string | null;
@@ -41,6 +42,30 @@ export class DatasetService {
     initialMetadata?: Partial<DatasetMetadata>;
   }): Promise<Tables<'datasets'>> {
     const { userId, filename, fileSize, fileType, initialMetadata = {} } = params;
+
+    // First, check if a dataset with this filename already exists for this user
+    let existingQuery = supabase
+      .from('datasets')
+      .select('id, filename')
+      .eq('filename', filename);
+      
+    if (userId === null) {
+      existingQuery = existingQuery.is('user_id', null);
+    } else {
+      existingQuery = existingQuery.eq('user_id', userId);
+    }
+    
+    const { data: existing, error: checkError } = await existingQuery.maybeSingle();
+    
+    // Only throw if we actually found a duplicate (ignore query errors for now)
+    if (existing && !checkError) {
+      console.log('⚠️ Dataset with filename already exists:', filename, 'ID:', existing.id);
+      throw new Error(`Dataset with filename "${filename}" already exists`);
+    }
+    
+    if (checkError) {
+      console.warn('Warning: Could not check for duplicates:', checkError.message);
+    }
 
     const datasetInsert: TablesInsert<'datasets'> = {
       user_id: userId,

@@ -78,7 +78,7 @@ export interface AnalysisStore {
   setCurrentDatasetId: (id: string | null) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
-  startAnalysis: (data: Array<Record<string, any>>, filename?: string) => Promise<void>;
+  startAnalysis: (data: Array<Record<string, any>>, filename?: string, datasetId?: string) => Promise<void>;
   pollAnalysisStatus: (datasetId: string) => Promise<void>;
   loadAnalysisResults: (datasetId: string) => Promise<void>;
   resetAnalysis: () => void;
