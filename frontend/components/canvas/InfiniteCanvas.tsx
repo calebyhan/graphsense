@@ -1,29 +1,22 @@
 'use client';
 
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
-function throttle<T extends (...args: any[]) => void>(func: T, limit: number): T {
-  let inThrottle = false;
-  return ((...args: any[]) => {
-    if (!inThrottle) {
-      func(...args);
-      inThrottle = true;
-      setTimeout(() => (inThrottle = false), limit);
-    }
-  }) as T;
-}
-
-function useRafThrottle<T extends (...args: any[]) => void>(func: T): T {
+function useOptimizedRaf<T extends (...args: any[]) => void>(func: T): T {
   const rafId = useRef<number | undefined>(undefined);
   const lastArgs = useRef<any[]>([]);
+  const isScheduled = useRef(false);
 
-  const throttledFunc = useCallback((...args: any[]) => {
+  const rafFunc = useCallback((...args: any[]) => {
     lastArgs.current = args;
-    if (rafId.current) return;
+
+    if (isScheduled.current) return;
+    isScheduled.current = true;
 
     rafId.current = requestAnimationFrame(() => {
-      if (lastArgs.current) func(...lastArgs.current);
+      func(...lastArgs.current);
+      isScheduled.current = false;
       rafId.current = undefined;
     });
   }, [func]);
@@ -34,7 +27,7 @@ function useRafThrottle<T extends (...args: any[]) => void>(func: T): T {
     };
   }, []);
 
-  return throttledFunc as T;
+  return rafFunc as T;
 }
 
 interface InfiniteCanvasProps {
@@ -47,6 +40,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const [localViewport, setLocalViewport] = useState({ x: 0, y: 0, zoom: 1 });
+  const viewportRef = useRef(localViewport);
 
   // Touch gesture support
   const lastTouchDistance = useRef<number>(0);
@@ -68,8 +62,9 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     canvasElements
   } = useCanvasStore();
 
-  // Sync local viewport with store viewport
+  // Optimized viewport sync
   useEffect(() => {
+    viewportRef.current = viewport;
     setLocalViewport(viewport);
   }, [viewport]);
 
@@ -89,28 +84,32 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     }
   }, [selectedTool, onCanvasClick]);
 
-  // Optimized viewport update with RAF throttling
-  const throttledViewportUpdate = useRafThrottle(useCallback((newViewport: typeof viewport) => {
-    updateViewport(newViewport);
-  }, [updateViewport]));
+  // Optimized viewport update - direct RAF for better performance
+  const updateViewportRef = useRef(updateViewport);
+  useEffect(() => {
+    updateViewportRef.current = updateViewport;
+  }, [updateViewport]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+  const handleMouseMove = useOptimizedRaf((e: React.MouseEvent) => {
     if (!isDragging.current) return;
 
     const deltaX = e.clientX - lastMousePos.current.x;
     const deltaY = e.clientY - lastMousePos.current.y;
 
+    const currentViewport = viewportRef.current;
     const newViewport = {
-      x: localViewport.x + deltaX,
-      y: localViewport.y + deltaY, // Y follows mouse movement directly
-      zoom: localViewport.zoom
+      x: currentViewport.x + deltaX,
+      y: currentViewport.y - deltaY, // Y inverted: pulling down moves canvas down
+      zoom: currentViewport.zoom
     };
 
+    // Update ref immediately for smooth feedback
+    viewportRef.current = newViewport;
     setLocalViewport(newViewport);
-    throttledViewportUpdate(newViewport);
+    updateViewportRef.current(newViewport);
 
     lastMousePos.current = { x: e.clientX, y: e.clientY };
-  }, [localViewport, throttledViewportUpdate]);
+  });
 
   const handleMouseUp = useCallback(() => {
     isDragging.current = false;
@@ -128,47 +127,45 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     return { x: screenX - centerX, y: centerY - screenY };
   }, []);
 
-  const cartesianToScreen = useCallback((cartX: number, cartY: number) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return { x: 0, y: 0 };
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    return { x: cartX + centerX, y: centerY - cartY };
-  }, []);
+  // Create refs for animation functions to avoid closure issues
+  const animateZoomRef = useRef<((targetZoom: number, centerPoint?: { x: number; y: number } | null) => void) | null>(null);
+  const screenToCartesianRef = useRef(screenToCartesian);
 
-  // Smooth zoom animation
+  // Optimized zoom animation using requestAnimationFrame and refs
   const animateZoom = useCallback((targetZoom: number, centerPoint: { x: number; y: number } | null = null) => {
     if (zoomAnimationId.current) cancelAnimationFrame(zoomAnimationId.current);
 
-    const startZoom = localViewport.zoom;
+    const startViewport = viewportRef.current;
+    const startZoom = startViewport.zoom;
     const zoomDiff = targetZoom - startZoom;
-    const duration = 150;
-    const startTime = Date.now();
+    const duration = 120;
+    const startTime = performance.now();
 
     if (Math.abs(zoomDiff) < 0.001) return;
 
     setIsZooming(true);
 
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
+      const eased = 1 - Math.pow(1 - progress, 2);
       const currentZoom = startZoom + (zoomDiff * eased);
 
-      let newX = localViewport.x;
-      let newY = localViewport.y;
+      let newX = startViewport.x;
+      let newY = startViewport.y;
 
       if (centerPoint) {
-        const cartesian = screenToCartesian(centerPoint.x, centerPoint.y);
-        const worldX = (cartesian.x - localViewport.x) / startZoom;
-        const worldY = (cartesian.y - localViewport.y) / startZoom;
+        const cartesian = screenToCartesianRef.current(centerPoint.x, centerPoint.y);
+        const worldX = (cartesian.x - startViewport.x) / startZoom;
+        const worldY = (cartesian.y - startViewport.y) / startZoom;
         newX = cartesian.x - worldX * currentZoom;
         newY = cartesian.y - worldY * currentZoom;
       }
 
       const newViewport = { x: newX, y: newY, zoom: currentZoom };
+      viewportRef.current = newViewport;
       setLocalViewport(newViewport);
-      updateViewport(newViewport);
+      updateViewportRef.current(newViewport);
 
       if (progress < 1) {
         zoomAnimationId.current = requestAnimationFrame(animate);
@@ -178,16 +175,15 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     };
 
     zoomAnimationId.current = requestAnimationFrame(animate);
-  }, [localViewport, screenToCartesian, updateViewport]);
+  }, []);
 
-  // Wheel update (throttled)
-  const throttledWheelUpdate = useRafThrottle(useCallback((newViewport: typeof viewport) => {
-    setLocalViewport(newViewport);
-    updateViewport(newViewport);
-  }, [updateViewport]));
+  // Update ref after animateZoom is defined
+  useEffect(() => {
+    animateZoomRef.current = animateZoom;
+  }, [animateZoom]);
 
-  // Native wheel handler (single source of truth)
-  const handleNativeWheel = useCallback((e: WheelEvent) => {
+  // Native wheel handler - optimized with RAF
+  const handleNativeWheel = useOptimizedRaf((e: WheelEvent) => {
     // Always prevent browser zoom and page scroll when over canvas
     e.preventDefault();
     e.stopPropagation();
@@ -198,6 +194,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     const centerPoint = { x: mouseX, y: mouseY };
+    const currentViewport = viewportRef.current;
 
     // Zoom **only** when Ctrl/Cmd is held (trackpads: browsers synthesize ctrlKey on pinch)
     const isZoomGesture = e.ctrlKey || e.metaKey;
@@ -211,22 +208,24 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       // Clamp extreme values
       if (Math.abs(delta) > 100) delta = Math.sign(delta) * 100;
 
-      const scaleFactor = Math.pow(0.99, delta / 10);
-      const currentZoom = localViewport.zoom;
+      const scaleFactor = Math.pow(0.995, delta / 8);
+      const currentZoom = currentViewport.zoom;
       const newZoom = Math.max(0.1, Math.min(5, currentZoom * scaleFactor));
 
       if (newZoom !== currentZoom) {
         const zoomRatio = newZoom / currentZoom;
-        const newX = centerPoint.x - (centerPoint.x - localViewport.x) * zoomRatio;
-        const newY = centerPoint.y - (centerPoint.y - localViewport.y) * zoomRatio;
+        const newX = centerPoint.x - (centerPoint.x - currentViewport.x) * zoomRatio;
+        const newY = centerPoint.y - (centerPoint.y - currentViewport.y) * zoomRatio;
 
         const newViewport = { x: newX, y: newY, zoom: newZoom };
+        viewportRef.current = newViewport;
         setIsZooming(true);
-        throttledWheelUpdate(newViewport);
+        setLocalViewport(newViewport);
+        updateViewportRef.current(newViewport);
 
         // Clear zoom indicator shortly after
         if (zoomIndicatorTimeout.current) window.clearTimeout(zoomIndicatorTimeout.current);
-        zoomIndicatorTimeout.current = window.setTimeout(() => setIsZooming(false), 120);
+        zoomIndicatorTimeout.current = window.setTimeout(() => setIsZooming(false), 100);
       }
     } else {
       // Regular pan (make signs consistent with mouse-drag behavior)
@@ -235,14 +234,16 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       const deltaY = e.deltaY * sensitivity;
 
       const newViewport = {
-        ...localViewport,
-        x: localViewport.x - deltaX, // scroll right -> pan canvas left
-        y: localViewport.y + deltaY  // scroll down -> move view down (matches your Cartesian setup)
+        ...currentViewport,
+        x: currentViewport.x - deltaX, // scroll right -> pan canvas left
+        y: currentViewport.y - deltaY  // scroll down -> move view down (inverted to match drag behavior)
       };
 
-      throttledWheelUpdate(newViewport);
+      viewportRef.current = newViewport;
+      setLocalViewport(newViewport);
+      updateViewportRef.current(newViewport);
     }
-  }, [localViewport, throttledWheelUpdate]);
+  });
 
   // Attach a single wheel listener with passive: false
   useEffect(() => {
@@ -269,26 +270,28 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
-          const current = localViewport;
+          const current = viewportRef.current;
           const worldX = (0 - current.x) / current.zoom;
           const worldY = (0 - current.y) / current.zoom;
-          const newZoom = Math.min(5, current.zoom + 0.1);
+          const newZoom = Math.min(5, current.zoom + 0.15);
           const newX = 0 - worldX * newZoom;
           const newY = 0 - worldY * newZoom;
 
           const nv = { x: newX, y: newY, zoom: newZoom };
+          viewportRef.current = nv;
           setLocalViewport(nv);
           updateViewport(nv);
         } else if (e.key === '-') {
           e.preventDefault();
-          const current = localViewport;
+          const current = viewportRef.current;
           const worldX = (0 - current.x) / current.zoom;
           const worldY = (0 - current.y) / current.zoom;
-          const newZoom = Math.max(0.1, current.zoom - 0.1);
+          const newZoom = Math.max(0.1, current.zoom - 0.15);
           const newX = 0 - worldX * newZoom;
           const newY = 0 - worldY * newZoom;
 
           const nv = { x: newX, y: newY, zoom: newZoom };
+          viewportRef.current = nv;
           setLocalViewport(nv);
           updateViewport(nv);
         } else if (e.key === '0') {
@@ -296,14 +299,15 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
 
           if (canvasElements.length === 0) {
             const nv = { x: 0, y: 0, zoom: 1 };
+            viewportRef.current = nv;
             setLocalViewport(nv);
             updateViewport(nv);
             return;
           }
 
-          // Fit all elements
+          // Fit all elements - optimized
           let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          canvasElements.forEach(element => {
+          for (const element of canvasElements) {
             const left = element.position.x;
             const top = element.position.y;
             const right = element.position.x + element.size.width;
@@ -313,7 +317,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
             minY = Math.min(minY, top);
             maxX = Math.max(maxX, right);
             maxY = Math.max(maxY, bottom);
-          });
+          }
 
           const padding = 50;
           const boundingWidth = maxX - minX + padding * 2;
@@ -322,8 +326,8 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
           const centerX_elements = (minX + maxX) / 2;
           const centerY_elements = (minY + maxY) / 2;
 
-          const viewportWidth = typeof window !== 'undefined' ? window.innerWidth - 400 : 1200;
-          const viewportHeight = typeof window !== 'undefined' ? window.innerHeight - 200 : 800;
+          const viewportWidth = window.innerWidth - 400;
+          const viewportHeight = window.innerHeight - 200;
 
           const zoomX = viewportWidth / boundingWidth;
           const zoomY = viewportHeight / boundingHeight;
@@ -337,6 +341,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
           const targetY = viewportCenterY - (centerY_elements * targetZoom);
 
           const nv = { x: targetX, y: targetY, zoom: targetZoom };
+          viewportRef.current = nv;
           setLocalViewport(nv);
           updateViewport(nv);
         }
@@ -345,7 +350,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [localViewport, updateViewport, canvasElements]);
+  }, [updateViewport, canvasElements]);
 
   // Set cursor based on selected tool
   useEffect(() => {
@@ -392,7 +397,15 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     }
   }, [selectedTool]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  // Create optimized viewport update function for touch events
+  const throttledViewportUpdate = useOptimizedRaf((newViewport: typeof viewport) => {
+    viewportRef.current = newViewport;
+    updateViewportRef.current(newViewport);
+  });
+
+  const handleTouchMove = useOptimizedRaf((e: React.TouchEvent) => {
+    const currentViewport = viewportRef.current;
+
     if (e.touches.length === 2 && isTouchZooming.current) {
       e.preventDefault();
       e.stopPropagation();
@@ -405,18 +418,19 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
 
       if (lastTouchDistance.current > 0) {
         const zoomFactor = currentDistance / lastTouchDistance.current;
-        const newZoom = Math.max(0.1, Math.min(5, localViewport.zoom * zoomFactor));
+        const newZoom = Math.max(0.1, Math.min(5, currentViewport.zoom * zoomFactor));
 
         const canvasX = currentCenter.x - rect.left;
         const canvasY = currentCenter.y - rect.top;
 
-        const worldX = (canvasX - localViewport.x) / localViewport.zoom;
-        const worldY = (canvasY - localViewport.y) / localViewport.zoom;
+        const worldX = (canvasX - currentViewport.x) / currentViewport.zoom;
+        const worldY = (canvasY - currentViewport.y) / currentViewport.zoom;
 
         const newX = canvasX - worldX * newZoom;
         const newY = canvasY - worldY * newZoom;
 
         const nv = { x: newX, y: newY, zoom: newZoom };
+        viewportRef.current = nv;
         setLocalViewport(nv);
         throttledViewportUpdate(nv);
       }
@@ -429,12 +443,13 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       const deltaX = t.clientX - lastMousePos.current.x;
       const deltaY = t.clientY - lastMousePos.current.y;
 
-      const nv = { x: localViewport.x + deltaX, y: localViewport.y + deltaY, zoom: localViewport.zoom };
+      const nv = { x: currentViewport.x + deltaX, y: currentViewport.y - deltaY, zoom: currentViewport.zoom };
+      viewportRef.current = nv;
       setLocalViewport(nv);
       throttledViewportUpdate(nv);
       lastMousePos.current = { x: t.clientX, y: t.clientY };
     }
-  }, [localViewport, throttledViewportUpdate]);
+  });
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (e.touches.length < 2) {
@@ -453,7 +468,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     }
   }, []);
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  const handlePointerMove = useOptimizedRaf((e: React.PointerEvent) => {
     if (e.pointerType === 'touch' && pointers.current.has(e.pointerId)) {
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -463,7 +478,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
 
         if (lastPinchDistance.current > 0 && Math.abs(currentDistance - lastPinchDistance.current) > 5) {
           const scaleFactor = currentDistance / lastPinchDistance.current;
-          const newZoom = Math.max(0.1, Math.min(5, localViewport.zoom * scaleFactor));
+          const newZoom = Math.max(0.1, Math.min(5, viewportRef.current.zoom * scaleFactor));
 
           const centerX = (pts[0].x + pts[1].x) / 2;
           const centerY = (pts[0].y + pts[1].y) / 2;
@@ -479,7 +494,7 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         lastPinchDistance.current = currentDistance;
       }
     }
-  }, [localViewport, animateZoom]);
+  });
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     if (e.pointerType === 'touch') {
@@ -531,8 +546,9 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         className="absolute inset-0 canvas-grid pointer-events-none"
         style={{
           backgroundSize: `${20 * localViewport.zoom}px ${20 * localViewport.zoom}px`,
-          backgroundPosition: `${((canvasRef.current ? canvasRef.current.clientWidth / 2 : 0) + localViewport.x) % (20 * localViewport.zoom)}px ${((canvasRef.current ? canvasRef.current.clientHeight / 2 : 0) - localViewport.y) % (20 * localViewport.zoom)}px`,
-          willChange: 'background-position, background-size',
+          backgroundPosition: `${((canvasRef.current ? canvasRef.current.clientWidth / 2 : 0) + localViewport.x) % (20 * localViewport.zoom)}px ${((canvasRef.current ? canvasRef.current.clientHeight / 2 : 0) + localViewport.y) % (20 * localViewport.zoom)}px`,
+          willChange: 'transform',
+          transform: 'translateZ(0)',
           contain: 'strict',
         }}
       />
@@ -541,9 +557,11 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
       <div
         className="absolute canvas-optimized"
         style={{
-          transform: `translate(${canvasRef.current ? canvasRef.current.clientWidth / 2 : 0}px, ${canvasRef.current ? canvasRef.current.clientHeight / 2 : 0}px) translate(${localViewport.x}px, ${-localViewport.y}px) scale(${localViewport.zoom})`,
+          transform: `translate(${canvasRef.current ? canvasRef.current.clientWidth / 2 : 0}px, ${canvasRef.current ? canvasRef.current.clientHeight / 2 : 0}px) translate(${localViewport.x}px, ${localViewport.y}px) scale(${localViewport.zoom})`,
           transformOrigin: '0 0',
           willChange: 'transform',
+          backfaceVisibility: 'hidden',
+          perspective: '1000px',
         }}
       >
         {children}

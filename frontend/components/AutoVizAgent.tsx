@@ -80,7 +80,7 @@ export default function AutoVizAgent() {
   
   // Canvas state
   const { viewport, updateViewport, canvasElements, addElement } = useCanvasStore();
-  const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, setRecommendations: setStoreRecommendations } = useAnalysisStore();
+  const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, setRecommendations: setStoreRecommendations, startAnalysis } = useAnalysisStore();
   
   // Debug logging for state changes
   React.useEffect(() => {
@@ -182,45 +182,56 @@ export default function AutoVizAgent() {
     setIsAnalyzing(isLoading);
   }, [isLoading]);
 
-  // Auto-select dataset when analysis data is available
+  // Auto-select dataset when analysis data is available (only if no manual selection)
   React.useEffect(() => {
-    console.log('🎯 Dataset selection effect triggered:', { 
-      hasRawData: !!rawData, 
+    console.log('🎯 Auto-selection effect triggered:', {
+      hasRawData: !!rawData,
       rawDataLength: rawData?.length,
-      hasDataProfile: !!dataProfile, 
+      hasSelectedDataset: !!selectedDataset,
+      hasDataProfile: !!dataProfile,
       isLoading,
       datasetsLength: datasets.length
     });
 
-    // If we have raw data but no selected dataset, try to find/select the matching dataset
+    // Only auto-select if no dataset is already selected and we have raw data
     if (rawData && !selectedDataset && datasets.length > 0) {
       const matchingDataset = datasets.find((d: Dataset) => {
         if (!d.data || !rawData) return false;
-        
+
         // Compare data length and structure
         if (d.data.length !== rawData.length) return false;
-        
+
         // Compare first row keys to ensure same structure
         if (d.data.length > 0 && rawData.length > 0) {
           const existingKeys = Object.keys(d.data[0] || {}).sort();
           const newKeys = Object.keys(rawData[0] || {}).sort();
           return JSON.stringify(existingKeys) === JSON.stringify(newKeys);
         }
-        
+
         return true;
       });
-      
+
       if (matchingDataset) {
         console.log('✅ Auto-selecting matching dataset:', matchingDataset.name);
         setSelectedDataset(matchingDataset);
+        // Note: Don't start analysis here - let the selection effect handle it
       }
     }
-  }, [rawData, selectedDataset, datasets]); // Focus on selection, not creation
+  }, [rawData, selectedDataset, datasets]);
 
   // Handle dataset selection from DataPanel
   const handleDatasetSelect = useCallback(async (dataset: Dataset) => {
+    console.log('🎯 Dataset selected in AutoVizAgent:', dataset.name, 'with data length:', dataset.data?.length);
     setSelectedDataset(dataset);
-  }, []);
+
+    // Start analysis if dataset has data
+    if (dataset.data && dataset.data.length > 0) {
+      console.log('🚀 Starting analysis for selected dataset:', dataset.name);
+      startAnalysis(dataset.data, dataset.name, dataset.id);
+    } else {
+      console.warn('⚠️ Selected dataset has no data:', dataset.name);
+    }
+  }, [startAnalysis]);
 
   // Handle drag & drop from DataPanel to Canvas
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -281,28 +292,30 @@ export default function AutoVizAgent() {
       configKeys: recommendation?.config ? Object.keys(recommendation.config) : []
     });
 
+    // Create visualization for local state tracking
     const newViz: Visualization = {
       id: `viz-${Date.now()}`,
       title: type ? `${type.charAt(0).toUpperCase() + type.slice(1)} Chart` : 'Chart',
       type,
       dataSource: dataset.name,
       position,
-      size: { width: 400, height: 300 },
+      size: { width: 500, height: 400 },
       confidence: recommendation?.confidence,
       reasoning: recommendation?.reasoning,
       config: recommendation?.config
     };
-    
-    // Add to local state for backward compatibility
+
+    // Add to local state for backward compatibility and selection tracking
     setVisualizations(prev => [...prev, newViz]);
     setSelectedVizId(newViz.id);
 
-    // CRITICAL: Also add to canvas store so it actually renders
-    const chartTitle = recommendation?.config?.title || 
-                      (recommendation?.config?.xAxis && recommendation?.config?.yAxis ? 
+    // Create chart title
+    const chartTitle = recommendation?.config?.title ||
+                      (recommendation?.config?.xAxis && recommendation?.config?.yAxis ?
                         `${recommendation.config.yAxis} vs ${recommendation.config.xAxis}` : null) ||
                       `${type} Visualization`;
 
+    // Add to canvas store for rendering
     const canvasElement = {
       type: 'chart' as const,
       position,
@@ -314,7 +327,8 @@ export default function AutoVizAgent() {
         },
         chartType: type,
         recommendation: recommendation,
-        title: chartTitle
+        title: chartTitle,
+        dataset: dataset
       }
     };
 
@@ -322,24 +336,17 @@ export default function AutoVizAgent() {
     addElement(canvasElement);
   }, [addElement]);
 
-  // Visualization management
+  // Visualization management - now sync with canvas store
   const handleVisualizationSelect = useCallback((id: string) => {
     setSelectedVizId(id);
   }, []);
 
-  const handleVisualizationPositionChange = useCallback((id: string, position: { x: number; y: number }) => {
-    setVisualizations(prev =>
-      prev.map(viz => viz.id === id ? { ...viz, position } : viz)
-    );
-  }, []);
-
-  const handleVisualizationSizeChange = useCallback((id: string, size: { width: number; height: number }) => {
-    setVisualizations(prev =>
-      prev.map(viz => viz.id === id ? { ...viz, size } : viz)
-    );
-  }, []);
-
   const handleVisualizationDelete = useCallback((id: string) => {
+    // Remove from canvas store
+    const { removeElement } = useCanvasStore.getState();
+    removeElement(id);
+
+    // Remove from local state
     setVisualizations(prev => prev.filter(viz => viz.id !== id));
     if (selectedVizId === id) {
       setSelectedVizId(null);
@@ -352,14 +359,16 @@ export default function AutoVizAgent() {
     }
   }, [selectedVizId, handleVisualizationDelete]);
 
-  // Prepare visualization positions for MiniMap
-  const visualizationPositions = visualizations.map(viz => ({
-    id: viz.id,
-    x: viz.position.x,
-    y: viz.position.y,
-    width: viz.size.width,
-    height: viz.size.height
-  }));
+  // Prepare visualization positions for MiniMap - use canvas elements
+  const visualizationPositions = canvasElements
+    .filter(element => element.type === 'chart')
+    .map(element => ({
+      id: element.id,
+      x: element.position.x,
+      y: element.position.y,
+      width: element.size.width,
+      height: element.size.height
+    }));
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-gray-50 dark:bg-gray-900 prevent-zoom">
@@ -397,34 +406,21 @@ export default function AutoVizAgent() {
               }
             }}
           >
-            <div 
+            <div
               ref={canvasRef}
               className="w-[10000px] h-[10000px]"
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
             >
-              {/* Render local visualizations */}
-              {visualizations.map((viz) => (
-                <VisualizationCard
-                  key={viz.id}
-                  id={viz.id}
-                  title={viz.title}
-                  type={viz.type}
-                  dataSource={viz.dataSource}
-                  lastUpdated="just now"
-                  position={viz.position}
-                  size={viz.size}
-                  isSelected={selectedVizId === viz.id}
-                  onSelect={handleVisualizationSelect}
-                  onPositionChange={handleVisualizationPositionChange}
-                  onSizeChange={handleVisualizationSizeChange}
-                  onDelete={handleVisualizationDelete}
-                />
-              ))}
-
-              {/* Render canvas store elements */}
+              {/* Render canvas store elements only - no duplicates */}
               {canvasElements.map((element) => (
-                <CanvasElement key={element.id} element={element}>
+                <CanvasElement
+                  key={element.id}
+                  element={element}
+                  isSelected={selectedVizId === element.id}
+                  onSelect={() => handleVisualizationSelect(element.id)}
+                  onDelete={() => handleVisualizationDelete(element.id)}
+                >
                   {element.type === 'chart' && (
                     <ChartCard
                       config={element.data?.config}

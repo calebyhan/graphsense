@@ -4,18 +4,20 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { useCanvasStore, CanvasElement as CanvasElementType } from '@/store/useCanvasStore';
 import { Move, X, Maximize2, Minimize2 } from 'lucide-react';
 
-function useRafThrottle<T extends (...args: any[]) => void>(func: T): T {
+function useOptimizedRaf<T extends (...args: any[]) => void>(func: T): T {
   const rafId = useRef<number | undefined>(undefined);
   const lastArgs = useRef<any[]>([]);
+  const isScheduled = useRef(false);
 
   const throttledFunc = useCallback((...args: any[]) => {
     lastArgs.current = args;
-    if (rafId.current) return;
+
+    if (isScheduled.current) return;
+    isScheduled.current = true;
 
     rafId.current = requestAnimationFrame(() => {
-      if (lastArgs.current) {
-        func(...lastArgs.current);
-      }
+      func(...lastArgs.current);
+      isScheduled.current = false;
       rafId.current = undefined;
     });
   }, [func]);
@@ -34,9 +36,12 @@ function useRafThrottle<T extends (...args: any[]) => void>(func: T): T {
 interface CanvasElementProps {
   element: CanvasElementType;
   children: React.ReactNode;
+  isSelected?: boolean;
+  onSelect?: () => void;
+  onDelete?: () => void;
 }
 
-export default function CanvasElement({ element, children }: CanvasElementProps) {
+export default function CanvasElement({ element, children, isSelected, onSelect, onDelete }: CanvasElementProps) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -63,15 +68,16 @@ export default function CanvasElement({ element, children }: CanvasElementProps)
   } = useCanvasStore();
 
   // Throttled update functions
-  const throttledPositionUpdate = useRafThrottle(useCallback((id: string, position: { x: number; y: number }) => {
+  const throttledPositionUpdate = useOptimizedRaf(useCallback((id: string, position: { x: number; y: number }) => {
     updateElement(id, { position });
   }, [updateElement]));
 
-  const throttledSizeUpdate = useRafThrottle(useCallback((id: string, size: { width: number; height: number }) => {
+  const throttledSizeUpdate = useOptimizedRaf(useCallback((id: string, size: { width: number; height: number }) => {
     updateElement(id, { size });
   }, [updateElement]));
 
-  const isSelected = selectedElements.includes(element.id);
+  const isStoreSelected = selectedElements.includes(element.id);
+  const isActuallySelected = isSelected || isStoreSelected;
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     // Don't start dragging if clicking on a button or interactive element
@@ -88,7 +94,8 @@ export default function CanvasElement({ element, children }: CanvasElementProps)
     e.stopPropagation();
 
     // Select this element if not already selected
-    if (!isSelected) {
+    if (!isActuallySelected && onSelect) {
+      onSelect();
       selectElements([element.id]);
     }
 
@@ -142,8 +149,11 @@ export default function CanvasElement({ element, children }: CanvasElementProps)
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (onDelete) {
+      onDelete();
+    }
     removeElement(element.id);
-  }, [element.id, removeElement]);
+  }, [element.id, removeElement, onDelete]);
 
   // Add global event listeners for drag/resize
   React.useEffect(() => {
@@ -162,7 +172,7 @@ export default function CanvasElement({ element, children }: CanvasElementProps)
     <div
       ref={elementRef}
       className={`absolute bg-white rounded-lg shadow-lg border-2 canvas-element-optimized ${isDragging || isResizing ? 'performance-mode' : 'smooth-transition'} ${
-        isSelected ? 'border-blue-500 shadow-xl' : 'border-gray-200'
+        isActuallySelected ? 'border-blue-500 shadow-xl' : 'border-gray-200'
       } ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
       style={{
         left: localPosition.x,
