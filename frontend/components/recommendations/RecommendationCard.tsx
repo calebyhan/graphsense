@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { ChartRecommendation } from '@/lib/types';
-import { TrendingUp, BarChart3, LineChart, Circle, PieChart, Activity, BarChart2, TreePine, Share2, Square } from 'lucide-react';
+import { TrendingUp, BarChart3, LineChart, Circle, PieChart, Activity, BarChart2, TreePine, Share2, Square, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface RecommendationCardProps {
   recommendation: ChartRecommendation;
@@ -36,12 +37,18 @@ const chartColors = {
   sankey: 'text-violet-500'
 };
 
+const MAX_DESCRIPTION_LENGTH = 120;
+const MAX_JUSTIFICATION_LENGTH = 200;
+
 export default function RecommendationCard({
   recommendation,
   onSelect,
   onAddToCanvas,
   isSelected = false
 }: RecommendationCardProps) {
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isJustificationExpanded, setIsJustificationExpanded] = useState(false);
+
   const Icon = chartIcons[recommendation.chartType] || TrendingUp;
   const iconColor = chartColors[recommendation.chartType] || 'text-gray-500';
 
@@ -110,6 +117,18 @@ export default function RecommendationCard({
     return parts.join(' • ');
   };
 
+  const truncateText = (text: string, maxLength: number) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength).trim() + '…';
+  };
+
+  const description = getChartDescription();
+  const shouldShowDescriptionToggle = description.length > MAX_DESCRIPTION_LENGTH;
+  const displayDescription = isDescriptionExpanded ? description : truncateText(description, MAX_DESCRIPTION_LENGTH);
+
+  const shouldShowJustificationToggle = recommendation.justification.length > MAX_JUSTIFICATION_LENGTH;
+  const displayJustification = isJustificationExpanded ? recommendation.justification : truncateText(recommendation.justification, MAX_JUSTIFICATION_LENGTH);
+
   return (
     <div
       className={`
@@ -131,21 +150,59 @@ export default function RecommendationCard({
         <span
           className={`text-xs font-medium px-2 py-1 rounded-full border ${getConfidenceColor(recommendation.confidence)}`}
         >
-          {recommendation.confidence}% confidence
+          {Math.round(recommendation.confidence)}% confidence
         </span>
       </div>
 
       <div className="mb-3">
-        <p className="text-sm text-gray-600 mb-3 leading-relaxed">
-          {getChartDescription()}
-        </p>
+        <div className="text-sm text-gray-600 mb-3 leading-relaxed">
+          {displayDescription}
+          {shouldShowDescriptionToggle && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDescriptionExpanded(!isDescriptionExpanded);
+              }}
+              className="text-blue-600 hover:text-blue-800 text-xs font-medium ml-1 focus:outline-none"
+            >
+              {isDescriptionExpanded ? (
+                <span className="flex items-center gap-1">
+                  <ChevronUp className="h-3 w-3" /> Show less
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <ChevronDown className="h-3 w-3" /> Read more
+                </span>
+              )}
+            </button>
+          )}
+        </div>
 
         <div className="flex items-center gap-1 mb-2">
           <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Why this chart?</span>
         </div>
-        <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-md border-l-4 border-blue-200">
-          {recommendation.justification}
-        </p>
+        <div className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-md border-l-4 border-blue-200">
+          {displayJustification}
+          {shouldShowJustificationToggle && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsJustificationExpanded(!isJustificationExpanded);
+              }}
+              className="text-blue-600 hover:text-blue-800 text-xs font-medium ml-1 mt-2 focus:outline-none block"
+            >
+              {isJustificationExpanded ? (
+                <span className="flex items-center gap-1">
+                  <ChevronUp className="h-3 w-3" /> Show less
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <ChevronDown className="h-3 w-3" /> Read more
+                </span>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {getDataMappingText() && (

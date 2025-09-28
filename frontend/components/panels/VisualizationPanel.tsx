@@ -43,6 +43,7 @@ export function VisualizationPanel({
   onAutoViz,
   visualizationPositions = []
 }: VisualizationPanelProps) {
+  // Get canvas elements for minimap
   const [activeTab, setActiveTab] = useState<'analysis' | 'recommendations' | 'manual'>('analysis');
   const {
     rawData,
@@ -53,7 +54,16 @@ export function VisualizationPanel({
     retryAnalysis
   } = useAnalysisStore();
   
-  const { viewport, updateViewport } = useCanvasStore();
+  const { viewport, updateViewport, canvasElements } = useCanvasStore();
+  
+  // Convert canvas elements to visualization positions for minimap
+  const canvasVisualizationPositions = canvasElements.map(element => ({
+    id: element.id,
+    x: element.position.x,
+    y: element.position.y,
+    width: element.size.width,
+    height: element.size.height
+  }));
 
   // Helper function to safely extract reasoning text
   const getReasoningText = (reasoning: any): string => {
@@ -379,14 +389,14 @@ export function VisualizationPanel({
       {/* Mini Map */}
       <div className="border-t border-gray-200 dark:border-gray-700">
         <MiniMap
-          visualizations={visualizationPositions}
+          visualizations={canvasVisualizationPositions}
           canvasSize={{ width: 10000, height: 10000 }}
           viewportSize={{ width: typeof window !== 'undefined' ? window.innerWidth : 1200, height: typeof window !== 'undefined' ? window.innerHeight : 800 }}
-          viewportPosition={{ x: -viewport.x / viewport.zoom, y: -viewport.y / viewport.zoom, zoom: viewport.zoom }}
+          viewportPosition={{ x: viewport.x, y: viewport.y, zoom: viewport.zoom }}
           onViewportChange={(position) => {
             updateViewport({
-              x: -position.x * viewport.zoom,
-              y: -position.y * viewport.zoom,
+              x: position.x,
+              y: position.y,
               zoom: viewport.zoom
             });
           }}

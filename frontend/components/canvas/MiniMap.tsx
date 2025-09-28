@@ -47,7 +47,7 @@ export function MiniMap({
     x: Math.max(0, Math.min(miniMapSize.width - (viewportSize.width * scaleX / zoom), 
         miniMapCenterX + (viewportPosition.x * scaleX) - (viewportSize.width * scaleX / zoom) / 2)),
     y: Math.max(0, Math.min(miniMapSize.height - (viewportSize.height * scaleY / zoom), 
-        miniMapCenterY - (viewportPosition.y * scaleY) - (viewportSize.height * scaleY / zoom) / 2)), // Invert Y
+        miniMapCenterY + (viewportPosition.y * scaleY) - (viewportSize.height * scaleY / zoom) / 2)), // Canvas Y is inverted in transform
     width: Math.min(miniMapSize.width, viewportSize.width * scaleX / zoom),
     height: Math.min(miniMapSize.height, viewportSize.height * scaleY / zoom)
   };
@@ -57,11 +57,12 @@ export function MiniMap({
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
     
-    // Convert click position to Cartesian coordinates
+    // Convert click position to canvas coordinates
     // In minimap: center is at (miniMapCenterX, miniMapCenterY)
-    // Convert to canvas coordinates where center is (0, 0)
-    const canvasX = (clickX - miniMapCenterX) / scaleX;
-    const canvasY = (miniMapCenterY - clickY) / scaleY; // Invert Y for Cartesian
+    // Canvas transform: translate(centerX, centerY) translate(viewport.x, -viewport.y)
+    // So viewport coordinates are: viewport.x = world.x, viewport.y = -world.y
+    const canvasX = (clickX - miniMapCenterX) / scaleX; // Direct mapping
+    const canvasY = (clickY - miniMapCenterY) / scaleY; // Direct mapping
     
     onViewportChange({ x: canvasX, y: canvasY });
   };
@@ -143,7 +144,7 @@ export function MiniMap({
                     left: Math.max(0, Math.min(miniMapSize.width - Math.max(viz.width * scaleX, 4), 
                           miniMapCenterX + (viz.x * scaleX))),
                     top: Math.max(0, Math.min(miniMapSize.height - Math.max(viz.height * scaleY, 4), 
-                          miniMapCenterY - (viz.y * scaleY) - Math.max(viz.height * scaleY, 4))), // Invert Y
+                          miniMapCenterY + (viz.y * scaleY))), // Direct mapping to match canvas positions
                     width: Math.max(viz.width * scaleX, 4),
                     height: Math.max(viz.height * scaleY, 4)
                   }}

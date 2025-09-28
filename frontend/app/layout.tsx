@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Auto Visualization Agent",
+  title: "GraphSense",
   description: "AI-powered chart recommendations for your data",
 };
 

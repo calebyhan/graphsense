@@ -21,8 +21,10 @@ import {
   Area,
   Treemap,
 } from 'recharts';
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import * as d3 from 'd3';
+import { useChartPerformance } from '@/hooks/usePerformance';
+import { PerformanceIndicator } from '@/components/common/PerformanceIndicator';
 
 type ChartType = 'line' | 'bar' | 'scatter' | 'pie' | 'histogram' | 'box_plot' | 'heatmap' | 'area' | 'treemap' | 'sankey';
 
@@ -36,130 +38,85 @@ const COLORS = [
   '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1'
 ];
 
+// Performance optimization constants
+const MAX_POINTS_SCATTER = 1000;
+const MAX_POINTS_LINE = 2000;
+const MAX_POINTS_BAR = 500;
+const MAX_POINTS_HEATMAP = 10000;
+const SAMPLE_SIZE_DETECTION = 100; // For field type detection
 
-function validateChartConfig(config: ChartConfig, chartType: ChartType): ChartConfig | null {
-  if (!config.data || config.data.length === 0) {
-    return null;
+// Intelligent data sampling function
+const sampleData = (data: any[], maxPoints: number, chartType: string) => {
+  if (!data || data.length <= maxPoints) return data;
+  
+  console.log(`🎯 Sampling ${data.length} points down to ${maxPoints} for ${chartType} chart`);
+  
+  // For time-series data, prefer systematic sampling
+  if (chartType === 'line' || chartType === 'area') {
+    const step = Math.floor(data.length / maxPoints);
+    return data.filter((_, index) => index % step === 0).slice(0, maxPoints);
   }
+  
+  // For other charts, use random sampling
+  const indices = new Set<number>();
+  while (indices.size < maxPoints) {
+    indices.add(Math.floor(Math.random() * data.length));
+  }
+  return Array.from(indices).sort((a, b) => a - b).map(i => data[i]);
+};
 
-  const sampleData = config.data[0];
-  const dataKeys = Object.keys(sampleData).filter(key => key && key.trim() !== '');
-
-  // Analyze data types
-  const numericFields = dataKeys.filter(key => {
-    const sampleValues = config.data.slice(0, 20).map(row => row[key]);
-    const numericValues = sampleValues.filter(val =>
-      val !== null && val !== '' && !isNaN(Number(val)) && isFinite(Number(val))
-    );
-    return numericValues.length > sampleValues.length * 0.7; // 70% threshold
+// Memoized field detection
+const detectFieldTypes = (data: any[], sampleSize: number = SAMPLE_SIZE_DETECTION) => {
+  if (!data || data.length === 0) return { numeric: [], categorical: [] };
+  
+  const sample = data.slice(0, Math.min(sampleSize, data.length));
+  const keys = Object.keys(sample[0] || {});
+  
+  const numeric = keys.filter(key => {
+    const values = sample.map(row => row[key]);
+    const numericValues = values.filter(val => !isNaN(Number(val)) && val !== null && val !== '');
+    return numericValues.length > values.length * 0.7;
   });
-
-  const categoricalFields = dataKeys.filter(key => !numericFields.includes(key));
-
-  const validatedConfig = { ...config };
-
-  switch (chartType) {
-    case 'line':
-    case 'area':
-      // Need one categorical (x) and one numeric (y)
-      if (!validatedConfig.xAxis) {
-        validatedConfig.xAxis = categoricalFields[0] || dataKeys[0];
-      }
-      if (!validatedConfig.yAxis) {
-        validatedConfig.yAxis = numericFields[0] || dataKeys.find(k => k !== validatedConfig.xAxis) || dataKeys[1];
-      }
-      break;
-
-    case 'bar':
-      // Need one categorical (x) and one numeric (y)
-      if (!validatedConfig.xAxis) {
-        validatedConfig.xAxis = categoricalFields[0] || numericFields[0] || dataKeys[0];
-      }
-      if (!validatedConfig.yAxis) {
-        validatedConfig.yAxis = numericFields[0] || dataKeys.find(k => k !== validatedConfig.xAxis) || dataKeys[1];
-      }
-      break;
-
-    case 'scatter':
-      // Need two numeric fields
-      if (!validatedConfig.xAxis) {
-        validatedConfig.xAxis = numericFields[0] || dataKeys[0];
-      }
-      if (!validatedConfig.yAxis) {
-        validatedConfig.yAxis = numericFields[1] || dataKeys.find(k => k !== validatedConfig.xAxis) || dataKeys[1];
-      }
-      break;
-
-    case 'pie':
-      // Need one categorical and one numeric
-      if (!validatedConfig.category) {
-        validatedConfig.category = categoricalFields[0] || dataKeys[0];
-      }
-      if (!validatedConfig.value) {
-        validatedConfig.value = numericFields[0] || dataKeys.find(k => k !== validatedConfig.category) || dataKeys[1];
-      }
-      break;
-
-    case 'treemap':
-      // Need one categorical and one numeric
-      if (!validatedConfig.category && !validatedConfig.hierarchyField) {
-        validatedConfig.category = categoricalFields[0] || dataKeys[0];
-      }
-      if (!validatedConfig.value) {
-        validatedConfig.value = numericFields[0] || dataKeys.find(k => k !== validatedConfig.category) || dataKeys[1];
-      }
-      break;
-
-    case 'histogram':
-      // Need one numeric field
-      if (!validatedConfig.value && !validatedConfig.yAxis && !validatedConfig.xAxis) {
-        validatedConfig.value = numericFields[0] || dataKeys[0];
-      }
-      break;
-
-    case 'box_plot':
-      // Need one numeric field
-      if (!validatedConfig.yAxis) {
-        validatedConfig.yAxis = numericFields[0] || dataKeys[0];
-      }
-      break;
-
-    case 'heatmap':
-      // Need two categorical and one numeric
-      if (!validatedConfig.rowField && !validatedConfig.xAxis) {
-        validatedConfig.rowField = categoricalFields[0] || dataKeys[0];
-      }
-      if (!validatedConfig.colField && !validatedConfig.yAxis) {
-        validatedConfig.colField = categoricalFields[1] || dataKeys.find(k => k !== validatedConfig.rowField) || dataKeys[1];
-      }
-      if (!validatedConfig.valueField && !validatedConfig.value) {
-        validatedConfig.valueField = numericFields[0] || dataKeys.find(k => k !== validatedConfig.rowField && k !== validatedConfig.colField) || dataKeys[2];
-      }
-      break;
-
-    case 'sankey':
-      // Need two categorical and one numeric
-      if (!validatedConfig.source) {
-        validatedConfig.source = categoricalFields[0] || dataKeys[0];
-      }
-      if (!validatedConfig.target) {
-        validatedConfig.target = categoricalFields[1] || dataKeys.find(k => k !== validatedConfig.source) || dataKeys[1];
-      }
-      if (!validatedConfig.weight && !validatedConfig.value) {
-        validatedConfig.weight = numericFields[0] || dataKeys.find(k => k !== validatedConfig.source && k !== validatedConfig.target) || dataKeys[2];
-      }
-      break;
-  }
-
-  return validatedConfig;
-}
+  
+  const categorical = keys.filter(key => !numeric.includes(key));
+  
+  return { numeric, categorical };
+};
 
 // D3.js Chart Components
-const D3Histogram = ({ config }: { config: ChartConfig }) => {
+const D3Histogram = memo(({ config }: { config: ChartConfig }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Memoize data processing for performance
+  const processedData = useMemo(() => {
+    if (!config.data || config.data.length === 0) return null;
+    
+    // Sample data for large datasets
+    const sampledData = sampleData(config.data, MAX_POINTS_LINE, 'histogram');
+    
+    // Auto-detect numeric field for histogram
+    let valueField = config.value || config.yAxis || config.xAxis || config.chartSpecificConfig?.value;
+    
+    if (!valueField) {
+      const { numeric } = detectFieldTypes(sampledData);
+      valueField = numeric[0];
+      console.log('📊 Histogram auto-detected field:', valueField);
+    }
+    
+    if (!valueField) return null;
+    
+    const numericData = sampledData.map(d => +d[valueField!]).filter(d => !isNaN(d));
+    
+    return {
+      data: numericData,
+      valueField,
+      originalLength: config.data.length,
+      sampledLength: sampledData.length
+    };
+  }, [config.data, config.value, config.yAxis, config.xAxis, config.chartSpecificConfig?.value]);
+
   useEffect(() => {
-    if (!svgRef.current || !config.data) return;
+    if (!svgRef.current || !processedData) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -168,45 +125,21 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
     const width = 600 - margin.left - margin.right;
     const height = 300 - margin.bottom - margin.top;
 
-    let valueField = config.value || config.yAxis || config.xAxis;
-
-    if (!valueField) {
-      const sampleData = config.data?.[0];
-      if (sampleData) {
-        const numericFields = Object.keys(sampleData).filter(key => {
-          const value = sampleData[key];
-          return !isNaN(parseFloat(value)) && isFinite(value);
-        });
-        valueField = numericFields[0];
-      }
-    }
-
-    if (!valueField) {
+    const { data: numericData } = processedData;
+    
+    if (numericData.length === 0) {
       svg.append("text")
         .attr("x", 300)
         .attr("y", 150)
         .attr("text-anchor", "middle")
-        .text("Histogram requires a numeric field");
+        .text("No valid numeric data for histogram");
       return;
     }
 
-    const data = config.data
-      .map(d => +d[valueField])
-      .filter(d => !isNaN(d) && isFinite(d));
-
-    if (data.length === 0) {
-      svg.append("text")
-        .attr("x", 300)
-        .attr("y", 150)
-        .attr("text-anchor", "middle")
-        .text("No numeric data available");
-      return;
-    }
-
-    const bins = config.bins || Math.min(30, Math.max(10, Math.ceil(Math.sqrt(data.length))));
+    const bins = config.bins || Math.min(30, Math.max(10, Math.ceil(Math.sqrt(numericData.length))));
 
     const x = d3.scaleLinear()
-      .domain(d3.extent(data) as [number, number])
+      .domain(d3.extent(numericData) as [number, number])
       .range([0, width]);
 
     const histogram = d3.histogram()
@@ -214,7 +147,7 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
       .domain(x.domain() as [number, number])
       .thresholds(bins);
 
-    const binData = histogram(data);
+    const binData = histogram(numericData);
 
     const y = d3.scaleLinear()
       .domain([0, d3.max(binData, d => d.length)!])
@@ -248,7 +181,7 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
       .attr("y", 35)
       .attr("text-anchor", "middle")
       .attr("fill", "black")
-      .text(valueField);
+      .text(processedData.valueField);
 
     g.append("g")
       .call(d3.axisLeft(y))
@@ -259,10 +192,71 @@ const D3Histogram = ({ config }: { config: ChartConfig }) => {
       .attr("text-anchor", "middle")
       .attr("fill", "black")
       .text("Frequency");
-  }, [config]);
 
-  return <svg ref={svgRef} width={600} height={300} />;
-};
+    // Add statistics overlay if requested
+    if (config.chartSpecificConfig?.showStats) {
+      const mean = d3.mean(numericData)!;
+      const std = d3.deviation(numericData)!;
+
+      // Mean line
+      g.append("line")
+        .attr("x1", x(mean))
+        .attr("x2", x(mean))
+        .attr("y1", 0)
+        .attr("y2", height)
+        .attr("stroke", "red")
+        .attr("stroke-width", 2)
+        .attr("stroke-dasharray", "5,5");
+
+      // Standard deviation area
+      g.append("rect")
+        .attr("x", x(mean - std))
+        .attr("y", 0)
+        .attr("width", x(mean + std) - x(mean - std))
+        .attr("height", height)
+        .attr("fill", "red")
+        .attr("opacity", 0.1);
+
+      // Legend
+      const legend = g.append("g")
+        .attr("transform", `translate(${width - 100}, 20)`);
+
+      legend.append("line")
+        .attr("x1", 0)
+        .attr("x2", 20)
+        .attr("y1", 0)
+        .attr("y2", 0)
+        .attr("stroke", "red")
+        .attr("stroke-width", 2)
+        .attr("stroke-dasharray", "5,5");
+
+      legend.append("text")
+        .attr("x", 25)
+        .attr("y", 5)
+        .attr("font-size", "12px")
+        .text(`Mean: ${mean.toFixed(2)}`);
+    }
+  }, [processedData]);
+
+  if (!processedData) {
+    return (
+      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <p className="text-gray-500">No valid numeric data for histogram</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <svg ref={svgRef} width={600} height={300} />
+      {processedData.originalLength > processedData.sampledLength && (
+        <div className="absolute top-2 right-2 bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+          Showing {processedData.sampledLength.toLocaleString()} of {processedData.originalLength.toLocaleString()} points
+        </div>
+      )}
+    </div>
+  );
+});
 
 const D3BoxPlot = ({ config }: { config: ChartConfig }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -587,132 +581,150 @@ const D3Sankey = ({ config }: { config: ChartConfig }) => {
   return <svg ref={svgRef} width={600} height={300} />;
 };
 
-export default function ChartRenderer({ config, chartType }: ChartRendererProps) {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
+const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
+  // Use performance optimization hook
+  const {
+    processedData,
+    metrics,
+    performanceInfo
+  } = useChartPerformance({
+    chartType,
+    data: config.data,
+    enableSampling: true,
+    preserveOutliers: chartType === 'box_plot' || chartType === 'histogram'
+  });
 
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
+  // Memoized processed config
+  const processedConfig = useMemo(() => {
+    if (!processedData) return null;
+    
+    return {
+      ...config,
+      data: processedData,
+      originalDataLength: performanceInfo?.originalSize || 0,
+      sampledDataLength: performanceInfo?.processedSize || 0
+    };
+  }, [config, processedData, performanceInfo]);
 
-  // Canvas positioning is handled by CanvasElement - no need for duplicate positioning logic
-  useEffect(() => {
-    if (!mounted) return;
-
-    // Ensure chart is visible when mounted
-    const chartElement = canvasRef.current?.closest('.chart-card');
-    if (chartElement && 'style' in chartElement) {
-      (chartElement as HTMLElement).style.visibility = 'visible';
-    }
-  }, [mounted]);
-
-  if (!config.data || config.data.length === 0) {
+  if (!processedConfig) {
     return (
-      <div ref={canvasRef} className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-        <p className="text-gray-500">No data available - please analyze dataset first</p>
+      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <p className="text-gray-500">No data available for visualization</p>
       </div>
     );
   }
 
   const renderChart = useCallback(() => {
-    try {
-      return renderChartForConfig(config, chartType);
-    } catch (error) {
-      console.error('Error rendering chart:', error);
-      return (
-        <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-          <p className="text-gray-500">Error rendering chart</p>
-        </div>
-      );
-    }
-  }, [config, chartType]);
+    switch (chartType) {
+      case 'line':
+        // Auto-detect fields for line chart  
+        let lineXField = processedConfig.xAxis || processedConfig.chartSpecificConfig?.xAxis;
+        let lineYField = processedConfig.yAxis || processedConfig.chartSpecificConfig?.yAxis;
+        
+        if (!lineXField || !lineYField) {
+          const sampleData = processedConfig.data?.[0];
+          if (sampleData) {
+            const fields = Object.keys(sampleData);
+            const numericFields = fields.filter(key => {
+              const value = sampleData[key];
+              return !isNaN(parseFloat(value)) && isFinite(value);
+            });
+            
+            // For line charts, both axes typically need to be numeric or X can be categorical
+            lineXField = lineXField || fields[0]; // First field for X
+            lineYField = lineYField || numericFields[0]; // First numeric field for Y
+          }
+        }
+        
+        if (!lineXField || !lineYField) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <div className="text-center">
+                <p className="text-gray-500 mb-2">Line chart requires both X and Y axis fields</p>
+                <p className="text-xs text-gray-400">
+                  Available fields: {Object.keys(processedConfig.data?.[0] || {}).join(', ')}
+                </p>
+              </div>
+            </div>
+          );
+        }
 
-  const isD3Chart = ['histogram', 'box_plot', 'heatmap', 'sankey'].includes(chartType);
+        // Process line chart data
+        const lineData = processedConfig.data
+          .filter((d: any) => d[lineXField!] !== null && d[lineYField!] !== null)
+          .map((d: any) => ({
+            ...d,
+            [lineYField!]: Number(d[lineYField!])
+          }))
+          .filter((d: any) => !isNaN(d[lineYField!]) && isFinite(d[lineYField!]));
 
-  if (isD3Chart) {
-    return (
-      <div ref={canvasRef} className="w-full h-80 flex items-center justify-center">
-        {renderChart()}
-      </div>
-    );
-  }
+        if (lineData.length === 0) {
+          return (
+            <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <p className="text-gray-500">No valid data for line chart</p>
+            </div>
+          );
+        }
 
-  return (
-    <div ref={canvasRef} className="w-full h-80">
-      <ResponsiveContainer width="100%" height="100%">
-        {renderChart()}
-      </ResponsiveContainer>
-    </div>
-  );
-}
+        return (
+          <LineChart data={lineData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey={lineXField || 'x'}
+              tick={{ fontSize: 12 }}
+              angle={-45}
+              textAnchor="end"
+              height={60}
+            />
+            <YAxis tick={{ fontSize: 12 }} />
+            <Tooltip
+              labelFormatter={(label) => `${lineXField}: ${label}`}
+              formatter={(value: any, name: string) => [Number(value).toFixed(2), lineYField]}
+            />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey={lineYField || 'y'}
+              stroke={COLORS[0]}
+              strokeWidth={2}
+              dot={{ fill: COLORS[0], strokeWidth: 2, r: 4 }}
+              activeDot={{ r: 6 }}
+            />
+          </LineChart>
+        );
 
-function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
-  try {
-    const validatedConfig = validateChartConfig(config, chartType);
-    if (!validatedConfig) {
-      return (
-        <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-          <p className="text-gray-500">Invalid chart configuration</p>
-        </div>
-      );
-    }
-
-  switch (chartType) {
-    case 'line':
-      // Process line chart data
-      const lineData = validatedConfig.data
-        .filter(d => d[validatedConfig.xAxis!] !== null && d[validatedConfig.yAxis!] !== null)
-        .map(d => ({
-          ...d,
-          [validatedConfig.yAxis!]: Number(d[validatedConfig.yAxis!])
-        }))
-        .filter(d => !isNaN(d[validatedConfig.yAxis!]) && isFinite(d[validatedConfig.yAxis!]));
-
-      if (lineData.length === 0) {
+    case 'bar':
+      // Auto-detect fields for bar chart
+      let barXField = processedConfig.xAxis || processedConfig.chartSpecificConfig?.xAxis;
+      let barYField = processedConfig.yAxis || processedConfig.chartSpecificConfig?.yAxis;
+      
+      if (!barXField || !barYField) {
+        const { numeric, categorical } = detectFieldTypes(processedConfig.data || []);
+        barXField = barXField || categorical[0] || Object.keys(processedConfig.data?.[0] || {})[0];
+        barYField = barYField || numeric[0];
+      }
+      
+      if (!barXField || !barYField) {
         return (
           <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-            <p className="text-gray-500">No valid data for line chart</p>
+            <div className="text-center">
+              <p className="text-gray-500 mb-2">Bar chart requires both X and Y axis fields</p>
+              <p className="text-xs text-gray-400">
+                Available fields: {Object.keys(processedConfig.data?.[0] || {}).join(', ')}
+              </p>
+            </div>
           </div>
         );
       }
-
-      return (
-        <LineChart data={lineData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis
-            dataKey={validatedConfig.xAxis || 'x'}
-            tick={{ fontSize: 12 }}
-            angle={-45}
-            textAnchor="end"
-            height={60}
-          />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip
-            labelFormatter={(label) => `${validatedConfig.xAxis}: ${label}`}
-            formatter={(value: any, name: string) => [Number(value).toFixed(2), validatedConfig.yAxis]}
-          />
-          <Legend />
-          <Line
-            type="monotone"
-            dataKey={validatedConfig.yAxis || 'y'}
-            stroke={COLORS[0]}
-            strokeWidth={2}
-            dot={{ fill: COLORS[0], strokeWidth: 2, r: 4 }}
-            activeDot={{ r: 6 }}
-          />
-        </LineChart>
-      );
-
-    case 'bar':
+      
       // Process bar chart data
-      const barData = validatedConfig.data
-        .filter(d => d[validatedConfig.xAxis!] !== null && d[validatedConfig.yAxis!] !== null)
-        .map(d => ({
+      const barData = processedConfig.data
+        .filter((d: any) => d[barXField!] !== null && d[barYField!] !== null)
+        .map((d: any) => ({
           ...d,
-          [validatedConfig.yAxis!]: Number(d[validatedConfig.yAxis!])
+          [barYField!]: Number(d[barYField!])
         }))
-        .filter(d => !isNaN(d[validatedConfig.yAxis!]) && isFinite(d[validatedConfig.yAxis!]));
+        .filter((d: any) => !isNaN(d[barYField!]) && isFinite(d[barYField!]));
 
       if (barData.length === 0) {
         return (
@@ -726,7 +738,7 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
         <BarChart data={barData}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
-            dataKey={validatedConfig.xAxis || 'x'}
+            dataKey={barXField || 'x'}
             tick={{ fontSize: 12 }}
             angle={-45}
             textAnchor="end"
@@ -734,12 +746,12 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
           />
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip
-            labelFormatter={(label) => `${validatedConfig.xAxis}: ${label}`}
-            formatter={(value: any, name: string) => [Number(value).toFixed(2), validatedConfig.yAxis]}
+            labelFormatter={(label) => `${barXField}: ${label}`}
+            formatter={(value: any, name: string) => [Number(value).toFixed(2), barYField]}
           />
           <Legend />
           <Bar
-            dataKey={validatedConfig.yAxis || 'y'}
+            dataKey={barYField || 'y'}
             fill={COLORS[1]}
             radius={[4, 4, 0, 0]}
           />
@@ -747,15 +759,38 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
       );
 
     case 'scatter':
+      // Auto-detect fields for scatter chart
+      let scatterXField = processedConfig.xAxis || processedConfig.chartSpecificConfig?.xAxis;
+      let scatterYField = processedConfig.yAxis || processedConfig.chartSpecificConfig?.yAxis;
+      
+      if (!scatterXField || !scatterYField) {
+        const { numeric } = detectFieldTypes(processedConfig.data || []);
+        scatterXField = scatterXField || numeric[0];
+        scatterYField = scatterYField || numeric[1];
+      }
+      
+      if (!scatterXField || !scatterYField) {
+        return (
+          <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+            <div className="text-center">
+              <p className="text-gray-500 mb-2">Scatter plot requires two numeric fields</p>
+              <p className="text-xs text-gray-400">
+                Available fields: {Object.keys(processedConfig.data?.[0] || {}).join(', ')}
+              </p>
+            </div>
+          </div>
+        );
+      }
+      
       // Ensure scatter plot has valid numeric data
-      const scatterData = validatedConfig.data
-        .filter(d => d[validatedConfig.xAxis!] !== null && d[validatedConfig.yAxis!] !== null)
-        .map(d => ({
+      const scatterData = processedConfig.data
+        .filter((d: any) => d[scatterXField!] !== null && d[scatterYField!] !== null)
+        .map((d: any) => ({
           ...d,
-          [validatedConfig.xAxis!]: Number(d[validatedConfig.xAxis!]),
-          [validatedConfig.yAxis!]: Number(d[validatedConfig.yAxis!])
+          [scatterXField!]: Number(d[scatterXField!]),
+          [scatterYField!]: Number(d[scatterYField!])
         }))
-        .filter(d => !isNaN(d[validatedConfig.xAxis!]) && !isNaN(d[validatedConfig.yAxis!]) && isFinite(d[validatedConfig.xAxis!]) && isFinite(d[validatedConfig.yAxis!]));
+        .filter((d: any) => !isNaN(d[scatterXField!]) && !isNaN(d[scatterYField!]) && isFinite(d[scatterXField!]) && isFinite(d[scatterYField!]));
 
       if (scatterData.length === 0) {
         return (
@@ -769,40 +804,63 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
         <ScatterChart data={scatterData}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
-            dataKey={validatedConfig.xAxis || 'x'}
+            dataKey={scatterXField || 'x'}
             type="number"
             tick={{ fontSize: 12 }}
-            name={validatedConfig.xAxis}
+            name={scatterXField}
           />
           <YAxis
-            dataKey={validatedConfig.yAxis || 'y'}
+            dataKey={scatterYField || 'y'}
             type="number"
             tick={{ fontSize: 12 }}
-            name={validatedConfig.yAxis}
+            name={scatterYField}
           />
           <Tooltip
             formatter={(value: any, name: string) => [Number(value).toFixed(2), name]}
-            labelFormatter={(label) => `${validatedConfig.xAxis}: ${Number(label).toFixed(2)}`}
+            labelFormatter={(label) => `${scatterXField}: ${Number(label).toFixed(2)}`}
           />
           <Legend />
           <Scatter
-            name={validatedConfig.yAxis}
-            dataKey={validatedConfig.yAxis || 'y'}
+            name={scatterYField}
+            dataKey={scatterYField || 'y'}
             fill={COLORS[2]}
           />
         </ScatterChart>
       );
 
     case 'pie':
+      // Auto-detect fields for pie chart
+      let pieCategoryField = processedConfig.category || processedConfig.chartSpecificConfig?.category || processedConfig.xAxis;
+      let pieValueField = processedConfig.value || processedConfig.chartSpecificConfig?.value || processedConfig.yAxis;
+      
+      if (!pieCategoryField || !pieValueField) {
+        const { numeric, categorical } = detectFieldTypes(processedConfig.data || []);
+        pieCategoryField = pieCategoryField || categorical[0];
+        pieValueField = pieValueField || numeric[0];
+      }
+      
+      if (!pieCategoryField || !pieValueField) {
+        return (
+          <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+            <div className="text-center">
+              <p className="text-gray-500 mb-2">Pie chart requires category and value fields</p>
+              <p className="text-xs text-gray-400">
+                Available fields: {Object.keys(processedConfig.data?.[0] || {}).join(', ')}
+              </p>
+            </div>
+          </div>
+        );
+      }
+      
       // Process pie data to ensure valid numeric values
-      const pieData = validatedConfig.data
+      const pieData = processedConfig.data
         .slice(0, 10)
-        .filter(d => d[validatedConfig.category!] !== null && d[validatedConfig.value!] !== null)
-        .map(d => ({
+        .filter((d: any) => d[pieCategoryField!] !== null && d[pieValueField!] !== null)
+        .map((d: any) => ({
           ...d,
-          [validatedConfig.value!]: Number(d[validatedConfig.value!])
+          [pieValueField!]: Number(d[pieValueField!])
         }))
-        .filter(d => !isNaN(d[validatedConfig.value!]) && isFinite(d[validatedConfig.value!]) && d[validatedConfig.value!] >= 0);
+        .filter((d: any) => !isNaN(d[pieValueField!]) && isFinite(d[pieValueField!]) && d[pieValueField!] >= 0);
 
       if (pieData.length === 0) {
         return (
@@ -816,8 +874,8 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
         <PieChart>
           <Pie
             data={pieData}
-            dataKey={validatedConfig.value}
-            nameKey={validatedConfig.category}
+            dataKey={pieValueField}
+            nameKey={pieCategoryField}
             cx="50%"
             cy="50%"
             outerRadius={80}
@@ -835,14 +893,38 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
       );
 
     case 'area':
+      // Auto-detect fields for area chart
+      let areaXField = processedConfig.xAxis || processedConfig.chartSpecificConfig?.xAxis;
+      let areaYField = processedConfig.yAxis || processedConfig.chartSpecificConfig?.yAxis;
+      
+      if (!areaXField || !areaYField) {
+        const { numeric } = detectFieldTypes(processedConfig.data || []);
+        const fields = Object.keys(processedConfig.data?.[0] || {});
+        areaXField = areaXField || fields[0];
+        areaYField = areaYField || numeric[0];
+      }
+      
+      if (!areaXField || !areaYField) {
+        return (
+          <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+            <div className="text-center">
+              <p className="text-gray-500 mb-2">Area chart requires both X and Y axis fields</p>
+              <p className="text-xs text-gray-400">
+                Available fields: {Object.keys(processedConfig.data?.[0] || {}).join(', ')}
+              </p>
+            </div>
+          </div>
+        );
+      }
+      
       // Process area chart data
-      const areaData = validatedConfig.data
-        .filter(d => d[validatedConfig.xAxis!] !== null && d[validatedConfig.yAxis!] !== null)
-        .map(d => ({
+      const areaData = processedConfig.data
+        .filter((d: any) => d[areaXField!] !== null && d[areaYField!] !== null)
+        .map((d: any) => ({
           ...d,
-          [validatedConfig.yAxis!]: Number(d[validatedConfig.yAxis!])
+          [areaYField!]: Number(d[areaYField!])
         }))
-        .filter(d => !isNaN(d[validatedConfig.yAxis!]) && isFinite(d[validatedConfig.yAxis!]));
+        .filter((d: any) => !isNaN(d[areaYField!]) && isFinite(d[areaYField!]));
 
       if (areaData.length === 0) {
         return (
@@ -856,7 +938,7 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
         <AreaChart data={areaData}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
-            dataKey={validatedConfig.xAxis || 'x'}
+            dataKey={areaXField || 'x'}
             tick={{ fontSize: 12 }}
             angle={-45}
             textAnchor="end"
@@ -864,13 +946,13 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
           />
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip
-            labelFormatter={(label) => `${validatedConfig.xAxis}: ${label}`}
-            formatter={(value: any, name: string) => [Number(value).toFixed(2), validatedConfig.yAxis]}
+            labelFormatter={(label) => `${areaXField}: ${label}`}
+            formatter={(value: any, name: string) => [Number(value).toFixed(2), areaYField]}
           />
           <Legend />
           <Area
             type="monotone"
-            dataKey={validatedConfig.yAxis || 'y'}
+            dataKey={areaYField || 'y'}
             stroke={COLORS[6]}
             fill={COLORS[6]}
             fillOpacity={0.6}
@@ -879,22 +961,34 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
       );
 
     case 'treemap':
-      const categoryField = validatedConfig.category || validatedConfig.hierarchyField || validatedConfig.xAxis;
-      const valueField = validatedConfig.value || validatedConfig.yAxis;
+      // Auto-detect fields for treemap
+      let treemapCategoryField = processedConfig.category || processedConfig.hierarchyField || processedConfig.xAxis;
+      let treemapValueField = processedConfig.value || processedConfig.yAxis;
+      
+      if (!treemapCategoryField || !treemapValueField) {
+        const { numeric, categorical } = detectFieldTypes(processedConfig.data || []);
+        treemapCategoryField = treemapCategoryField || categorical[0];
+        treemapValueField = treemapValueField || numeric[0];
+      }
 
-      if (!categoryField || !valueField) {
+      if (!treemapCategoryField || !treemapValueField) {
         return (
           <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-            <p className="text-gray-500">Treemap requires category and value fields</p>
+            <div className="text-center">
+              <p className="text-gray-500 mb-2">Treemap requires category and value fields</p>
+              <p className="text-xs text-gray-400">
+                Available fields: {Object.keys(processedConfig.data?.[0] || {}).join(', ')}
+              </p>
+            </div>
           </div>
         );
       }
 
-      const treemapData = validatedConfig.data
-        .filter(d => d[categoryField] !== null && d[valueField] !== null)
-        .map((item, index) => ({
-          name: String(item[categoryField]),
-          size: Math.max(0, Number(item[valueField]) || 0),
+      const treemapData = processedConfig.data
+        .filter((d: any) => d[treemapCategoryField!] !== null && d[treemapValueField!] !== null)
+        .map((item: any, index: number) => ({
+          name: String(item[treemapCategoryField!]),
+          size: Math.max(0, Number(item[treemapValueField!]) || 0),
           fill: COLORS[index % COLORS.length]
         }))
         .filter(d => d.size > 0 && isFinite(d.size));
@@ -918,30 +1012,74 @@ function renderChartForConfig(config: ChartConfig, chartType: ChartType) {
       );
 
     case 'histogram':
-      return <D3Histogram config={validatedConfig} />;
+      return <D3Histogram config={processedConfig} />;
 
     case 'box_plot':
-      return <D3BoxPlot config={validatedConfig} />;
+      return <D3BoxPlot config={processedConfig} />;
 
     case 'heatmap':
-      return <D3Heatmap config={validatedConfig} />;
+      return <D3Heatmap config={processedConfig} />;
 
     case 'sankey':
-      return <D3Sankey config={validatedConfig} />;
+      return <D3Sankey config={processedConfig} />;
 
-    default:
-      return (
-        <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-          <p className="text-gray-500">Chart type not yet supported</p>
-        </div>
-      );
-  }
-  } catch (error) {
-    console.error('Error in renderChartForConfig:', error);
+      default:
+        return (
+          <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+            <p className="text-gray-500">Chart type not yet supported</p>
+          </div>
+        );
+    }
+  }, [chartType, processedConfig]);
+
+  // D3 charts need to be rendered directly, not wrapped in ResponsiveContainer
+  const isD3Chart = ['histogram', 'box_plot', 'heatmap', 'sankey'].includes(chartType);
+  
+  if (isD3Chart) {
     return (
-      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-        <p className="text-gray-500">Error rendering chart</p>
+      <div className="w-full h-80 flex flex-col">
+        {/* Performance indicator for D3 charts */}
+        {metrics && performanceInfo && (
+          <div className="mb-2">
+            <PerformanceIndicator
+              metrics={metrics}
+              originalSize={performanceInfo.originalSize}
+              processedSize={performanceInfo.processedSize}
+              className="text-xs"
+              showDetails={false}
+            />
+          </div>
+        )}
+        
+        <div className="flex-1 flex items-center justify-center">
+          {renderChart()}
+        </div>
       </div>
     );
   }
-}
+
+  return (
+    <div className="w-full h-80 flex flex-col">
+      {/* Performance indicator */}
+      {metrics && performanceInfo && (
+        <div className="mb-2">
+          <PerformanceIndicator
+            metrics={metrics}
+            originalSize={performanceInfo.originalSize}
+            processedSize={performanceInfo.processedSize}
+            className="text-xs"
+            showDetails={false}
+          />
+        </div>
+      )}
+      
+      <div className="flex-1 relative">
+        <ResponsiveContainer width="100%" height="100%">
+          {renderChart()}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+});
+
+export default ChartRenderer;
