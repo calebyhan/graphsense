@@ -94,7 +94,7 @@ export function Team() {
             transition={{ duration: 0.4, delay: 0.7 }}
           >
             <p className="text-muted-foreground text-sm leading-relaxed">
-              GraphSense was built in 36ç hours by a team passionate about making data visualization 
+              GraphSense was built in 36 hours by a team passionate about making data visualization 
               accessible through AI. We focused on creating intelligent agents that understand both 
               data patterns and visualization best practices.
             </p>
