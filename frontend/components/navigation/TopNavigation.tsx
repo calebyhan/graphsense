@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Share, Download, History, Users, Settings, Edit3, Bell, ChevronDown, Sun, Moon, Brain } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
 
 interface TopNavigationProps {
   isDarkMode: boolean;
@@ -65,9 +66,12 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode }: TopNavigationPro
           </div>
         </div>
         
-        <Badge variant="secondary" className="text-xs">
-          Auto-saved
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            Auto-saved
+          </Badge>
+          <BackendStatusChecker />
+        </div>
       </div>
 
       {/* Right Section - Actions */}

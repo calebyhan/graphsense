@@ -2,7 +2,6 @@
 
 import React from 'react';
 import AutoVizAgent from '@/components/AutoVizAgent';
-import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
 import DataLoader from '@/components/canvas/DataLoader';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
@@ -12,9 +11,6 @@ export default function CanvasPage() {
 
   return (
     <>
-      {/* Backend Status Checker */}
-      <BackendStatusChecker />
-      
       {/* Main Auto Viz Agent Application */}
       <AutoVizAgent />
       

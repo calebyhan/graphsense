@@ -2,23 +2,21 @@
 
 import React, { useState, useRef } from 'react';
 import { 
-  Plus, 
   MousePointer, 
   Hand, 
-  Square, 
-  Circle, 
   Type, 
-  Image, 
   Trash2, 
   GripVertical,
   Database,
-  BarChart3
+  BarChart3,
+  ZoomIn,
+  ZoomOut,
+  Maximize
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useCanvasStore, ToolType } from '@/store/useCanvasStore';
-import { useAnalysisStore } from '@/store/useAnalysisStore';
 
 interface FloatingToolbarProps {
   onAddVisualization?: () => void;
@@ -39,8 +37,7 @@ export default function FloatingToolbar({
   onDeleteSelected,
   hasSelection = false
 }: FloatingToolbarProps) {
-  const { selectedTool, setSelectedTool, selectedElements, isDatasetPanelOpen, toggleDatasetPanel } = useCanvasStore();
-  const { recommendations } = useAnalysisStore();
+  const { selectedTool, setSelectedTool, selectedElements, isDatasetPanelOpen, toggleDatasetPanel, viewport, updateViewport, canvasElements } = useCanvasStore();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -98,21 +95,58 @@ export default function FloatingToolbar({
     setSelectedTool(tool);
   };
 
-  const handleAddVisualization = () => {
-    if (recommendations && recommendations.length > 0) {
-      onAddVisualization?.();
-    } else {
-      // Open dataset panel if no recommendations
-      if (!isDatasetPanelOpen) {
-        toggleDatasetPanel();
-      }
-    }
-  };
+
 
   const handleDeleteSelected = () => {
     if (selectedElements.length > 0) {
       onDeleteSelected?.();
     }
+  };
+
+  const handleZoomIn = () => {
+    const newZoom = Math.min(5, viewport.zoom + 0.1);
+    updateViewport({ ...viewport, zoom: newZoom });
+  };
+
+  const handleZoomOut = () => {
+    const newZoom = Math.max(0.1, viewport.zoom - 0.1);
+    updateViewport({ ...viewport, zoom: newZoom });
+  };
+
+  const handleFitToScreen = () => {
+    if (canvasElements.length === 0) {
+      updateViewport({ x: 0, y: 0, zoom: 1 });
+      return;
+    }
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    canvasElements.forEach(element => {
+      const left = element.position.x;
+      const top = element.position.y;
+      const right = element.position.x + element.size.width;
+      const bottom = element.position.y + element.size.height;
+      minX = Math.min(minX, left);
+      minY = Math.min(minY, top);
+      maxX = Math.max(maxX, right);
+      maxY = Math.max(maxY, bottom);
+    });
+
+    const padding = 50;
+    const boundingWidth = maxX - minX + padding * 2;
+    const boundingHeight = maxY - minY + padding * 2;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth - 400 : 1200;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight - 200 : 800;
+    const zoomX = viewportWidth / boundingWidth;
+    const zoomY = viewportHeight / boundingHeight;
+    const fitZoom = Math.min(Math.min(zoomX, zoomY), 3);
+    const targetZoom = Math.max(0.1, fitZoom);
+    const viewportCenterX = viewportWidth / 2;
+    const viewportCenterY = viewportHeight / 2;
+    const targetX = viewportCenterX - (centerX * targetZoom);
+    const targetY = viewportCenterY - (centerY * targetZoom);
+    updateViewport({ x: targetX, y: targetY, zoom: targetZoom });
   };
 
   return (
@@ -131,25 +165,6 @@ export default function FloatingToolbar({
           <div className="drag-handle cursor-grab active:cursor-grabbing flex items-center justify-center w-8 h-8 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
             <GripVertical className="w-4 h-4 text-gray-400" />
           </div>
-
-          {/* Quick Add Visualization */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleAddVisualization}
-            className={cn(
-              "h-10 w-10 p-0 rounded-lg transition-all duration-200",
-              recommendations && recommendations.length > 0
-                ? "text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900"
-                : "text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
-            )}
-            title="Add Visualization"
-          >
-            <Plus className="w-5 h-5" />
-          </Button>
-
-          {/* Separator */}
-          <div className="w-px h-8 bg-gray-300 dark:bg-gray-600" />
 
           {/* Tools */}
           <div className="flex items-center gap-1">
@@ -172,6 +187,46 @@ export default function FloatingToolbar({
             ))}
           </div>
 
+          {/* Separator */}
+          <div className="w-px h-8 bg-gray-300 dark:bg-gray-600" />
+
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleZoomOut}
+              className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+              title="Zoom Out (Ctrl+-)"
+            >
+              <ZoomOut className="w-5 h-5" />
+            </Button>
+            
+            <div className="px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded text-xs font-medium text-gray-600 dark:text-gray-400 min-w-[50px] text-center">
+              {Math.round(viewport.zoom * 100)}%
+            </div>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleZoomIn}
+              className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+              title="Zoom In (Ctrl++)"
+            >
+              <ZoomIn className="w-5 h-5" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleFitToScreen}
+              className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+              title="Fit to Screen (Ctrl+0)"
+            >
+              <Maximize className="w-5 h-5" />
+            </Button>
+          </div>
+
           {/* Delete Selected */}
           {(hasSelection || selectedElements.length > 0) && (
             <>
@@ -187,13 +242,6 @@ export default function FloatingToolbar({
               </Button>
             </>
           )}
-
-          {/* Keyboard Shortcuts Indicator */}
-          <div className="ml-auto px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Use keyboard shortcuts
-            </span>
-          </div>
         </div>
       </Card>
     </div>

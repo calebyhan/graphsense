@@ -165,43 +165,43 @@ export default function BackendStatusChecker() {
     return `${Math.floor(diff / 3600000)}h ago`;
   };
 
+  const getCircleColor = () => {
+    if (!isOnline) return 'bg-gray-400';
+
+    switch (status.status) {
+      case 'healthy':
+        return 'bg-green-500';
+      case 'degraded':
+        return 'bg-yellow-500';
+      case 'unhealthy':
+        return 'bg-red-500';
+      default:
+        return 'bg-gray-400';
+    }
+  };
+
   return (
-    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
-      <div 
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg border shadow-sm cursor-pointer transition-all duration-200 backdrop-blur-sm ${
-          getStatusColor(status.status)
-        } ${isExpanded ? 'shadow-lg' : 'shadow-sm'} hover:shadow-md`}
+    <div className="relative">
+      {/* Circular Status Indicator with Pulsating Ring */}
+      <button
         onClick={() => setIsExpanded(!isExpanded)}
+        className={`relative w-4 h-4 rounded-full transition-all duration-200 hover:scale-110 shadow-sm ${getCircleColor()} ${
+          status.status === 'unknown' ? 'animate-pulse' : ''
+        }`}
+        title={`Backend: ${getStatusText()}${status.response_time ? ` (${status.response_time}ms)` : ''}`}
       >
-        {getStatusIcon()}
-        
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{getStatusText()}</span>
-          
-          {status.response_time && (
-            <span className="text-xs opacity-75">
-              {status.response_time}ms
-            </span>
-          )}
-        </div>
+        {/* Pulsating Ring Effect */}
+        <span className={`absolute inset-0 rounded-full animate-ping ${getCircleColor()} opacity-75`} />
+        <span className={`absolute inset-0 rounded-full ${getCircleColor()}`} />
+      </button>
 
-        {!isOnline && <Wifi className="h-3 w-3 opacity-50" />}
-        
-        {/* Expand/Collapse indicator */}
-        <div className={`w-2 h-2 border-r border-b transform transition-transform ${
-          isExpanded ? 'rotate-45' : 'rotate-[225deg]'
-        }`} style={{ borderColor: 'currentColor', opacity: 0.5 }} />
-      </div>
-
-      {/* Expanded Details */}
+      {/* Expanded Details Tooltip */}
       {isExpanded && (
-        <div className={`mt-2 p-4 rounded-lg border shadow-lg bg-white/95 backdrop-blur-sm min-w-80 ${
-          getStatusColor(status.status).includes('border-') ? getStatusColor(status.status) : 'border-gray-200'
-        }`}>
+        <div className="absolute top-6 right-0 z-[60] min-w-80 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg">
           <div className="space-y-3">
             {/* Basic Status Info */}
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Backend Status</span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Backend Status</span>
               <div className="flex items-center gap-1">
                 {getStatusIcon()}
                 <span className="text-sm font-medium">{status.status?.toUpperCase()}</span>
@@ -211,7 +211,7 @@ export default function BackendStatusChecker() {
             {/* Service Info */}
             {status.service && (
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Service:</span>
+                <span className="text-gray-600 dark:text-gray-400">Service:</span>
                 <span className="font-mono">{status.service}</span>
               </div>
             )}
@@ -219,7 +219,7 @@ export default function BackendStatusChecker() {
             {/* Response Time */}
             {status.response_time && (
               <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Response Time:</span>
+                <span className="text-gray-600 dark:text-gray-400">Response Time:</span>
                 <span className={`font-mono ${
                   status.response_time > 1000 ? 'text-red-600' :
                   status.response_time > 500 ? 'text-yellow-600' : 'text-green-600'
@@ -231,17 +231,17 @@ export default function BackendStatusChecker() {
 
             {/* Last Checked */}
             <div className="flex justify-between text-sm">
-              <span className="text-gray-600">Last Checked:</span>
-              <span className="text-gray-800">{formatTimestamp(status.last_checked)}</span>
+              <span className="text-gray-600 dark:text-gray-400">Last Checked:</span>
+              <span className="text-gray-800 dark:text-gray-200">{formatTimestamp(status.last_checked)}</span>
             </div>
 
             {/* Dependencies */}
             {status.dependencies && (
               <div className="space-y-1">
-                <span className="text-sm font-medium text-gray-700">Dependencies:</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Dependencies:</span>
                 {Object.entries(status.dependencies).map(([key, value]) => (
                   <div key={key} className="flex justify-between text-sm ml-2">
-                    <span className="text-gray-600 capitalize">{key}:</span>
+                    <span className="text-gray-600 dark:text-gray-400 capitalize">{key}:</span>
                     <span className={`font-medium ${
                       value === 'healthy' ? 'text-green-600' : 'text-red-600'
                     }`}>
@@ -255,10 +255,10 @@ export default function BackendStatusChecker() {
             {/* System Metrics */}
             {status.system && (
               <div className="space-y-1">
-                <span className="text-sm font-medium text-gray-700">System:</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">System:</span>
                 {status.system.cpu_percent !== undefined && (
                   <div className="flex justify-between text-sm ml-2">
-                    <span className="text-gray-600">CPU:</span>
+                    <span className="text-gray-600 dark:text-gray-400">CPU:</span>
                     <span className={`font-mono ${
                       status.system.cpu_percent > 80 ? 'text-red-600' :
                       status.system.cpu_percent > 60 ? 'text-yellow-600' : 'text-green-600'
@@ -269,7 +269,7 @@ export default function BackendStatusChecker() {
                 )}
                 {status.system.memory_percent !== undefined && (
                   <div className="flex justify-between text-sm ml-2">
-                    <span className="text-gray-600">Memory:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Memory:</span>
                     <span className={`font-mono ${
                       status.system.memory_percent > 85 ? 'text-red-600' :
                       status.system.memory_percent > 70 ? 'text-yellow-600' : 'text-green-600'
@@ -283,9 +283,9 @@ export default function BackendStatusChecker() {
 
             {/* Error Message */}
             {status.error && (
-              <div className="p-2 bg-red-50 border border-red-200 rounded text-sm">
-                <span className="text-red-800 font-medium">Error: </span>
-                <span className="text-red-700">{status.error}</span>
+              <div className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm">
+                <span className="text-red-800 dark:text-red-200 font-medium">Error: </span>
+                <span className="text-red-700 dark:text-red-300">{status.error}</span>
               </div>
             )}
 
@@ -295,13 +295,13 @@ export default function BackendStatusChecker() {
                 e.stopPropagation();
                 performHealthCheck();
               }}
-              className="w-full mt-3 px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              className="w-full mt-3 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
             >
               Refresh Status
             </button>
             
             {/* Keyboard Shortcut Hint */}
-            <div className="mt-2 text-xs text-gray-500 text-center">
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
               Press Ctrl+Shift+H to toggle
             </div>
           </div>

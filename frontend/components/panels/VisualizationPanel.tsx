@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dataset, ChartRecommendation } from '@/components/AutoVizAgent';
 import AgentProgress from '@/components/analysis/AgentProgress';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { MiniMap } from '@/components/canvas/MiniMap';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 interface VisualizationPanelProps {
   selectedDataset: Dataset | null;
@@ -15,6 +17,13 @@ interface VisualizationPanelProps {
   isAnalyzing: boolean;
   onCreateVisualization: (recommendation: ChartRecommendation) => void;
   onAutoViz: () => void;
+  visualizationPositions?: Array<{
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }>;
 }
 
 const allChartTypes = [
@@ -31,7 +40,8 @@ export function VisualizationPanel({
   recommendations,
   isAnalyzing,
   onCreateVisualization,
-  onAutoViz
+  onAutoViz,
+  visualizationPositions = []
 }: VisualizationPanelProps) {
   const [activeTab, setActiveTab] = useState<'analysis' | 'recommendations' | 'manual'>('analysis');
   const {
@@ -42,6 +52,8 @@ export function VisualizationPanel({
     setShowErrorNotification,
     retryAnalysis
   } = useAnalysisStore();
+  
+  const { viewport, updateViewport } = useCanvasStore();
 
   // Auto-switch between tabs based on analysis state
   useEffect(() => {
@@ -334,12 +346,21 @@ export function VisualizationPanel({
         )}
       </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/30 dark:bg-gray-800/30">
-        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-          <p><strong>Smart:</strong> AI-powered recommendations</p>
-          <p><strong>Manual:</strong> Choose your own chart type</p>
-        </div>
+      {/* Mini Map */}
+      <div className="border-t border-gray-200 dark:border-gray-700">
+        <MiniMap
+          visualizations={visualizationPositions}
+          canvasSize={{ width: 10000, height: 10000 }}
+          viewportSize={{ width: typeof window !== 'undefined' ? window.innerWidth : 1200, height: typeof window !== 'undefined' ? window.innerHeight : 800 }}
+          viewportPosition={{ x: -viewport.x / viewport.zoom, y: -viewport.y / viewport.zoom, zoom: viewport.zoom }}
+          onViewportChange={(position) => {
+            updateViewport({
+              x: -position.x * viewport.zoom,
+              y: -position.y * viewport.zoom,
+              zoom: viewport.zoom
+            });
+          }}
+        />
       </div>
     </div>
   );
