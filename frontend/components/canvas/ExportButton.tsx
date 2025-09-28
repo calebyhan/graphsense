@@ -101,12 +101,12 @@ export default function ExportButton({
         <>
           {/* Backdrop */}
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-[9999]"
             onClick={() => setShowOptions(false)}
           />
 
           {/* Export options dropdown */}
-          <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+          <div className="absolute top-full right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-[10000]">
             <div className="p-2">
               <div className="text-xs font-medium text-gray-500 mb-2 px-2">
                 Export Options
