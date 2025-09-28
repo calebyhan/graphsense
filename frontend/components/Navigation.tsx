@@ -5,7 +5,7 @@ import { Github } from "lucide-react";
 
 export function Navigation() {
   const handleGitHub = () => {
-    window.open('https://github.com/YOUR_REPO', '_blank');
+    window.open('https://github.com/calebyhan/vthacks25', '_blank');
   };
 
   return (

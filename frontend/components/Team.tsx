@@ -10,13 +10,13 @@ export function Team() {
       icon: Github,
       title: "GitHub Repository",
       description: "View the complete source code",
-      href: "#"
+      href: "https://github.com/calebyhan/vthacks25"
     },
     {
       icon: ExternalLink,
       title: "Live Demo",
       description: "Try GraphSense in action",
-      href: "#"
+      href: "htts://localhost:3000"
     },
     {
       icon: FileText,
@@ -28,7 +28,7 @@ export function Team() {
       icon: Award,
       title: "DevPost Submission",
       description: "Official hackathon entry",
-      href: "#"
+      href: "https://devpost.com/software/graphsense?ref_content=user-portfolio&ref_feature=in_progress"
     }
   ];
 
@@ -94,7 +94,7 @@ export function Team() {
             transition={{ duration: 0.4, delay: 0.7 }}
           >
             <p className="text-muted-foreground text-sm leading-relaxed">
-              GraphSense was built in 48 hours by a team passionate about making data visualization 
+              GraphSense was built in 36 hours by a team passionate about making data visualization 
               accessible through AI. We focused on creating intelligent agents that understand both 
               data patterns and visualization best practices.
             </p>
@@ -132,7 +132,13 @@ export function Team() {
                           </div>
                         </div>
                         <button 
-                          onClick={() => handleComingSoon(link.title)}
+                          onClick={() => {
+                            if (link.href !== "#") {
+                              window.open(link.href, '_blank');
+                            } else {
+                              handleComingSoon(link.title);
+                            }
+                          }}
                           className="inline-flex items-center justify-center size-9 rounded-md hover:bg-accent hover:text-accent-foreground transition-all cursor-pointer"
                         >
                           <ExternalLink className="h-4 w-4" />
