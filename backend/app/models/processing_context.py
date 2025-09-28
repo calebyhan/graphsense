@@ -1,155 +1,251 @@
 """
-Processing Context - Shared data context between agents to avoid redundant calculations
+Processing Context - Efficient data sharing between agents
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional
+import logging
 import pandas as pd
+import numpy as np
+from typing import Dict, Any, List, Optional
+from dataclasses import dataclass, field
 from datetime import datetime
+import psutil
+import os
 
-from app.models.analysis import ComprehensiveDataAnalysis
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ProcessingContext:
     """
-    Shared context between agents to pass data references and avoid copying.
-    This class maintains statistical summaries and intermediate results that can be
-    reused across the agent pipeline.
+    Shared processing context for efficient data sharing between agents.
+    Focuses on single responsibility: data sharing and basic caching.
     """
     
-    # Core dataset information
+    # Core data
     dataset_id: str
-    original_data_size: int
     sample_data: pd.DataFrame
+    original_size: int
     
-    # Cached statistical computations
-    statistical_cache: Dict[str, Any] = field(default_factory=dict)
-    correlation_cache: Optional[pd.DataFrame] = None
-    pattern_cache: Dict[str, Any] = field(default_factory=dict)
+    # Cached computations
+    _computation_cache: Dict[str, Any] = field(default_factory=dict)
     
-    # Data quality metrics (computed once, reused)
-    data_quality_cache: Dict[str, Any] = field(default_factory=dict)
+    # Column metadata cache
+    _column_metadata: Optional[Dict[str, Any]] = field(default=None)
     
-    # Column metadata (computed once, reused)
-    column_metadata: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # Memory tracking
+    _creation_time: datetime = field(default_factory=datetime.now)
+    _memory_usage_mb: float = field(default=0.0)
     
-    # Memory usage tracking
-    memory_usage_bytes: int = 0
+    def __post_init__(self):
+        """Initialize context after creation"""
+        self._update_memory_usage()
+        logger.info(f"Created ProcessingContext for dataset {self.dataset_id} with {len(self.sample_data)} rows")
     
-    # Processing metadata
-    created_at: datetime = field(default_factory=datetime.now)
-    last_updated: datetime = field(default_factory=datetime.now)
+    def cache_computation(self, key: str, value: Any) -> None:
+        """Cache a computation result for reuse between agents"""
+        try:
+            self._computation_cache[key] = value
+            self._update_memory_usage()
+            logger.debug(f"Cached computation '{key}' for dataset {self.dataset_id}")
+        except Exception as e:
+            logger.warning(f"Failed to cache computation '{key}': {e}")
     
-    # Agent results cache to avoid recomputation
-    profiler_results: Optional[ComprehensiveDataAnalysis] = None
+    def get_cached_computation(self, key: str) -> Optional[Any]:
+        """Retrieve a cached computation result"""
+        return self._computation_cache.get(key)
     
-    def update_memory_usage(self, additional_bytes: int = 0) -> None:
-        """Update memory usage tracking"""
-        if additional_bytes > 0:
-            self.memory_usage_bytes += additional_bytes
-        else:
-            # Estimate current memory usage
-            self.memory_usage_bytes = (
-                self.sample_data.memory_usage(deep=True).sum() +
-                len(str(self.statistical_cache)) +
-                len(str(self.pattern_cache)) +
-                len(str(self.data_quality_cache)) +
-                len(str(self.column_metadata))
-            )
-        
-        self.last_updated = datetime.now()
+    def has_cached_computation(self, key: str) -> bool:
+        """Check if a computation is cached"""
+        return key in self._computation_cache
     
-    def get_cached_statistic(self, key: str) -> Optional[Any]:
-        """Get a cached statistical computation"""
-        return self.statistical_cache.get(key)
-    
-    def cache_statistic(self, key: str, value: Any) -> None:
-        """Cache a statistical computation for reuse"""
-        self.statistical_cache[key] = value
-        self.last_updated = datetime.now()
-    
-    def get_cached_correlation(self) -> Optional[pd.DataFrame]:
-        """Get cached correlation matrix"""
-        return self.correlation_cache
-    
-    def cache_correlation(self, correlation_matrix: pd.DataFrame) -> None:
-        """Cache correlation matrix for reuse"""
-        self.correlation_cache = correlation_matrix
-        self.last_updated = datetime.now()
-    
-    def get_cached_pattern(self, pattern_type: str) -> Optional[Any]:
-        """Get a cached pattern analysis result"""
-        return self.pattern_cache.get(pattern_type)
-    
-    def cache_pattern(self, pattern_type: str, pattern_data: Any) -> None:
-        """Cache pattern analysis result"""
-        self.pattern_cache[pattern_type] = pattern_data
-        self.last_updated = datetime.now()
-    
-    def get_cached_data_quality(self, metric: str) -> Optional[Any]:
-        """Get a cached data quality metric"""
-        return self.data_quality_cache.get(metric)
-    
-    def cache_data_quality(self, metric: str, value: Any) -> None:
-        """Cache data quality metric"""
-        self.data_quality_cache[metric] = value
-        self.last_updated = datetime.now()
-    
-    def get_column_metadata(self, column: str) -> Optional[Dict[str, Any]]:
-        """Get cached column metadata"""
-        return self.column_metadata.get(column)
-    
-    def cache_column_metadata(self, column: str, metadata: Dict[str, Any]) -> None:
-        """Cache column metadata"""
-        self.column_metadata[column] = metadata
-        self.last_updated = datetime.now()
+    def get_column_types(self) -> Dict[str, str]:
+        """Get column data types with caching"""
+        if self._column_metadata is None:
+            self._build_column_metadata()
+        return self._column_metadata.get("types", {})
     
     def get_numeric_columns(self) -> List[str]:
-        """Get list of numeric columns from cached metadata"""
-        return [
-            col for col, meta in self.column_metadata.items()
-            if meta.get("data_type") == "numeric"
-        ]
+        """Get list of numeric columns with caching"""
+        if self._column_metadata is None:
+            self._build_column_metadata()
+        return self._column_metadata.get("numeric", [])
     
     def get_categorical_columns(self) -> List[str]:
-        """Get list of categorical columns from cached metadata"""
-        return [
-            col for col, meta in self.column_metadata.items()
-            if meta.get("data_type") == "categorical"
-        ]
+        """Get list of categorical columns with caching"""
+        if self._column_metadata is None:
+            self._build_column_metadata()
+        return self._column_metadata.get("categorical", [])
     
     def get_temporal_columns(self) -> List[str]:
-        """Get list of temporal columns from cached metadata"""
-        return [
-            col for col, meta in self.column_metadata.items()
-            if meta.get("data_type") == "temporal"
-        ]
+        """Get list of temporal columns with caching"""
+        if self._column_metadata is None:
+            self._build_column_metadata()
+        return self._column_metadata.get("temporal", [])
     
-    def clear_cache(self) -> None:
-        """Clear all cached data to free memory"""
-        self.statistical_cache.clear()
-        self.correlation_cache = None
-        self.pattern_cache.clear()
-        self.data_quality_cache.clear()
-        self.column_metadata.clear()
-        self.profiler_results = None
-        self.memory_usage_bytes = 0
-        self.last_updated = datetime.now()
+    def get_text_columns(self) -> List[str]:
+        """Get list of text columns with caching"""
+        if self._column_metadata is None:
+            self._build_column_metadata()
+        return self._column_metadata.get("text", [])
     
-    def get_cache_summary(self) -> Dict[str, Any]:
-        """Get summary of cached data for debugging/monitoring"""
+    def _build_column_metadata(self) -> None:
+        """Build and cache column metadata"""
+        try:
+            metadata = {
+                "types": {},
+                "numeric": [],
+                "categorical": [],
+                "temporal": [],
+                "text": []
+            }
+            
+            logger.info(f"Building column metadata for {len(self.sample_data.columns)} columns: {list(self.sample_data.columns)}")
+            
+            for column in self.sample_data.columns:
+                series = self.sample_data[column]
+                data_type = self._infer_data_type(series)
+                
+                metadata["types"][column] = data_type
+                
+                if data_type == "numeric":
+                    metadata["numeric"].append(column)
+                elif data_type == "categorical":
+                    metadata["categorical"].append(column)
+                elif data_type == "temporal":
+                    metadata["temporal"].append(column)
+                else:
+                    metadata["text"].append(column)
+                
+                logger.debug(f"Column '{column}': {data_type} (nunique={series.nunique()}, dtype={series.dtype})")
+            
+            self._column_metadata = metadata
+            logger.info(f"Column metadata built - numeric: {len(metadata['numeric'])}, categorical: {len(metadata['categorical'])}, temporal: {len(metadata['temporal'])}, text: {len(metadata['text'])}")
+            
+        except Exception as e:
+            logger.error(f"Failed to build column metadata: {e}")
+            self._column_metadata = {
+                "types": {},
+                "numeric": [],
+                "categorical": [],
+                "temporal": [],
+                "text": []
+            }
+    
+    def _infer_data_type(self, series: pd.Series) -> str:
+        """Infer data type for a pandas Series"""
+        try:
+            if pd.api.types.is_numeric_dtype(series):
+                return "numeric"
+            elif pd.api.types.is_datetime64_any_dtype(series):
+                return "temporal"
+            elif pd.api.types.is_bool_dtype(series):
+                return "categorical"  # Treat boolean as categorical
+            elif series.nunique() < 50 and series.nunique() / len(series) < 0.5:
+                return "categorical"
+            else:
+                return "text"
+        except Exception:
+            return "text"  # Default fallback
+    
+    def estimate_memory_usage(self) -> float:
+        """Estimate current memory usage in MB"""
+        try:
+            # DataFrame memory usage
+            df_memory = self.sample_data.memory_usage(deep=True).sum() / (1024 * 1024)
+            
+            # Cache memory usage (rough estimate)
+            cache_memory = 0.0
+            for value in self._computation_cache.values():
+                if isinstance(value, pd.DataFrame):
+                    cache_memory += value.memory_usage(deep=True).sum() / (1024 * 1024)
+                elif isinstance(value, (list, dict)):
+                    cache_memory += 0.001  # Small estimate for basic structures
+            
+            total_memory = df_memory + cache_memory
+            return round(total_memory, 2)
+            
+        except Exception as e:
+            logger.warning(f"Failed to estimate memory usage: {e}")
+            return 0.0
+    
+    def _update_memory_usage(self) -> None:
+        """Update internal memory usage tracking"""
+        self._memory_usage_mb = self.estimate_memory_usage()
+    
+    def get_processing_stats(self) -> Dict[str, Any]:
+        """Get processing statistics for monitoring"""
         return {
             "dataset_id": self.dataset_id,
-            "sample_size": len(self.sample_data),
-            "original_size": self.original_data_size,
-            "cached_statistics": len(self.statistical_cache),
-            "has_correlation_cache": self.correlation_cache is not None,
-            "cached_patterns": len(self.pattern_cache),
-            "cached_quality_metrics": len(self.data_quality_cache),
-            "cached_columns": len(self.column_metadata),
-            "memory_usage_bytes": self.memory_usage_bytes,
-            "has_profiler_results": self.profiler_results is not None,
-            "created_at": self.created_at.isoformat(),
-            "last_updated": self.last_updated.isoformat()
+            "sample_rows": len(self.sample_data),
+            "sample_columns": len(self.sample_data.columns),
+            "original_size": self.original_size,
+            "cached_computations": len(self._computation_cache),
+            "memory_usage_mb": self._memory_usage_mb,
+            "processing_time_seconds": (datetime.now() - self._creation_time).total_seconds()
         }
+    
+    def cleanup(self) -> None:
+        """Clean up resources and free memory"""
+        try:
+            # Clear computation cache
+            self._computation_cache.clear()
+            
+            # Clear column metadata
+            self._column_metadata = None
+            
+            # Clear DataFrame if it's large
+            if len(self.sample_data) > 1000:
+                self.sample_data = self.sample_data.iloc[:100].copy()  # Keep small sample
+            
+            self._update_memory_usage()
+            logger.info(f"Cleaned up ProcessingContext for dataset {self.dataset_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to cleanup ProcessingContext: {e}")
+    
+    @classmethod
+    def create_from_data(
+        cls, 
+        dataset_id: str, 
+        data: List[Dict[str, Any]], 
+        max_sample_size: int = 5000
+    ) -> 'ProcessingContext':
+        """
+        Create ProcessingContext from raw data with intelligent sampling
+        """
+        try:
+            # Convert to DataFrame
+            df = pd.DataFrame(data)
+            original_size = len(df)
+            
+            # Apply intelligent sampling for large datasets
+            if len(df) > max_sample_size:
+                # Use stratified sampling if possible, otherwise random
+                sample_df = df.sample(n=max_sample_size, random_state=42)
+                logger.info(f"Sampled {max_sample_size} rows from {original_size} for processing")
+            else:
+                sample_df = df.copy()
+            
+            return cls(
+                dataset_id=dataset_id,
+                sample_data=sample_df,
+                original_size=original_size
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to create ProcessingContext: {e}")
+            raise ValueError(f"Failed to create processing context: {e}")
+    
+    def get_system_memory_info(self) -> Dict[str, float]:
+        """Get system memory information for monitoring"""
+        try:
+            memory = psutil.virtual_memory()
+            return {
+                "total_gb": round(memory.total / (1024**3), 2),
+                "available_gb": round(memory.available / (1024**3), 2),
+                "used_percent": memory.percent,
+                "process_memory_mb": round(psutil.Process(os.getpid()).memory_info().rss / (1024**2), 2)
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get system memory info: {e}")
+            return {}

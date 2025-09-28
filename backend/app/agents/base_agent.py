@@ -1,152 +1,161 @@
 """
-Base agent class with Gemini integration
+Clean base agent architecture with single process() method and fallback mechanisms
 """
 
-import json
 import logging
-import re
 import time
-import asyncio
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List
-import google.generativeai as genai
-from google.generativeai.types import GenerationConfig
+from typing import Dict, Any, Optional
+from datetime import datetime
+from dataclasses import dataclass
 
-from app.core.config import get_settings
 from app.models.base import AgentType
+from app.models.processing_context import ProcessingContext
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
-class GeminiAgentConfig:
-    """Configuration for Gemini API integration"""
-
-    def __init__(self):
-        self.api_key = settings.gemini_api_key
-        self.model = settings.gemini_model
-        self.temperature = settings.gemini_temperature
-        self.max_tokens = settings.gemini_max_tokens
-
-        # Configure Gemini API
-        genai.configure(api_key=self.api_key)
+@dataclass
+class AgentResult:
+    """Standardized result from agent processing"""
+    agent_type: AgentType
+    success: bool
+    data: Dict[str, Any]
+    processing_time_ms: int
+    confidence: float
+    error_message: Optional[str] = None
 
 
 class BaseAgent(ABC):
-    """Base class for all AI agents"""
+    """
+    Clean base agent interface with single responsibility.
+    All agents follow the same pattern: process(context) -> AgentResult
+    """
 
-    def __init__(self, agent_type: AgentType, config: Optional[GeminiAgentConfig] = None):
+    def __init__(self, agent_type: AgentType):
         self.agent_type = agent_type
-        self.config = config or GeminiAgentConfig()
-        self.model = genai.GenerativeModel(self.config.model)
         self.logger = logging.getLogger(f"{__name__}.{agent_type.value}")
 
-    async def generate_response(
-        self,
-        prompt: str,
-        context: Optional[Dict[str, Any]] = None,
-        system_instruction: Optional[str] = None,
-        timeout: int = 60
-    ) -> str:
-        """Generate response using Gemini API with timeout"""
-        try:
-            start_time = time.time()
-
-            # Prepare the full prompt
-            full_prompt = self._prepare_prompt(prompt, context, system_instruction)
-            self.logger.info(f"Sending request to Gemini model: {self.config.model}")
-
-            # Generate response with timeout
-            try:
-                response = await asyncio.wait_for(
-                    self.model.generate_content_async(
-                        full_prompt,
-                        generation_config=GenerationConfig(
-                            temperature=self.config.temperature,
-                            max_output_tokens=self.config.max_tokens
-                        )
-                    ),
-                    timeout=timeout
-                )
-            except asyncio.TimeoutError:
-                self.logger.error(f"Gemini API request timed out after {timeout} seconds")
-                raise Exception(f"API request timed out after {timeout} seconds")
-
-            processing_time = int((time.time() - start_time) * 1000)
-            self.logger.info(f"Generated response in {processing_time}ms")
-
-            if not response.text:
-                self.logger.error("Gemini API returned empty response")
-                raise Exception("Empty response from Gemini API")
-
-            return response.text
-
-        except Exception as e:
-            self.logger.error(f"Failed to generate response: {e}")
-            raise
-
-    def _prepare_prompt(
-        self,
-        prompt: str,
-        context: Optional[Dict[str, Any]] = None,
-        system_instruction: Optional[str] = None
-    ) -> str:
-        """Prepare the complete prompt with context and instructions"""
-        full_prompt = []
-
-        if system_instruction:
-            full_prompt.append(f"SYSTEM: {system_instruction}")
-
-        if context:
-            full_prompt.append("CONTEXT:")
-            for key, value in context.items():
-                full_prompt.append(f"{key}: {value}")
-
-        full_prompt.append(f"TASK: {prompt}")
-
-        return "\n\n".join(full_prompt)
-
-    def extract_json_from_response(self, response: str) -> Dict[str, Any]:
-        """Extract JSON from AI response that might contain extra text"""
-        try:
-            # First try to parse the entire response as JSON
-            return json.loads(response)
-        except json.JSONDecodeError:
-            pass
-        
-        # Try to find JSON in the response using regex
-        json_patterns = [
-            r'```json\s*(\{.*?\})\s*```',  # JSON code blocks
-            r'```\s*(\{.*?\})\s*```',      # Code blocks without json tag
-            r'(\{.*\})',                    # Any text that looks like JSON
-        ]
-        
-        for pattern in json_patterns:
-            matches = re.findall(pattern, response, re.DOTALL)
-            for match in matches:
-                try:
-                    return json.loads(match.strip())
-                except json.JSONDecodeError:
-                    continue
-        
-        # If no JSON found, return empty dict
-        self.logger.warning(f"Could not extract valid JSON from response: {response[:200]}...")
-        return {}
-
     @abstractmethod
-    async def analyze(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Abstract method for agent analysis"""
+    async def process(self, context: ProcessingContext) -> AgentResult:
+        """
+        Single processing method for agent - to be implemented by subclasses.
+        
+        Args:
+            context: ProcessingContext with shared data and caching
+            
+        Returns:
+            AgentResult with processing outcome
+        """
         pass
 
-    def _validate_input(self, data: Dict[str, Any]) -> bool:
-        """Validate input data"""
-        return data is not None and len(data) > 0
+    def get_fallback_result(self, context: ProcessingContext, error: str = None) -> AgentResult:
+        """
+        Fallback mechanism when processing fails - to be overridden by subclasses.
+        Provides rule-based alternatives when AI processing fails.
+        """
+        return AgentResult(
+            agent_type=self.agent_type,
+            success=False,
+            data={},
+            processing_time_ms=0,
+            confidence=0.0,
+            error_message=error or "Processing failed, no fallback implemented"
+        )
 
-    def _format_output(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Format agent output with metadata"""
-        return {
-            "agent_type": self.agent_type.value,
-            "result": result,
-            "timestamp": time.time(),
-            "model": self.config.model
-        }
+    def validate_input(self, context: ProcessingContext) -> bool:
+        """
+        Input validation - can be overridden by subclasses.
+        
+        Args:
+            context: ProcessingContext to validate
+            
+        Returns:
+            True if input is valid, False otherwise
+        """
+        try:
+            return (
+                context is not None and 
+                context.sample_data is not None and 
+                not context.sample_data.empty
+            )
+        except Exception as e:
+            self.logger.warning(f"Input validation failed: {e}")
+            return False
+
+    async def _safe_process(self, context: ProcessingContext) -> AgentResult:
+        """
+        Safe processing wrapper with error handling and fallbacks.
+        This method handles the common error patterns and fallback logic.
+        """
+        start_time = datetime.now()
+        
+        try:
+            # Validate input
+            if not self.validate_input(context):
+                self.logger.warning(f"{self.agent_type.value} agent received invalid input")
+                return self.get_fallback_result(context, "Invalid input data")
+            
+            # Process with timeout and error handling
+            result = await self.process(context)
+            
+            # Ensure result is properly formatted
+            if not isinstance(result, AgentResult):
+                self.logger.error(f"{self.agent_type.value} agent returned invalid result type")
+                return self.get_fallback_result(context, "Invalid result format")
+            
+            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+            result.processing_time_ms = processing_time
+            
+            self.logger.info(f"{self.agent_type.value} agent completed successfully in {processing_time}ms")
+            return result
+            
+        except Exception as e:
+            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+            self.logger.error(f"{self.agent_type.value} agent failed: {e}")
+            
+            # Try fallback
+            try:
+                fallback_result = self.get_fallback_result(context, str(e))
+                fallback_result.processing_time_ms = processing_time
+                return fallback_result
+            except Exception as fallback_error:
+                self.logger.error(f"{self.agent_type.value} agent fallback also failed: {fallback_error}")
+                return AgentResult(
+                    agent_type=self.agent_type,
+                    success=False,
+                    data={},
+                    processing_time_ms=processing_time,
+                    confidence=0.0,
+                    error_message=f"Both processing and fallback failed: {e}"
+                )
+
+    def _create_success_result(
+        self, 
+        data: Dict[str, Any], 
+        confidence: float = 1.0,
+        processing_time_ms: int = 0
+    ) -> AgentResult:
+        """Helper method to create successful AgentResult"""
+        return AgentResult(
+            agent_type=self.agent_type,
+            success=True,
+            data=data,
+            processing_time_ms=processing_time_ms,
+            confidence=max(0.0, min(1.0, confidence))  # Clamp between 0 and 1
+        )
+
+    def _create_error_result(
+        self, 
+        error_message: str, 
+        processing_time_ms: int = 0
+    ) -> AgentResult:
+        """Helper method to create error AgentResult"""
+        return AgentResult(
+            agent_type=self.agent_type,
+            success=False,
+            data={},
+            processing_time_ms=processing_time_ms,
+            confidence=0.0,
+            error_message=error_message
+        )

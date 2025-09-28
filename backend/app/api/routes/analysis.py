@@ -1,78 +1,128 @@
 """
-Analysis endpoints for the agent pipeline
+Analysis endpoints using the new PipelineOrchestrator
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, UploadFile, File
-from typing import Dict, Any, Optional
-
-from app.models.analysis import AnalysisRequest, AnalysisResponse
-from app.models.dataset import CreateDatasetRequest, CreateDatasetResponse
-from app.services.agent_pipeline import AgentPipelineService
-from app.database.supabase_client import get_supabase_client
-from app.utils.enhanced_file_parser import EnhancedFileParser
-from app.utils.memory_manager import get_memory_manager, RequestPriority
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from typing import Dict, Any, Optional, List
+from pydantic import BaseModel
 import uuid
-from datetime import datetime
+import pandas as pd
+
+from app.models.analysis import AnalysisResponse
+from app.services.pipeline_orchestrator import PipelineOrchestrator
+from app.database.supabase_client import get_supabase_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class AnalysisRequest(BaseModel):
+    """Request model for dataset analysis"""
+    data: List[Dict[str, Any]]
+    filename: Optional[str] = "dataset.csv"
+    file_type: Optional[str] = "csv"
+    options: Optional[Dict[str, Any]] = {}
+
+
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_dataset(
     request: AnalysisRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks = None
 ):
     """
-    Analyze dataset using the 3-agent pipeline
-    This endpoint receives client-parsed data and runs the AI analysis
+    Single analyze endpoint for dataset analysis using the new PipelineOrchestrator
+    Accepts JSON data payload and runs comprehensive 3-agent analysis
     """
     try:
-        # Validate input data
+        # Validate request data
         if not request.data or len(request.data) == 0:
             raise HTTPException(
                 status_code=400,
-                detail="No data provided. Please upload a file with data."
+                detail="No data provided in request"
             )
-
-        if len(request.data) > 50000:  # Increased limit with streaming support
+        
+        # Convert to DataFrame for validation
+        try:
+            df = pd.DataFrame(request.data)
+            
+            # Validate DataFrame
+            if df.empty:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Dataset contains no data"
+                )
+            
+            if len(df.columns) == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Dataset contains no columns"
+                )
+            
+            # Enhanced row limit check
+            if len(request.data) > 50000:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Dataset too large. Please provide fewer than 50,000 rows."
+                )
+                
+        except HTTPException:
+            raise
+        except Exception as parse_error:
             raise HTTPException(
                 status_code=400,
-                detail="Dataset too large. Please upload a file with fewer than 50,000 rows."
+                detail=f"Failed to process dataset: {str(parse_error)}"
             )
 
         # Create dataset record
         dataset_id = str(uuid.uuid4())
         supabase = get_supabase_client()
-
-        # TODO: Replace with proper authentication
-        user_id_to_use = None  # Will need proper user authentication
         
-        # Insert dataset record
+        # Calculate approximate data size
+        data_size_estimate = len(str(request.data).encode('utf-8'))
+        
+        # Insert enhanced dataset record
         dataset_data = {
             "id": dataset_id,
-            "user_id": user_id_to_use,
-            "filename": request.filename or "dataset.csv",
-            "file_size": len(str(request.data)),
-            "file_type": request.file_type or "csv",
+            "user_id": None,  # No authentication for now
+            "filename": request.filename,
+            "file_size": data_size_estimate,
+            "file_type": request.file_type,
             "processing_status": "processing",
             "sample_data": request.data[:10],  # Store first 10 rows as sample
-            "metadata": request.options
+            "metadata": {
+                "row_count": len(request.data),
+                "column_count": len(df.columns),
+                "columns": list(df.columns),
+                "data_size_mb": round(data_size_estimate / (1024 * 1024), 2)
+            }
         }
 
         result = supabase.table("datasets").insert(dataset_data).execute()
-        logger.info(f"Created dataset record: {dataset_id}")
+        logger.info(f"Created dataset record: {dataset_id} with {len(request.data)} rows and {len(df.columns)} columns")
 
-        # Initialize pipeline service
-        pipeline_service = AgentPipelineService()
+        # Initialize new pipeline orchestrator
+        orchestrator = PipelineOrchestrator()
 
-        # Run analysis in background with memory management
-        background_tasks.add_task(
-            pipeline_service.analyze_dataset_with_memory_management,
-            request.data,
-            dataset_id
-        )
+        # Run analysis in background using new orchestrator
+        if background_tasks:
+            background_tasks.add_task(
+                orchestrator.analyze_dataset,
+                request.data,
+                dataset_id
+            )
+        else:
+            # If no background tasks, run synchronously (for testing)
+            logger.warning("Running analysis synchronously - not recommended for production")
+            try:
+                result = await orchestrator.analyze_dataset(request.data, dataset_id)
+                return result
+            except Exception as sync_error:
+                logger.error(f"Synchronous analysis failed: {sync_error}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Analysis failed: {str(sync_error)}"
+                )
 
         # Return immediate response with dataset ID
         return AnalysisResponse(
@@ -81,7 +131,7 @@ async def analyze_dataset(
             recommendations=[],  # Will be populated when analysis completes
             data_profile=None,  # Will be populated when analysis completes
             processing_time_ms=0,
-            message="Analysis started. Use the status endpoint to check progress."
+            message="Analysis started successfully. Use the status endpoint to check progress."
         )
 
     except HTTPException:
@@ -94,122 +144,23 @@ async def analyze_dataset(
         )
 
 
-@router.post("/analyze-file", response_model=AnalysisResponse)
-async def analyze_file_upload(
-    file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None,
-    priority: str = "normal"
-):
-    """
-    Analyze uploaded file using streaming processing and memory management
-    This endpoint handles file uploads directly with optimized processing
-    """
+@router.get("/status/{dataset_id}")
+async def get_analysis_status(dataset_id: str):
+    """Get the current analysis status for a dataset using PipelineOrchestrator"""
     try:
-        # Validate file
-        if not file.filename:
+        orchestrator = PipelineOrchestrator()
+        status = await orchestrator.get_status(dataset_id)
+        
+        if status.get("status") == "not_found":
             raise HTTPException(
-                status_code=400,
-                detail="No file provided"
+                status_code=404,
+                detail="Dataset not found"
             )
         
-        # Check file size
-        file_content = await file.read()
-        file_size_mb = len(file_content) / (1024 * 1024)
-        
-        if file_size_mb > 500:  # 500MB limit
-            raise HTTPException(
-                status_code=400,
-                detail="File too large. Maximum size is 500MB."
-            )
-        
-        # Reset file pointer
-        await file.seek(0)
-        
-        # Create dataset ID
-        dataset_id = str(uuid.uuid4())
-        
-        # Parse priority
-        priority_map = {
-            "low": RequestPriority.LOW,
-            "normal": RequestPriority.NORMAL,
-            "high": RequestPriority.HIGH
-        }
-        request_priority = priority_map.get(priority.lower(), RequestPriority.NORMAL)
-        
-        # Initialize enhanced file parser
-        file_parser = EnhancedFileParser()
-        
-        # Parse file with streaming support
-        parse_result = await file_parser.parse_file(
-            file=file,
-            request_id=dataset_id,
-            priority=request_priority
-        )
-        
-        # Create dataset record
-        supabase = get_supabase_client()
-        
-        # TODO: Replace with proper authentication
-        user_id_to_use = None  # Will need proper user authentication
-        
-        # Insert dataset record with streaming metadata
-        dataset_data = {
-            "id": dataset_id,
-            "user_id": user_id_to_use,
-            "filename": file.filename,
-            "file_size": len(file_content),
-            "file_type": parse_result['metadata'].get('file_type', 'unknown'),
-            "processing_status": "processing",
-            "sample_data": parse_result['data'][:10],  # Store first 10 rows as sample
-            "metadata": {
-                **parse_result['metadata'],
-                "processing_stats": parse_result.get('processing_stats', {}),
-                "streaming_enabled": True
-            }
-        }
-
-        result = supabase.table("datasets").insert(dataset_data).execute()
-        logger.info(f"Created dataset record with streaming: {dataset_id}")
-
-        # Initialize pipeline service
-        pipeline_service = AgentPipelineService()
-
-        # Run analysis in background with memory management
-        if background_tasks:
-            background_tasks.add_task(
-                pipeline_service.analyze_dataset_with_memory_management,
-                parse_result['data'],
-                dataset_id
-            )
-
-        # Return immediate response
-        return AnalysisResponse(
-            success=True,
-            dataset_id=dataset_id,
-            recommendations=[],
-            data_profile=None,
-            processing_time_ms=0,
-            message=f"File processed with streaming. Analysis started for {len(parse_result['data'])} rows (sampled from {parse_result['metadata']['original_rows']} rows)."
-        )
+        return status
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"File analysis request failed: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"File analysis failed: {str(e)}"
-        )
-
-
-@router.get("/status/{dataset_id}")
-async def get_analysis_status(dataset_id: str):
-    """Get the current analysis status for a dataset"""
-    try:
-        pipeline_service = AgentPipelineService()
-        status = await pipeline_service.get_analysis_status(dataset_id)
-        return status
-
     except Exception as e:
         logger.error(f"Failed to get analysis status: {e}")
         raise HTTPException(
@@ -220,15 +171,15 @@ async def get_analysis_status(dataset_id: str):
 
 @router.get("/results/{dataset_id}", response_model=AnalysisResponse)
 async def get_analysis_results(dataset_id: str):
-    """Get the complete analysis results for a dataset"""
+    """Get the complete analysis results for a dataset using PipelineOrchestrator"""
     try:
-        pipeline_service = AgentPipelineService()
-        results = await pipeline_service.get_analysis_results(dataset_id)
+        orchestrator = PipelineOrchestrator()
+        results = await orchestrator.get_results(dataset_id)
 
         if not results:
             raise HTTPException(
                 status_code=404,
-                detail="Analysis results not found or analysis not completed"
+                detail="Analysis results not found or analysis not completed yet"
             )
 
         return results
@@ -243,40 +194,17 @@ async def get_analysis_results(dataset_id: str):
         )
 
 
-@router.get("/memory-status")
-async def get_memory_status():
-    """Get current memory usage and queue status"""
-    try:
-        memory_manager = get_memory_manager()
-        return {
-            "memory_usage": memory_manager.get_memory_usage(),
-            "queue_status": memory_manager.get_queue_status(),
-            "system_status": "healthy" if memory_manager.get_memory_pressure() < 0.8 else "under_pressure"
-        }
-    except Exception as e:
-        logger.error(f"Failed to get memory status: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get memory status: {str(e)}"
-        )
+
 
 
 @router.get("/")
 async def analysis_info():
-    """Get information about the analysis API"""
+    """Get basic information about the analysis API"""
     return {
-        "message": "Auto Visualization Agent Analysis API",
-        "version": "1.0.0",
+        "message": "Analysis API",
         "endpoints": {
-            "POST /analyze": "Start dataset analysis using the 3-agent pipeline",
-            "POST /analyze-file": "Upload and analyze file with streaming support",
-            "GET /status/{dataset_id}": "Get analysis progress status",
-            "GET /results/{dataset_id}": "Get complete analysis results",
-            "GET /memory-status": "Get memory usage and queue status"
-        },
-        "supported_formats": ["CSV", "JSON", "Excel", "TSV"],
-        "max_rows": 50000,
-        "max_file_size": "500MB",
-        "features": ["Streaming Processing", "Memory Management", "Request Queuing"],
-        "agents": ["Enhanced Data Profiler", "Chart Recommender", "Validation Agent"]
+            "POST /analyze": "Upload file and start analysis",
+            "GET /status/{dataset_id}": "Get analysis status",
+            "GET /results/{dataset_id}": "Get analysis results"
+        }
     }

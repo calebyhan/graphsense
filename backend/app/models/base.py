@@ -21,6 +21,7 @@ class DataType(str, Enum):
 class ChartType(str, Enum):
     """Supported chart types"""
     BAR = "bar"
+    COLUMN = "column"
     LINE = "line"
     SCATTER = "scatter"
     PIE = "pie"

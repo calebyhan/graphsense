@@ -58,6 +58,7 @@ export interface ChartRecommendation {
 export default function AutoVizAgent() {
   // State management
   const [visualizations, setVisualizations] = useState<Visualization[]>([]);
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const [selectedVizId, setSelectedVizId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -96,6 +97,40 @@ export default function AutoVizAgent() {
   React.useEffect(() => {
     setIsAnalyzing(isLoading);
   }, [isLoading]);
+
+  // Create dataset entry when analysis completes
+  React.useEffect(() => {
+    if (rawData && dataProfile && !isLoading) {
+      const datasetId = `dataset-${Date.now()}`;
+      const newDataset: Dataset = {
+        id: datasetId,
+        name: `Dataset ${datasets.length + 1}`,
+        type: 'csv',
+        columns: Object.keys(rawData[0] || {}).length,
+        rows: rawData.length,
+        size: `${Math.round(JSON.stringify(rawData).length / 1024)}KB`,
+        lastModified: 'Just now',
+        dataTypes: {
+          numerical: dataProfile.column_types?.filter((col: any) => col.type === 'numeric').length || 0,
+          categorical: dataProfile.column_types?.filter((col: any) => col.type === 'categorical').length || 0,
+          temporal: dataProfile.column_types?.filter((col: any) => col.type === 'temporal').length || 0,
+          geographic: 0
+        },
+        preview: Object.keys(rawData[0] || {}).slice(0, 5),
+        data: rawData
+      };
+
+      // Only add if not already exists
+      setDatasets(prev => {
+        const exists = prev.some(d => d.data === rawData);
+        if (exists) return prev;
+        return [...prev, newDataset];
+      });
+
+      // Auto-select the new dataset
+      setSelectedDataset(newDataset);
+    }
+  }, [rawData, dataProfile, isLoading, datasets.length]);
 
   // Handle dataset selection from DataPanel
   const handleDatasetSelect = useCallback(async (dataset: Dataset) => {
@@ -220,7 +255,7 @@ export default function AutoVizAgent() {
         {/* Data Panel - Left Sidebar */}
         <div className="flex flex-col">
           <DataPanel
-            datasets={[]}
+            datasets={datasets}
             selectedDataset={selectedDataset}
             onDatasetSelect={handleDatasetSelect}
           />

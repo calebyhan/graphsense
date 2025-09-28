@@ -73,6 +73,9 @@ export function useKeyboardShortcuts() {
   };
 
   useEffect(() => {
+    // Only add event listeners on the client side
+    if (typeof window === 'undefined') return;
+
     const handleKeyPress = (e: KeyboardEvent) => {
       // Ignore if typing in input/textarea
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
