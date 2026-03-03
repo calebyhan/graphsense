@@ -1,4 +1,4 @@
--- Auto Visualization Agent Database Schema
+-- GraphSense Database Schema
 -- This file contains the complete database schema for the application
 
 -- Enable required extensions

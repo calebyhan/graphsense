@@ -1,15 +1,19 @@
 """
-Visualization management endpoints
+Visualization management endpoints — save, retrieve, share.
+All database calls are wrapped with asyncio.to_thread to avoid blocking.
 """
 
+import asyncio
 import logging
-from fastapi import APIRouter, HTTPException
-from typing import List, Optional, Dict, Any
+import uuid
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.core.auth import get_user_id
 from app.database.supabase_client import get_supabase_client
-from datetime import datetime
-import uuid
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,247 +34,166 @@ class UpdateVisualizationRequest(BaseModel):
     is_shared: Optional[bool] = None
 
 
+# ── Shared route MUST come before /{visualization_id} to avoid conflict ──────
+
+@router.get("/shared/{share_token}")
+async def get_shared_visualization(share_token: str):
+    """Return a publicly shared visualization by token (no auth required)."""
+    supabase = get_supabase_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("visualizations")
+        .select("*")
+        .eq("share_token", share_token)
+        .eq("is_shared", True)
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Shared visualization not found")
+    return response.data[0]
+
+
+# ── Standard CRUD ─────────────────────────────────────────────────────────────
+
 @router.post("/")
-async def create_visualization(request: CreateVisualizationRequest):
-    """Create a new visualization"""
-    try:
-        supabase = get_supabase_client()
+async def create_visualization(
+    body: CreateVisualizationRequest,
+    user_id: str | None = Depends(get_user_id),
+):
+    """Create a new visualization linked to a dataset."""
+    supabase = get_supabase_client()
 
-        # Verify dataset exists
-        dataset_response = supabase.table("datasets").select("id").eq("id", request.dataset_id).execute()
-        if not dataset_response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Dataset not found"
-            )
+    # Verify dataset exists
+    ds = await asyncio.to_thread(
+        lambda: supabase.table("datasets").select("id").eq("id", body.dataset_id).execute()
+    )
+    if not ds.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
 
-        # Create visualization
-        visualization_data = {
-            "id": str(uuid.uuid4()),
-            "dataset_id": request.dataset_id,
-            "user_id": "00000000-0000-0000-0000-000000000000",  # Anonymous user for now
-            "chart_type": request.chart_type,
-            "chart_config": request.chart_config,
-            "title": request.title,
-            "description": request.description,
-            "is_shared": False
-        }
-
-        response = supabase.table("visualizations").insert(visualization_data).execute()
-
-        return {
-            "success": True,
-            "visualization": response.data[0],
-            "message": "Visualization created successfully"
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to create visualization: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to create visualization: {str(e)}"
-        )
+    row = {
+        "id": str(uuid.uuid4()),
+        "dataset_id": body.dataset_id,
+        "user_id": user_id,
+        "chart_type": body.chart_type,
+        "chart_config": body.chart_config,
+        "title": body.title,
+        "description": body.description,
+        "is_shared": False,
+    }
+    response = await asyncio.to_thread(
+        lambda: supabase.table("visualizations").insert(row).execute()
+    )
+    return {"success": True, "visualization": response.data[0]}
 
 
 @router.get("/")
 async def list_visualizations(
-    user_id: Optional[str] = None,
     dataset_id: Optional[str] = None,
-    limit: int = 10,
-    offset: int = 0
+    limit: int = 20,
+    offset: int = 0,
+    user_id: str | None = Depends(get_user_id),
 ):
-    """List visualizations with optional filtering"""
-    try:
-        supabase = get_supabase_client()
+    """List visualizations, optionally filtered by dataset."""
+    supabase = get_supabase_client()
 
-        query = supabase.table("visualizations").select("*")
-
+    def _query():
+        q = supabase.table("visualizations").select("*")
         if user_id:
-            query = query.eq("user_id", user_id)
-
+            q = q.eq("user_id", user_id)
         if dataset_id:
-            query = query.eq("dataset_id", dataset_id)
+            q = q.eq("dataset_id", dataset_id)
+        return q.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
 
-        response = query.order("created_at", desc=True).range(offset, offset + limit - 1).execute()
-
-        return {
-            "visualizations": response.data,
-            "count": len(response.data),
-            "offset": offset,
-            "limit": limit
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to list visualizations: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to list visualizations: {str(e)}"
-        )
+    response = await asyncio.to_thread(_query)
+    return {"visualizations": response.data, "count": len(response.data), "offset": offset, "limit": limit}
 
 
 @router.get("/{visualization_id}")
 async def get_visualization(visualization_id: str):
-    """Get a specific visualization by ID"""
-    try:
-        supabase = get_supabase_client()
-
-        response = supabase.table("visualizations").select("*").eq("id", visualization_id).execute()
-
-        if not response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Visualization not found"
-            )
-
-        return response.data[0]
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get visualization: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get visualization: {str(e)}"
-        )
+    """Get a specific visualization by ID."""
+    supabase = get_supabase_client()
+    response = await asyncio.to_thread(
+        lambda: supabase.table("visualizations").select("*").eq("id", visualization_id).execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Visualization not found")
+    return response.data[0]
 
 
 @router.put("/{visualization_id}")
-async def update_visualization(visualization_id: str, request: UpdateVisualizationRequest):
-    """Update a visualization"""
-    try:
-        supabase = get_supabase_client()
+async def update_visualization(
+    visualization_id: str,
+    body: UpdateVisualizationRequest,
+    user_id: str | None = Depends(get_user_id),
+):
+    """Update chart config, title, description, or sharing state."""
+    supabase = get_supabase_client()
 
-        # Check if visualization exists
-        check_response = supabase.table("visualizations").select("id").eq("id", visualization_id).execute()
-        if not check_response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Visualization not found"
-            )
+    check = await asyncio.to_thread(
+        lambda: supabase.table("visualizations").select("id, user_id").eq("id", visualization_id).execute()
+    )
+    if not check.data:
+        raise HTTPException(status_code=404, detail="Visualization not found")
 
-        # Prepare update data
-        update_data = {"updated_at": datetime.now().isoformat()}
+    updates: Dict[str, Any] = {"updated_at": datetime.now().isoformat()}
+    if body.chart_config is not None:
+        updates["chart_config"] = body.chart_config
+    if body.title is not None:
+        updates["title"] = body.title
+    if body.description is not None:
+        updates["description"] = body.description
+    if body.is_shared is not None:
+        updates["is_shared"] = body.is_shared
 
-        if request.chart_config is not None:
-            update_data["chart_config"] = request.chart_config
-
-        if request.title is not None:
-            update_data["title"] = request.title
-
-        if request.description is not None:
-            update_data["description"] = request.description
-
-        if request.is_shared is not None:
-            update_data["is_shared"] = request.is_shared
-
-        # Update visualization
-        response = supabase.table("visualizations").update(update_data).eq("id", visualization_id).execute()
-
-        return {
-            "success": True,
-            "visualization": response.data[0],
-            "message": "Visualization updated successfully"
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update visualization: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update visualization: {str(e)}"
-        )
+    response = await asyncio.to_thread(
+        lambda: supabase.table("visualizations").update(updates).eq("id", visualization_id).execute()
+    )
+    return {"success": True, "visualization": response.data[0]}
 
 
 @router.delete("/{visualization_id}")
-async def delete_visualization(visualization_id: str):
-    """Delete a visualization"""
-    try:
-        supabase = get_supabase_client()
+async def delete_visualization(
+    visualization_id: str,
+    user_id: str | None = Depends(get_user_id),
+):
+    """Delete a visualization."""
+    supabase = get_supabase_client()
 
-        # Check if visualization exists
-        check_response = supabase.table("visualizations").select("id").eq("id", visualization_id).execute()
-        if not check_response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Visualization not found"
-            )
+    check = await asyncio.to_thread(
+        lambda: supabase.table("visualizations").select("id").eq("id", visualization_id).execute()
+    )
+    if not check.data:
+        raise HTTPException(status_code=404, detail="Visualization not found")
 
-        # Delete visualization
-        supabase.table("visualizations").delete().eq("id", visualization_id).execute()
-
-        return {"message": "Visualization deleted successfully"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete visualization: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete visualization: {str(e)}"
-        )
-
-
-@router.get("/shared/{share_token}")
-async def get_shared_visualization(share_token: str):
-    """Get a shared visualization by token"""
-    try:
-        supabase = get_supabase_client()
-
-        response = supabase.table("visualizations").select("*").eq("share_token", share_token).eq("is_shared", True).execute()
-
-        if not response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Shared visualization not found"
-            )
-
-        return response.data[0]
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get shared visualization: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get shared visualization: {str(e)}"
-        )
+    await asyncio.to_thread(
+        lambda: supabase.table("visualizations").delete().eq("id", visualization_id).execute()
+    )
+    return {"success": True, "message": "Visualization deleted"}
 
 
 @router.post("/{visualization_id}/share")
-async def share_visualization(visualization_id: str):
-    """Enable sharing for a visualization"""
-    try:
-        supabase = get_supabase_client()
+async def share_visualization(
+    visualization_id: str,
+    user_id: str | None = Depends(get_user_id),
+):
+    """Enable sharing and return the public share URL."""
+    supabase = get_supabase_client()
 
-        # Check if visualization exists
-        check_response = supabase.table("visualizations").select("id").eq("id", visualization_id).execute()
-        if not check_response.data:
-            raise HTTPException(
-                status_code=404,
-                detail="Visualization not found"
-            )
+    check = await asyncio.to_thread(
+        lambda: supabase.table("visualizations").select("id").eq("id", visualization_id).execute()
+    )
+    if not check.data:
+        raise HTTPException(status_code=404, detail="Visualization not found")
 
-        # Update to enable sharing (trigger will generate share_token)
-        response = supabase.table("visualizations").update({
+    response = await asyncio.to_thread(
+        lambda: supabase.table("visualizations").update({
             "is_shared": True,
-            "updated_at": datetime.now().isoformat()
+            "updated_at": datetime.now().isoformat(),
         }).eq("id", visualization_id).execute()
-
-        return {
-            "success": True,
-            "visualization": response.data[0],
-            "share_url": f"/visualizations/shared/{response.data[0]['share_token']}",
-            "message": "Visualization sharing enabled"
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to share visualization: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to share visualization: {str(e)}"
-        )
+    )
+    viz = response.data[0]
+    return {
+        "success": True,
+        "visualization": viz,
+        "share_token": viz.get("share_token"),
+        "share_url": f"/shared/{viz.get('share_token')}",
+    }

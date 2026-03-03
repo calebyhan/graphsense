@@ -1,5 +1,5 @@
 """
-Logging configuration for the Auto Visualization Agent backend
+Logging configuration for the GraphSense backend
 """
 
 import logging

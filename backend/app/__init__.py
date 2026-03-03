@@ -1,1 +1,1 @@
-# Auto Visualization Agent Backend App
+# GraphSense Backend App

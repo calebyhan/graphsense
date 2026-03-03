@@ -1,4 +1,4 @@
-# Auto Visualization Agent 🤖📊
+# GraphSense
 [![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)]() [![AI](https://img.shields.io/badge/AI-Gemini%202.0%20Flash-blue)]() [![Docker](https://img.shields.io/badge/Docker-Ready-blue)]() [![Integration](https://img.shields.io/badge/Tests-Passing-brightgreen)]()
 
 
@@ -54,54 +54,9 @@ An AI-powered data visualization platform that automatically analyzes datasets a
 - **Error Recovery**: Automatic reconnection attempts and status restoration
 
 
-## Installation & Setup
-
-### Prerequisites
-- Node.js 18+
-- Python 3.11+
-- Docker & Docker Compose
-- Google Gemini API Key
-- Supabase Project
-
-### 1. Clone and Setup Environment
-
-```bash
-git clone <repository-url>
-cd vthacks25
-cp .env.example .env
-docker-compose up --build
-
-# Or run backend only (if running frontend locally)
-docker-compose up backend -d
-
-# Services will be available at:
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000
-# API Docs: http://localhost:8000/docs
-# Health Check: http://localhost:8000/health/
-```
-
-#### Option B: Local Development
-```bash
-# Terminal 1: Backend
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-
-# Terminal 2: Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-### 5. Verify Installation
-
-```bash
-# Run integration tests
-node test/test-integration.js
-```
-
 ## Quick Start
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for installation and configuration instructions.
 
 1. **Open the Application**: Navigate to http://localhost:3000
 

@@ -59,7 +59,7 @@ class DataProfilerAgent(BaseAgent):
                 processing_time_ms=processing_time
             )
 
-            return self._format_output(analysis.dict(), success=True)
+            return self._format_output(analysis.model_dump(), success=True)
 
         except Exception as e:
             logger.error(f"Data profiler processing failed: {e}")

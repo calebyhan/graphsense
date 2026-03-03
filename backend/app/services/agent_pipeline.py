@@ -66,7 +66,7 @@ def convert_to_json_serializable(obj):
     # Handle pydantic models
     elif hasattr(obj, '__dict__'):
         if hasattr(obj, 'dict'):
-            return convert_to_json_serializable(obj.dict())
+            return convert_to_json_serializable(obj.model_dump())
         else:
             return convert_to_json_serializable(obj.__dict__)
     
@@ -114,14 +114,14 @@ class AgentPipelineService:
             analysis.dataset_id = dataset_id
 
             # Store profiler results
-            await self._store_agent_analysis(dataset_id, "profiler", analysis.dict())
+            await self._store_agent_analysis(dataset_id, "profiler", analysis.model_dump())
 
             # Stage 2: Chart Recommender Agent
             logger.info(f"Starting recommender agent for dataset {dataset_id}")
             recommendations = await self.recommender_agent.recommend(analysis)
 
             # Store recommender results
-            recommendations_data = [rec.dict() for rec in recommendations]
+            recommendations_data = [rec.model_dump() for rec in recommendations]
             await self._store_agent_analysis(dataset_id, "recommender", {
                 "recommendations": recommendations_data
             })
@@ -133,7 +133,7 @@ class AgentPipelineService:
             )
 
             # Store validation results
-            validated_data = [rec.dict() for rec in validated_recommendations]
+            validated_data = [rec.model_dump() for rec in validated_recommendations]
             await self._store_agent_analysis(dataset_id, "validator", {
                 "validated_recommendations": validated_data
             })

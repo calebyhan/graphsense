@@ -104,7 +104,7 @@ export default function SharedVisualizationPage() {
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-gray-900">
-                  Auto Visualization Agent
+                  GraphSense
                 </h1>
                 <p className="text-sm text-gray-600">Shared Chart</p>
               </div>

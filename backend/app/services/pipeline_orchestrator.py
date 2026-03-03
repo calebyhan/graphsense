@@ -9,6 +9,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 
+from app.core.config import get_settings
 from app.models.processing_context import ProcessingContext
 from app.agents.data_profiler_agent import DataProfilerAgent
 from app.agents.chart_recommender_agent import ChartRecommenderAgent
@@ -59,9 +60,10 @@ class PipelineOrchestrator:
         # Database client
         self.supabase = get_supabase_client()
         
-        # Pipeline configuration
-        self.max_processing_time_seconds = 300  # 5 minutes timeout
-        self.agent_timeout_seconds = 60  # 1 minute per agent
+        # Pipeline configuration — driven by settings so .env overrides work
+        _settings = get_settings()
+        self.max_processing_time_seconds = _settings.agent_timeout
+        self.agent_timeout_seconds = _settings.agent_timeout // 3  # equal share per agent
         
         logger.info("Pipeline orchestrator initialized")
 
@@ -327,7 +329,9 @@ class PipelineOrchestrator:
         """Get the current pipeline status for a dataset"""
         try:
             # Get dataset status from database
-            dataset_response = self.supabase.table("datasets").select("processing_status").eq("id", dataset_id).execute()
+            dataset_response = await asyncio.to_thread(
+                lambda: self.supabase.table("datasets").select("processing_status").eq("id", dataset_id).execute()
+            )
 
             if not dataset_response.data:
                 return {"status": "not_found"}
@@ -335,7 +339,9 @@ class PipelineOrchestrator:
             status = dataset_response.data[0]["processing_status"]
 
             # Get completed agent analyses
-            analyses_response = self.supabase.table("agent_analyses").select("agent_type, created_at").eq("dataset_id", dataset_id).execute()
+            analyses_response = await asyncio.to_thread(
+                lambda: self.supabase.table("agent_analyses").select("agent_type, created_at").eq("dataset_id", dataset_id).execute()
+            )
             completed_agents = [analysis["agent_type"] for analysis in analyses_response.data]
 
             # Calculate progress percentage
@@ -373,7 +379,9 @@ class PipelineOrchestrator:
         """Get the complete analysis results for a dataset"""
         try:
             # Get all agent analyses
-            analyses_response = self.supabase.table("agent_analyses").select("*").eq("dataset_id", dataset_id).order("created_at").execute()
+            analyses_response = await asyncio.to_thread(
+                lambda: self.supabase.table("agent_analyses").select("*").eq("dataset_id", dataset_id).order("created_at").execute()
+            )
 
             if not analyses_response.data:
                 logger.warning(f"No analysis data found for dataset {dataset_id}")
@@ -445,14 +453,15 @@ class PipelineOrchestrator:
     ) -> None:
         """Store agent analysis results in the database"""
         try:
-            self.supabase.table("agent_analyses").insert({
-                "dataset_id": dataset_id,
-                "agent_type": agent_type,
-                "analysis_data": analysis_data,
-                "confidence_score": confidence_score,
-                "processing_time_ms": processing_time_ms
-            }).execute()
-
+            await asyncio.to_thread(
+                lambda: self.supabase.table("agent_analyses").insert({
+                    "dataset_id": dataset_id,
+                    "agent_type": agent_type,
+                    "analysis_data": analysis_data,
+                    "confidence_score": confidence_score,
+                    "processing_time_ms": processing_time_ms,
+                }).execute()
+            )
             logger.info(f"Stored {agent_type} analysis for dataset {dataset_id}")
 
         except Exception as e:
@@ -462,11 +471,12 @@ class PipelineOrchestrator:
     async def _update_dataset_status(self, dataset_id: str, status: str) -> None:
         """Update dataset processing status"""
         try:
-            self.supabase.table("datasets").update({
-                "processing_status": status,
-                "updated_at": datetime.now().isoformat()
-            }).eq("id", dataset_id).execute()
-
+            await asyncio.to_thread(
+                lambda: self.supabase.table("datasets").update({
+                    "processing_status": status,
+                    "updated_at": datetime.now().isoformat(),
+                }).eq("id", dataset_id).execute()
+            )
             logger.info(f"Updated dataset {dataset_id} status to {status}")
 
         except Exception as e:

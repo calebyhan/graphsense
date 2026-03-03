@@ -1,21 +1,22 @@
 """
-Auto Visualization Agent Backend
+GraphSense Backend
 FastAPI application for the AI-powered data visualization platform
 """
 
-import os
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import get_settings
+from app.core.limiter import limiter
 from app.core.logging_config import setup_logging
 from app.api.routes import datasets, analysis, visualizations, health
 from app.database.supabase_client import get_supabase_client
-# Removed old pipeline import - using new PipelineOrchestrator
 
 
 # Load environment variables
@@ -51,7 +52,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Auto Visualization Agent API",
+    title="GraphSense API",
     description="Simplified AI-powered data visualization platform with 3-agent pipeline",
     version="1.0.0",
     docs_url="/docs",
@@ -59,10 +60,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# Attach rate limiter to app state and register its 429 handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS middleware — origins controlled by CORS_ORIGINS env var
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -95,7 +100,7 @@ app.include_router(
 async def root():
     """Basic API information"""
     return {
-        "message": "Auto Visualization Agent API",
+        "message": "GraphSense API",
         "version": "1.0.0",
         "status": "running",
         "endpoints": {

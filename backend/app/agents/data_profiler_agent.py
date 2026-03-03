@@ -73,7 +73,7 @@ class DataProfilerAgent(BaseAgent):
             )
 
             return self._create_success_result(
-                data=analysis.dict(),
+                data=analysis.model_dump(),
                 confidence=0.95,  # High confidence for statistical analysis
                 processing_time_ms=processing_time
             )
@@ -435,7 +435,7 @@ class DataProfilerAgent(BaseAgent):
             )
             
             return self._create_success_result(
-                data=fallback_analysis.dict(),
+                data=fallback_analysis.model_dump(),
                 confidence=0.3,  # Low confidence for fallback
                 processing_time_ms=0
             )

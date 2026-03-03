@@ -73,7 +73,7 @@ class ValidationAgent(BaseAgent):
 
             # Get AI validation insights
             ai_validations = await self._get_ai_validations(
-                [rec.dict() for rec in recommendations], 
+                [rec.model_dump() for rec in recommendations], 
                 {"profiler_data": profiler_data, "correlations": correlations}
             )
             
@@ -94,7 +94,7 @@ class ValidationAgent(BaseAgent):
             processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
             return self._create_success_result(
-                data={"validated_recommendations": [rec.dict() for rec in validated_recommendations]},
+                data={"validated_recommendations": [rec.model_dump() for rec in validated_recommendations]},
                 confidence=0.9,  # High confidence for validation
                 processing_time_ms=processing_time
             )
@@ -264,7 +264,7 @@ class ValidationAgent(BaseAgent):
                         continue
                 
                 return self._create_success_result(
-                    data={"validated_recommendations": [rec.dict() for rec in fallback_validated]},
+                    data={"validated_recommendations": [rec.model_dump() for rec in fallback_validated]},
                     confidence=0.3,  # Low confidence for fallback
                     processing_time_ms=0
                 )

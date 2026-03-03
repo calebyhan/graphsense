@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The Auto Visualization Agent is a web application that automatically analyzes real-world datasets and recommends the most appropriate chart types with clear justifications. The system will accept various dataset formats, perform intelligent analysis of data characteristics, and generate visualizations with explanations of why specific chart types were selected. This empowers users to quickly understand their data through optimal visual representations without requiring deep visualization expertise.
+The GraphSense is a web application that automatically analyzes real-world datasets and recommends the most appropriate chart types with clear justifications. The system will accept various dataset formats, perform intelligent analysis of data characteristics, and generate visualizations with explanations of why specific chart types were selected. This empowers users to quickly understand their data through optimal visual representations without requiring deep visualization expertise.
 
 ## Requirements
 

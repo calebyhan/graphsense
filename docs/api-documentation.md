@@ -1,8 +1,8 @@
-# Auto Visualization Agent API Documentation
+# GraphSense API Documentation
 
 ## Overview
 
-The Auto Visualization Agent API is a FastAPI-based backend that powers the AI-driven data visualization platform. It features a sophisticated 3-agent pipeline that analyzes datasets and generates intelligent chart recommendations.
+The GraphSense API is a FastAPI-based backend that powers the AI-driven data visualization platform. It features a sophisticated 3-agent pipeline that analyzes datasets and generates intelligent chart recommendations.
 
 **Base URL**: `http://localhost:8000` (development)
 **API Documentation**: `http://localhost:8000/docs` (Interactive Swagger UI)
@@ -407,4 +407,4 @@ curl "http://localhost:8000/health"
 
 **Last Updated**: January 2025
 **Version**: 1.0.0
-**Contact**: Auto Visualization Agent Team
+**Contact**: GraphSense Team

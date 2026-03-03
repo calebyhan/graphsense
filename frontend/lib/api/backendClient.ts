@@ -3,7 +3,18 @@
  * Handles communication with the Python FastAPI backend
  */
 
+import { supabase } from '@/lib/supabase/client';
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+/** Returns auth headers if a Supabase session exists, empty otherwise. */
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    return { Authorization: `Bearer ${session.access_token}` };
+  }
+  return {};
+}
 
 export interface AnalysisRequest {
   data: Array<Record<string, any>>;
@@ -46,9 +57,7 @@ export class BackendAPIClient {
     try {
       const response = await fetch(`${this.baseURL}/api/analysis/analyze`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...await authHeaders() },
         body: JSON.stringify(request),
       });
 
@@ -82,7 +91,9 @@ export class BackendAPIClient {
    */
   async getAnalysisStatus(datasetId: string): Promise<AnalysisStatus> {
     try {
-      const response = await fetch(`${this.baseURL}/api/analysis/status/${datasetId}`);
+      const response = await fetch(`${this.baseURL}/api/analysis/status/${datasetId}`, {
+        headers: await authHeaders(),
+      });
 
       if (!response.ok) {
         let errorMessage = `Status request failed: ${response.status}`;
@@ -114,7 +125,9 @@ export class BackendAPIClient {
    */
   async getAnalysisResults(datasetId: string): Promise<AnalysisResponse> {
     try {
-      const response = await fetch(`${this.baseURL}/api/analysis/results/${datasetId}`);
+      const response = await fetch(`${this.baseURL}/api/analysis/results/${datasetId}`, {
+        headers: await authHeaders(),
+      });
 
       if (!response.ok) {
         let errorMessage = `Results request failed: ${response.status}`;
@@ -151,7 +164,7 @@ export class BackendAPIClient {
       if (params?.offset) searchParams.set('offset', params.offset.toString());
 
       const url = `${this.baseURL}/api/datasets?${searchParams.toString()}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: await authHeaders() });
 
       if (!response.ok) {
         const error = await response.json();
@@ -178,9 +191,7 @@ export class BackendAPIClient {
     try {
       const response = await fetch(`${this.baseURL}/api/visualizations/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...await authHeaders() },
         body: JSON.stringify(visualization),
       });
 
@@ -203,9 +214,7 @@ export class BackendAPIClient {
     try {
       const response = await fetch(`${this.baseURL}/api/visualizations/${visualizationId}/share`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json', ...await authHeaders() },
       });
 
       if (!response.ok) {

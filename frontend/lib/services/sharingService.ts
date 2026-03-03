@@ -221,7 +221,7 @@ export class SharingService {
     const shareUrl = `${baseUrl}/shared/${visualization.shareToken}`;
 
     return {
-      title: `${visualization.title} - Auto Visualization Agent`,
+      title: `${visualization.title} - GraphSense`,
       description: visualization.description || `Interactive ${visualization.chartType} chart created with AI-powered analysis`,
       url: shareUrl,
       image: `${baseUrl}/api/og?token=${visualization.shareToken}`, // For Open Graph image

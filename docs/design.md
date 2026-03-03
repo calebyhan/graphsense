@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Auto Visualization Agent is a full-stack web application that leverages an intelligent agentic pipeline to automatically analyze datasets and recommend optimal visualizations. The system combines Next.js 15/React frontend with a Python backend featuring multiple specialized AI agents powered by Google Gemini that collaborate to provide high-quality chart recommendations with transparent reasoning.
+The GraphSense is a full-stack web application that leverages an intelligent agentic pipeline to automatically analyze datasets and recommend optimal visualizations. The system combines Next.js 15/React frontend with a Python backend featuring multiple specialized AI agents powered by Google Gemini that collaborate to provide high-quality chart recommendations with transparent reasoning.
 
 The core innovation lies in the multi-agent architecture where specialized Gemini-powered agents handle different aspects of data analysis, chart selection, and validation, creating a robust feedback loop that ensures recommendation quality and provides clear justifications for visualization choices. The entire system is containerized with Docker for seamless cross-platform development and deployment, designed for hackathon-style rapid development with local execution and Supabase for data persistence.
 
@@ -444,4 +444,4 @@ class BaseAgent:
         return response.text
 ```
 
-This design provides a robust foundation for building the Auto Visualization Agent with a focus on the agentic pipeline architecture, scalable data processing, user-friendly visualization capabilities, and hackathon-ready Docker containerization using Google Gemini for intelligent reasoning.
+This design provides a robust foundation for building the GraphSense with a focus on the agentic pipeline architecture, scalable data processing, user-friendly visualization capabilities, and hackathon-ready Docker containerization using Google Gemini for intelligent reasoning.

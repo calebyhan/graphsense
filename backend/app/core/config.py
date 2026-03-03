@@ -1,10 +1,9 @@
 """
-Configuration settings for the Auto Visualization Agent backend
+Configuration settings for the GraphSense backend
 """
 
-import os
 from functools import lru_cache
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
@@ -13,16 +12,17 @@ class Settings(BaseSettings):
 
     # Environment
     environment: str = "development"
-    debug: bool = True
+    debug: bool = False  # Override with DEBUG=true in .env for local dev
 
     # API Configuration
-    api_title: str = "Auto Visualization Agent API"
+    api_title: str = "GraphSense API"
     api_version: str = "1.0.0"
 
     # Supabase Configuration
     supabase_url: str
     supabase_service_key: str
     supabase_anon_key: str = ""
+    supabase_jwt_secret: str = ""  # Dashboard → Settings → API → JWT Secret
 
     # Google Gemini API
     gemini_api_key: str
@@ -36,11 +36,6 @@ class Settings(BaseSettings):
     upload_dir: str = "/app/uploads"
     allowed_extensions: List[str] = ["csv", "json", "xlsx", "xls", "tsv"]
 
-    # Security
-    jwt_secret: str = "your-secret-key-change-in-production"
-    jwt_algorithm: str = "HS256"
-    jwt_expiration: int = 3600  # 1 hour
-
     # CORS
     cors_origins: List[str] = [
         "http://localhost:3000",
@@ -52,14 +47,17 @@ class Settings(BaseSettings):
     log_level: str = "info"
     log_format: str = "json"
 
+    # Redis / Celery
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/0"
+    celery_result_backend: str = "redis://localhost:6379/1"
+
     # Agent Configuration
     agent_timeout: int = 300  # 5 minutes
     max_concurrent_agents: int = 3
     retry_attempts: int = 3
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
 
 @lru_cache()

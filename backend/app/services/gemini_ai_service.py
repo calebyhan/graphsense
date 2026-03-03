@@ -8,7 +8,8 @@ import json
 import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from cachetools import TTLCache
 
 from app.core.config import get_settings
@@ -24,16 +25,11 @@ class GeminiAIService:
     """
 
     def __init__(self):
-        # Configure Gemini API
-        genai.configure(api_key=settings.gemini_api_key)
-        
-        # Initialize model
-        self.model = genai.GenerativeModel(
-            model_name=settings.gemini_model,
-            generation_config={
-                "temperature": settings.gemini_temperature,
-                "max_output_tokens": settings.gemini_max_tokens,
-            }
+        # Initialize client with API key
+        self.client = genai.Client(api_key=settings.gemini_api_key)
+        self._generation_config = types.GenerateContentConfig(
+            temperature=settings.gemini_temperature,
+            max_output_tokens=settings.gemini_max_tokens,
         )
         
         # Response cache with TTL (1 hour)
@@ -170,10 +166,14 @@ class GeminiAIService:
                 
                 # Generate response
                 response = await asyncio.wait_for(
-                    self._generate_async(prompt),
+                    self.client.aio.models.generate_content(
+                        model=settings.gemini_model,
+                        contents=prompt,
+                        config=self._generation_config,
+                    ),
                     timeout=30.0  # 30 second timeout
                 )
-                
+
                 return response.text
                 
             except asyncio.TimeoutError:
@@ -187,11 +187,6 @@ class GeminiAIService:
                 if attempt == max_retries - 1:
                     raise
                 await asyncio.sleep(2 ** attempt)  # Exponential backoff
-
-    async def _generate_async(self, prompt: str):
-        """Async wrapper for Gemini generation"""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.model.generate_content, prompt)
 
     async def _rate_limit(self):
         """Simple rate limiting"""

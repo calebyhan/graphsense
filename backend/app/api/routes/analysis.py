@@ -2,24 +2,38 @@
 Analysis endpoints using the new PipelineOrchestrator
 """
 
+import asyncio
+import hashlib
+import json
 import logging
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from typing import Dict, Any, Optional, List
-from pydantic import BaseModel
 import uuid
-import pandas as pd
-import time
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
+import pandas as pd
+import redis as redis_lib
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
+
+from app.core.auth import get_user_id
+from app.core.config import get_settings
+from app.core.limiter import limiter
+from app.database.supabase_client import get_supabase_client
 from app.models.analysis import AnalysisResponse
 from app.services.pipeline_orchestrator import PipelineOrchestrator
-from app.database.supabase_client import get_supabase_client
+from app.worker import run_analysis
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Global request deduplication cache
-_active_requests: Dict[str, tuple[str, float]] = {}  # request_hash -> (dataset_id, timestamp)
-REQUEST_CACHE_DURATION = 60  # seconds
+settings = get_settings()
+
+# Redis client — shared across workers for cross-process deduplication
+_redis = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+DEDUP_TTL = 60  # seconds
+
+# Module-level orchestrator — one instance per process (avoids per-request init cost)
+_orchestrator = PipelineOrchestrator()
 
 
 class AnalysisRequest(BaseModel):
@@ -32,47 +46,38 @@ class AnalysisRequest(BaseModel):
 
 
 @router.post("/analyze", response_model=AnalysisResponse)
+@limiter.limit("10/minute")
 async def analyze_dataset(
-    request: AnalysisRequest,
-    background_tasks: BackgroundTasks = None
+    request: Request,
+    body: AnalysisRequest,
+    user_id: str | None = Depends(get_user_id),
 ):
     """
     Single analyze endpoint for dataset analysis using the new PipelineOrchestrator
     Accepts JSON data payload and runs comprehensive 3-agent analysis
     """
     try:
-        # Global request deduplication using request signature
-        import hashlib
-        import json
+        # Cross-process deduplication via Redis
         request_signature = hashlib.md5(
             json.dumps({
-                "filename": request.filename or "",
-                "data_length": len(request.data),
-                "first_row": request.data[0] if request.data else {},
-                "columns": sorted(request.data[0].keys()) if request.data else []
+                "filename": body.filename or "",
+                "data_length": len(body.data),
+                "first_row": body.data[0] if body.data else {},
+                "columns": sorted(body.data[0].keys()) if body.data else [],
             }, sort_keys=True).encode()
         ).hexdigest()
-        
-        current_time = time.time()
-        
-        # Clean old requests from cache
-        expired_keys = [k for k, (_, timestamp) in _active_requests.items() 
-                       if current_time - timestamp > REQUEST_CACHE_DURATION]
-        for key in expired_keys:
-            del _active_requests[key]
-        
-        # Check if this exact request is already being processed
-        if request_signature in _active_requests:
-            existing_dataset_id, request_time = _active_requests[request_signature]
-            logger.warning(f"Duplicate request detected for {request.filename}, returning existing dataset: {existing_dataset_id}")
+
+        existing_dataset_id = _redis.get(f"dedup:{request_signature}")
+        if existing_dataset_id:
+            logger.warning(f"Duplicate request detected for {body.filename}, returning existing dataset: {existing_dataset_id}")
             return AnalysisResponse(
                 success=True,
                 dataset_id=existing_dataset_id,
-                message=f"Request already in progress (started {current_time - request_time:.1f}s ago)",
-                processing_time_ms=0
+                message="Request already in progress",
+                processing_time_ms=0,
             )
         # Validate request data
-        if not request.data or len(request.data) == 0:
+        if not body.data or len(body.data) == 0:
             raise HTTPException(
                 status_code=400,
                 detail="No data provided in request"
@@ -80,7 +85,7 @@ async def analyze_dataset(
         
         # Convert to DataFrame for validation
         try:
-            df = pd.DataFrame(request.data)
+            df = pd.DataFrame(body.data)
             
             # Validate DataFrame
             if df.empty:
@@ -96,7 +101,7 @@ async def analyze_dataset(
                 )
             
             # Enhanced row limit check
-            if len(request.data) > 50000:
+            if len(body.data) > 50000:
                 raise HTTPException(
                     status_code=400,
                     detail="Dataset too large. Please provide fewer than 50,000 rows."
@@ -110,40 +115,36 @@ async def analyze_dataset(
                 detail=f"Failed to process dataset: {str(parse_error)}"
             )
 
-        # Enhanced duplicate detection (prevent React Strict Mode duplicates)
         supabase = get_supabase_client()
-        
-        # Create a comprehensive content hash to identify exact duplicate requests
-        import hashlib
-        import json
-        from datetime import datetime, timedelta
-        
-        # Hash based on filename, size, and first/last rows for uniqueness
+
+        # DB-level dedup: check for a recent dataset with the same content hash
         content_data = {
-            "filename": request.filename or "",
-            "row_count": len(request.data),
-            "columns": sorted(request.data[0].keys()) if request.data else [],
-            "first_row": request.data[0] if request.data else {},
-            "last_row": request.data[-1] if request.data else {},
+            "filename": body.filename or "",
+            "row_count": len(body.data),
+            "columns": sorted(body.data[0].keys()) if body.data else [],
+            "first_row": body.data[0] if body.data else {},
+            "last_row": body.data[-1] if body.data else {},
         }
         content_hash = hashlib.md5(
             json.dumps(content_data, sort_keys=True).encode()
         ).hexdigest()
         
-        logger.info(f"Content hash for {request.filename}: {content_hash}")
+        logger.info(f"Content hash for {body.filename}: {content_hash}")
         
         # Check for recent datasets with same content (within last 60 seconds)
         recent_time = (datetime.utcnow() - timedelta(seconds=60)).isoformat()
         
-        recent_datasets = supabase.table("datasets").select("id, filename, metadata").gte("created_at", recent_time).execute()
+        recent_datasets = await asyncio.to_thread(
+            lambda: supabase.table("datasets").select("id, filename, metadata").gte("created_at", recent_time).execute()
+        )
         
         # Enhanced duplicate detection
         duplicate_found = False
         existing_id = None
         for existing in recent_datasets.data:
             # Check exact filename match first
-            if existing.get("filename") == request.filename:
-                logger.warning(f"Exact filename match found for {request.filename}")
+            if existing.get("filename") == body.filename:
+                logger.warning(f"Exact filename match found for {body.filename}")
                 duplicate_found = True
                 existing_id = existing["id"]
                 break
@@ -168,45 +169,46 @@ async def analyze_dataset(
             )
 
         # Use provided dataset_id or create new one
-        if request.dataset_id:
-            dataset_id = request.dataset_id
+        if body.dataset_id:
+            dataset_id = body.dataset_id
             logger.info(f"Using existing dataset ID: {dataset_id}")
 
             # Verify the dataset exists
-            existing_dataset = supabase.table("datasets").select("id, processing_status").eq("id", dataset_id).execute()
+            existing_dataset = await asyncio.to_thread(
+                lambda: supabase.table("datasets").select("id, processing_status").eq("id", dataset_id).execute()
+            )
             if not existing_dataset.data:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Dataset with ID {dataset_id} not found"
                 )
 
-            # Skip dataset creation and go directly to analysis
-            # Add to global request cache to prevent duplicates
-            _active_requests[request_signature] = (dataset_id, current_time)
+            # Register in Redis so other workers skip this request
+            _redis.setex(f"dedup:{request_signature}", DEDUP_TTL, dataset_id)
             logger.info(f"Added existing dataset to deduplication cache: {request_signature} -> {dataset_id}")
 
         else:
             # Create new dataset record
             dataset_id = str(uuid.uuid4())
 
-            # Add to global request cache to prevent duplicates
-            _active_requests[request_signature] = (dataset_id, current_time)
+            # Register in Redis so other workers skip this request
+            _redis.setex(f"dedup:{request_signature}", DEDUP_TTL, dataset_id)
             logger.info(f"Added request to deduplication cache: {request_signature} -> {dataset_id}")
 
             # Calculate approximate data size
-            data_size_estimate = len(str(request.data).encode('utf-8'))
+            data_size_estimate = len(str(body.data).encode('utf-8'))
 
             # Insert enhanced dataset record
             dataset_data = {
                 "id": dataset_id,
-                "user_id": None,  # No authentication for now
-                "filename": request.filename,
+                "user_id": user_id,  # None for anonymous; populated when JWT is present
+                "filename": body.filename,
                 "file_size": data_size_estimate,
-                "file_type": request.file_type,
+                "file_type": body.file_type,
                 "processing_status": "processing",
-                "sample_data": request.data[:10],  # Store first 10 rows as sample
+                "sample_data": body.data[:10],  # Store first 10 rows as sample
                 "metadata": {
-                    "row_count": len(request.data),
+                    "row_count": len(body.data),
                     "column_count": len(df.columns),
                     "columns": list(df.columns),
                     "data_size_mb": round(data_size_estimate / (1024 * 1024), 2),
@@ -214,31 +216,14 @@ async def analyze_dataset(
                 }
             }
 
-            result = supabase.table("datasets").insert(dataset_data).execute()
-            logger.info(f"Created dataset record: {dataset_id} with {len(request.data)} rows and {len(df.columns)} columns")
-
-        # Initialize new pipeline orchestrator
-        orchestrator = PipelineOrchestrator()
-
-        # Run analysis in background using new orchestrator
-        if background_tasks:
-            background_tasks.add_task(
-                orchestrator.analyze_dataset,
-                request.data,
-                dataset_id
+            await asyncio.to_thread(
+                lambda: supabase.table("datasets").insert(dataset_data).execute()
             )
-        else:
-            # If no background tasks, run synchronously (for testing)
-            logger.warning("Running analysis synchronously - not recommended for production")
-            try:
-                result = await orchestrator.analyze_dataset(request.data, dataset_id)
-                return result
-            except Exception as sync_error:
-                logger.error(f"Synchronous analysis failed: {sync_error}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Analysis failed: {str(sync_error)}"
-                )
+            logger.info(f"Created dataset record: {dataset_id} with {len(body.data)} rows and {len(df.columns)} columns")
+
+        # Enqueue analysis as a Celery task (survives worker restarts)
+        run_analysis.delay(body.data, dataset_id)
+        logger.info(f"Enqueued analysis task for dataset {dataset_id}")
 
         # Return immediate response with dataset ID
         return AnalysisResponse(
@@ -264,8 +249,7 @@ async def analyze_dataset(
 async def get_analysis_status(dataset_id: str):
     """Get the current analysis status for a dataset using PipelineOrchestrator"""
     try:
-        orchestrator = PipelineOrchestrator()
-        status = await orchestrator.get_status(dataset_id)
+        status = await _orchestrator.get_status(dataset_id)
         
         if status.get("status") == "not_found":
             raise HTTPException(
@@ -289,8 +273,7 @@ async def get_analysis_status(dataset_id: str):
 async def get_analysis_results(dataset_id: str):
     """Get the complete analysis results for a dataset using PipelineOrchestrator"""
     try:
-        orchestrator = PipelineOrchestrator()
-        results = await orchestrator.get_results(dataset_id)
+        results = await _orchestrator.get_results(dataset_id)
 
         if not results:
             raise HTTPException(

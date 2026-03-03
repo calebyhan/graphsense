@@ -1,4 +1,4 @@
--- Auto Visualization Agent Database Schema
+-- GraphSense Database Schema
 -- Supabase PostgreSQL Schema
 
 -- Enable UUID extension

@@ -1,5 +1,5 @@
 """
-Base models and common types for the Auto Visualization Agent
+Base models and common types for the GraphSense
 """
 
 from enum import Enum

@@ -70,7 +70,7 @@ class ChartRecommenderAgent(BaseAgent):
             processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
             return self._create_success_result(
-                data={"recommendations": [rec.dict() for rec in recommendations]},
+                data={"recommendations": [rec.model_dump() for rec in recommendations]},
                 confidence=0.85,  # High confidence for rule-based recommendations
                 processing_time_ms=processing_time
             )
@@ -623,7 +623,7 @@ class ChartRecommenderAgent(BaseAgent):
                 ))
             
             return self._create_success_result(
-                data={"recommendations": [rec.dict() for rec in fallback_recommendations]},
+                data={"recommendations": [rec.model_dump() for rec in fallback_recommendations]},
                 confidence=0.3,  # Low confidence for fallback
                 processing_time_ms=0
             )
