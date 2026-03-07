@@ -17,7 +17,7 @@ xlrd==2.0.1
 python-json-logger==3.3.0
 prometheus-client==0.21.1
 psutil==6.1.1
-cachetools==5.5.2
+cachetools==7.0.3
 slowapi==0.1.9
 PyJWT==2.10.1
 celery==5.4.0
