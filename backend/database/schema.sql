@@ -73,9 +73,17 @@ CREATE POLICY "Users can view their own datasets"
     ON datasets FOR SELECT
     USING (auth.uid() = user_id);
 
+CREATE POLICY "Anyone can view anonymous datasets"
+    ON datasets FOR SELECT
+    USING (user_id IS NULL);
+
 CREATE POLICY "Users can insert their own datasets"
     ON datasets FOR INSERT
     WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Anyone can insert anonymous datasets"
+    ON datasets FOR INSERT
+    WITH CHECK (user_id IS NULL);
 
 CREATE POLICY "Users can update their own datasets"
     ON datasets FOR UPDATE

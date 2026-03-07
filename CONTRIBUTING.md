@@ -5,8 +5,27 @@
 - Node.js 18+
 - Python 3.11+
 - Docker & Docker Compose
-- Google Gemini API Key
-- Supabase Project
+- [Doppler CLI](https://docs.doppler.com/docs/install-cli) (replaces manual `.env` management)
+
+## Secret Management (Doppler)
+
+Secrets are managed via [Doppler](https://doppler.com). No `.env` file needed — Doppler injects secrets at runtime.
+
+**One-time setup (per machine):**
+
+```bash
+# Install Doppler CLI
+brew install dopplerhq/cli/doppler   # macOS
+# or: https://docs.doppler.com/docs/install-cli
+# may need to install dependency:
+# brew install gnupg
+
+# Authenticate
+doppler login
+
+# Link this repo to the project
+doppler setup   # select project: graphsense, config: dev
+```
 
 ## Setup
 
@@ -15,12 +34,10 @@
 ```bash
 git clone https://github.com/calebyhan/vthacks25.git
 cd vthacks25
-cp .env.example .env
-# Fill in required values in .env
-docker-compose up --build
+doppler run -- docker-compose up --build
 
 # Or run backend only (if running frontend locally)
-docker-compose up backend -d
+doppler run -- docker-compose up backend -d
 ```
 
 Services will be available at:
@@ -35,25 +52,24 @@ Services will be available at:
 # Terminal 1: Backend
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+doppler run -- uvicorn main:app --reload --port 8000
 
 # Terminal 2: Frontend
 cd frontend
 npm install
-npm run dev
+doppler run -- npm run dev
 ```
 
-## Environment Configuration
+## Environment Variables Reference
 
-Copy `.env.example` to `.env` and fill in the following:
+See `.env.example` for the full list of required variables. Key secrets:
 
 | Variable | Description |
 |---|---|
 | `GEMINI_API_KEY` | Google Gemini API key for AI analysis |
 | `SUPABASE_URL` | Your Supabase project URL |
-| `SUPABASE_ANON_KEY` | Supabase anonymous key (frontend) |
-| `SUPABASE_SERVICE_KEY` | Supabase service key (backend) |
-| `SUPABASE_JWT_SECRET` | JWT secret from Supabase project settings |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key — safe for frontend (`sb_publishable_...`) |
+| `SUPABASE_SECRET_KEY` | Supabase secret key — backend only (`sb_secret_...`) |
 
 ## Verify Installation
 

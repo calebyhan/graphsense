@@ -1,12 +1,12 @@
 """
 Authentication utilities — validate Supabase JWTs and extract the user_id.
 
-Supabase signs its JWTs with the project-level JWT secret found at:
-  Supabase Dashboard → Settings → API → JWT Secret
+Supabase now signs user JWTs with asymmetric keys (RS256). Verification
+uses the JWKS endpoint published at:
+  {SUPABASE_URL}/auth/v1/.well-known/jwks.json
 
-Set SUPABASE_JWT_SECRET in your .env. When missing, the dependency
-returns user_id=None so unauthenticated requests still work (anonymous
-datasets remain permitted).
+No JWT secret is needed. PyJWT's PyJWKClient fetches and caches the public
+keys automatically (10-minute TTL).
 """
 
 import logging
@@ -14,12 +14,22 @@ from typing import Optional
 
 import jwt
 from fastapi import Header, HTTPException
-from jwt import InvalidTokenError
+from jwt import InvalidTokenError, PyJWKClient
 
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+_jwks_client: Optional[PyJWKClient] = None
+
+
+def _get_jwks_client() -> PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+        _jwks_client = PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=600)
+    return _jwks_client
 
 
 def get_user_id(authorization: Optional[str] = Header(default=None)) -> Optional[str]:
@@ -37,17 +47,14 @@ def get_user_id(authorization: Optional[str] = Header(default=None)) -> Optional
 
     token = authorization.removeprefix("Bearer ").strip()
 
-    if not settings.supabase_jwt_secret:
-        # JWT secret not configured — log once and treat as anonymous
-        logger.warning("SUPABASE_JWT_SECRET not set; skipping JWT validation")
-        return None
-
     try:
+        client = _get_jwks_client()
+        signing_key = client.get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            options={"verify_aud": False},  # Supabase doesn't use a standard aud claim
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
         )
         user_id: Optional[str] = payload.get("sub")
         return user_id

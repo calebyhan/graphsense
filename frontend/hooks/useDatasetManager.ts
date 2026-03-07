@@ -36,22 +36,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
   const { data: datasets = [], isLoading, error, refetch } = useQuery({
     queryKey: ['datasets', user?.id || 'dev-user'],
     queryFn: async (): Promise<Dataset[]> => {
-      console.log('Loading datasets on refresh... User:', user?.id || 'dev-user (null treated as dev)');
-
       // Check if Supabase is properly configured
       if (!isSupabaseConfigured()) {
-        console.log('Supabase not configured, falling back to localStorage');
         return loadDatasetsFromLocalStorage();
       }
 
-      // For dev purposes, use null user_id to get datasets without authentication
       const userId = user?.id || null;
-      console.log('Using user ID for dataset query:', userId || 'null (dev mode)');
 
       // Fetch datasets using the service
       try {
         const dbDatasets = await DatasetService.getUserDatasets(userId);
-        console.log(`Retrieved ${dbDatasets.length} datasets from Supabase`);
 
         // Transform database datasets to frontend format
         const transformedDatasets: Dataset[] = await Promise.all(
@@ -62,7 +56,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
             let actualData: any[] = [];
             if (dbDataset.processing_status === 'completed' && metadata.sample_data) {
               actualData = Array.isArray(metadata.sample_data) ? metadata.sample_data : [];
-              console.log(`Dataset ${dbDataset.filename}: Loaded ${actualData.length} sample rows`);
             }
 
             return {
@@ -89,9 +82,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           })
         );
 
-        console.log('Successfully loaded and transformed datasets from Supabase:',
-          transformedDatasets.map(d => ({ id: d.id, name: d.name, hasData: (d.data?.length || 0) > 0, status: d.processingStatus }))
-        );
         return transformedDatasets;
       } catch (error) {
         console.error('Error loading datasets from Supabase:', error);
@@ -115,16 +105,11 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
     mutationFn: async (params: CreateDatasetWithLifecycleParams): Promise<Dataset> => {
       const { file, onProgress, onStatusChange } = params;
 
-      console.log('Creating dataset with lifecycle for file:', file.name);
-
-      // Get user ID (null for dev mode)
       const userId = user?.id || null;
-      console.log('Creating dataset for user:', userId || 'null (dev mode)');
 
       // Check if this mutation is already in progress (prevent React Strict Mode duplicates)
       const inProgressKey = `creating-${file.name}-${file.size}`;
       if (typeof window !== 'undefined' && (window as any)[inProgressKey]) {
-        console.log('Upload already in progress for:', file.name);
         throw new Error('Upload already in progress for this file');
       }
       
@@ -138,7 +123,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         const existingDatasets = await DatasetService.getUserDatasets(userId);
         const duplicateExists = existingDatasets.some(d => d.filename === file.name);
         if (duplicateExists) {
-          console.log('Dataset with filename already exists:', file.name);
           // Don't throw error, just return existing dataset to prevent UI issues
           const existing = existingDatasets.find(d => d.filename === file.name)!;
           const metadata = (existing.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
@@ -227,7 +211,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           processingStatus: 'completed'
         };
 
-          console.log('Dataset created with full lifecycle:', newDataset);
           return newDataset;
 
         } catch (error) {
@@ -254,17 +237,13 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       }
     },
     onSuccess: (newDataset, variables) => {
-      console.log('Dataset created with lifecycle:', newDataset);
-
       // Update React Query cache (avoid duplicates by checking ID)
       queryClient.setQueryData(['datasets', user?.id || 'dev-user'], (oldData: Dataset[] | undefined) => {
         const current = oldData || [];
         const exists = current.some(d => d.id === newDataset.id);
         if (!exists) {
-          console.log('Adding new dataset to cache:', newDataset.name);
           return [newDataset, ...current];
         } else {
-          console.log('Dataset already exists in cache, updating:', newDataset.name);
           return current.map(d => d.id === newDataset.id ? newDataset : d);
         }
       });
@@ -284,12 +263,10 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         setTimeout(() => variables.onDatasetCreated?.(newDataset), 0);
       }
 
-      console.log('Dataset created successfully with full lifecycle:', newDataset);
     },
     onError: (error) => {
       console.error('Failed to create dataset with lifecycle:', error);
-      const dbError = handleError(error);
-      console.error('Processed error:', dbError);
+      handleError(error);
     },
   });
 
@@ -299,20 +276,11 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
     mutationFn: async (params: CreateDatasetParams): Promise<Dataset> => {
       const { rawData, dataProfile, filename } = params;
 
-      console.log('Creating dataset directly with data:', {
-        hasRawData: !!rawData,
-        rawDataLength: rawData?.length,
-        hasDataProfile: !!dataProfile,
-        filename
-      });
-
       if (!rawData || rawData.length === 0) {
         throw new Error('No raw data provided');
       }
 
-      // Get user ID (null for dev mode)
       const userId = user?.id || null;
-      console.log('Creating legacy dataset for user:', userId || 'null (dev mode)');
 
       // Analyze the data
       const dataAnalysis = analyzeData(rawData);
@@ -354,21 +322,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         processingStatus: 'completed'
       };
 
-      console.log('Created new dataset directly:', newDataset);
       return newDataset;
     },
     onSuccess: (newDataset) => {
-      console.log('MUTATION SUCCESS - Dataset created in Supabase:', newDataset);
-
       // Update React Query cache with the new dataset (prevent duplicates)
       queryClient.setQueryData(['datasets', user?.id || 'dev-user'], (oldData: Dataset[] | undefined) => {
         const current = oldData || [];
         const exists = current.some(d => d.id === newDataset.id);
         if (!exists) {
-          console.log('Adding legacy dataset to cache:', newDataset.name);
           return [newDataset, ...current];
         } else {
-          console.log('Legacy dataset already exists in cache, updating:', newDataset.name);
           return current.map(d => d.id === newDataset.id ? newDataset : d);
         }
       });
@@ -383,12 +346,10 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         setTimeout(() => options.onDatasetCreated?.(newDataset), 0);
       }
 
-      console.log('Dataset created successfully and cache updated:', newDataset);
     },
     onError: (error) => {
       console.error('Failed to create dataset:', error);
-      const dbError = handleError(error);
-      console.error('Processed error:', dbError);
+      handleError(error);
     },
   });
 
@@ -396,17 +357,8 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
   // Mutation to remove dataset using service
   const removeDatasetMutation = useMutation({
     mutationFn: async (datasetId: string) => {
-      console.log('Removing dataset:', datasetId);
-
-      // Ensure user is authenticated
-      // Get user ID (null for dev mode)
       const userId = user?.id || null;
-      console.log('Deleting dataset for user:', userId || 'null (dev mode)');
-
-      // Delete using service (handles cascade deletion)
       await DatasetService.deleteDataset(datasetId, userId);
-
-      console.log('Dataset deleted successfully');
       return datasetId;
     },
     onSuccess: (deletedId) => {
@@ -418,13 +370,10 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
       queryClient.invalidateQueries({ queryKey: ['visualizations'] });
-
-      console.log('Dataset removed from cache:', deletedId);
     },
     onError: (error) => {
       console.error('Failed to remove dataset:', error);
-      const dbError = handleError(error);
-      console.error('Processed error:', dbError);
+      handleError(error);
     },
   });
 
@@ -445,9 +394,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
   // Function to update dataset status
   const updateDatasetStatus = useCallback(async (datasetId: string, status: ProcessingStatus, errorMessage?: string) => {
-    const userId = user?.id || null;
-    console.log('Updating dataset status for user:', userId || 'null (dev mode)');
-
     await DatasetService.updateProcessingStatus(datasetId, status, errorMessage);
 
     // Invalidate cache to refetch data
@@ -456,7 +402,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
   // Add refresh functionality for manual data reload
   const refreshDatasets = useCallback(() => {
-    console.log('Manually refreshing datasets from Supabase...');
     return refetch();
   }, [refetch]);
 
@@ -464,7 +409,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && isSupabaseConfigured()) {
-        console.log('Page visible again, refreshing datasets...');
         refetch();
       }
     };
@@ -472,16 +416,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [refetch]);
-
-  // Log dataset loading status for debugging
-  useEffect(() => {
-    console.log('Dataset Manager Status:', {
-      datasetsCount: datasets.length,
-      isLoading,
-      hasError: !!error,
-      errorMessage: error?.message
-    });
-  }, [datasets.length, isLoading, error]);
 
   return {
     datasets,
@@ -553,7 +487,6 @@ function parseCSVText(text: string): Array<Record<string, any>> {
       return [];
     }
 
-    console.log('parseCSVText: Successfully parsed', results.data.length, 'rows');
     return results.data as Array<Record<string, any>>;
   } catch (error) {
     console.error('parseCSVText: Failed to parse CSV:', error);
@@ -635,9 +568,7 @@ function loadDatasetsFromLocalStorage(): Dataset[] {
 
   try {
     const stored = localStorage.getItem('datasets');
-    const parsedDatasets = stored ? JSON.parse(stored) : [];
-    console.log('Loaded datasets from localStorage:', parsedDatasets);
-    return parsedDatasets;
+    return stored ? JSON.parse(stored) : [];
   } catch (error) {
     console.error('Failed to load datasets from localStorage:', error);
     return [];

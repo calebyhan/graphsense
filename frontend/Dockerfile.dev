@@ -1,6 +1,8 @@
 # Development Dockerfile for Next.js with hot reload
 FROM node:20-alpine
 
+RUN apk add --no-cache libc6-compat
+
 WORKDIR /app
 
 # Install dependencies
@@ -9,6 +11,12 @@ RUN npm ci
 
 # Copy source code
 COPY . .
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs && \
+    chown -R nextjs:nodejs /app
+
+USER nextjs
 
 # Expose port
 EXPOSE 3000

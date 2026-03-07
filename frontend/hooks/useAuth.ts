@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
 
@@ -20,40 +20,12 @@ export function useAuth() {
   });
 
   useEffect(() => {
-    // Get initial session
-    const getInitialSession = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-
-        if (error) {
-          console.error('Error getting session:', error);
-          setAuthState(prev => ({ ...prev, error: error.message, loading: false }));
-          return;
-        }
-
-        setAuthState({
-          user: session?.user || null,
-          session,
-          loading: false,
-          error: null,
-        });
-      } catch (err) {
-        console.error('Auth initialization error:', err);
-        setAuthState(prev => ({
-          ...prev,
-          error: 'Failed to initialize authentication',
-          loading: false
-        }));
-      }
-    };
-
-    getInitialSession();
-
-    // Listen for auth changes
+    // onAuthStateChange fires INITIAL_SESSION immediately on subscribe,
+    // so no separate getSession() call is needed.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      (_event, session) => {
         setAuthState({
-          user: session?.user || null,
+          user: session?.user ?? null,
           session,
           loading: false,
           error: null,
@@ -66,74 +38,45 @@ export function useAuth() {
     };
   }, []);
 
-  const signInAnonymously = async () => {
+  const signInAnonymously = useCallback(async () => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
-
       const { data, error } = await supabase.auth.signInAnonymously();
-
       if (error) {
         setAuthState(prev => ({ ...prev, error: error.message, loading: false }));
         return { user: null, error };
       }
-
       return { user: data.user, error: null };
-    } catch (err) {
+    } catch {
       const errorMessage = 'Failed to sign in anonymously';
       setAuthState(prev => ({ ...prev, error: errorMessage, loading: false }));
       return { user: null, error: new Error(errorMessage) };
     }
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       setAuthState(prev => ({ ...prev, loading: true, error: null }));
-
       const { error } = await supabase.auth.signOut();
-
       if (error) {
         setAuthState(prev => ({ ...prev, error: error.message, loading: false }));
         return { error };
       }
-
-      setAuthState({
-        user: null,
-        session: null,
-        loading: false,
-        error: null,
-      });
-
       return { error: null };
-    } catch (err) {
+    } catch {
       const errorMessage = 'Failed to sign out';
       setAuthState(prev => ({ ...prev, error: errorMessage, loading: false }));
       return { error: new Error(errorMessage) };
     }
-  };
+  }, []);
 
-  const ensureAuth = async (): Promise<User | null> => {
-    if (authState.user) {
-      return authState.user;
-    }
-
-    if (authState.loading) {
-      // Wait for auth to finish loading
-      return new Promise((resolve) => {
-        const checkAuth = () => {
-          if (!authState.loading) {
-            resolve(authState.user);
-          } else {
-            setTimeout(checkAuth, 100);
-          }
-        };
-        checkAuth();
-      });
-    }
-
-    // Try to sign in anonymously if no user
+  // Calls getSession() directly to avoid reading stale closed-over state.
+  const ensureAuth = useCallback(async (): Promise<User | null> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) return session.user;
     const { user } = await signInAnonymously();
     return user;
-  };
+  }, [signInAnonymously]);
 
   return {
     user: authState.user,

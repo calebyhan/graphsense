@@ -21,7 +21,7 @@ def get_supabase_client() -> Client:
         try:
             _supabase_client = create_client(
                 supabase_url=settings.supabase_url,
-                supabase_key=settings.supabase_service_key
+                supabase_key=settings.supabase_secret_key
             )
             logger.info("Supabase client created successfully")
         except Exception as e:

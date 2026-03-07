@@ -32,8 +32,15 @@ settings = get_settings()
 _redis = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
 DEDUP_TTL = 60  # seconds
 
-# Module-level orchestrator — one instance per process (avoids per-request init cost)
-_orchestrator = PipelineOrchestrator()
+# Lazy orchestrator — initialized on first use to avoid startup crash if DB is unconfigured
+_orchestrator: Optional[PipelineOrchestrator] = None
+
+
+def _get_orchestrator() -> PipelineOrchestrator:
+    global _orchestrator
+    if _orchestrator is None:
+        _orchestrator = PipelineOrchestrator()
+    return _orchestrator
 
 
 class AnalysisRequest(BaseModel):
@@ -249,7 +256,7 @@ async def analyze_dataset(
 async def get_analysis_status(dataset_id: str):
     """Get the current analysis status for a dataset using PipelineOrchestrator"""
     try:
-        status = await _orchestrator.get_status(dataset_id)
+        status = await _get_orchestrator().get_status(dataset_id)
         
         if status.get("status") == "not_found":
             raise HTTPException(
@@ -273,7 +280,7 @@ async def get_analysis_status(dataset_id: str):
 async def get_analysis_results(dataset_id: str):
     """Get the complete analysis results for a dataset using PipelineOrchestrator"""
     try:
-        results = await _orchestrator.get_results(dataset_id)
+        results = await _get_orchestrator().get_results(dataset_id)
 
         if not results:
             raise HTTPException(

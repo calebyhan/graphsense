@@ -20,9 +20,8 @@ class Settings(BaseSettings):
 
     # Supabase Configuration
     supabase_url: str
-    supabase_service_key: str
-    supabase_anon_key: str = ""
-    supabase_jwt_secret: str = ""  # Dashboard → Settings → API → JWT Secret
+    supabase_secret_key: str  # Dashboard → Settings → API → Secret key (sb_secret_...)
+    supabase_publishable_key: str = ""  # Dashboard → Settings → API → Publishable key (sb_publishable_...)
 
     # Google Gemini API
     gemini_api_key: str
