@@ -1,0 +1,55 @@
+name: AI and Static Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  complexity-and-security:
+    name: Complexity and Security Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install analysis tools
+        run: pip install radon bandit
+
+      - name: Run complexity analysis
+        working-directory: backend
+        continue-on-error: true
+        run: |
+          echo "## Code Complexity Report" > complexity-report.md
+          echo "" >> complexity-report.md
+          echo "### Cyclomatic Complexity" >> complexity-report.md
+          radon cc app -a -s >> complexity-report.md || true
+          echo "" >> complexity-report.md
+          echo "### Maintainability Index" >> complexity-report.md
+          radon mi app -s >> complexity-report.md || true
+          cat complexity-report.md
+
+      - name: Run security scan
+        working-directory: backend
+        continue-on-error: true
+        run: |
+          echo "## Security Scan Report" > security-report.md
+          bandit -r app -f markdown >> security-report.md || true
+          cat security-report.md
+
+      - name: Upload analysis reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-analysis-reports
+          path: |
+            backend/complexity-report.md
+            backend/security-report.md
