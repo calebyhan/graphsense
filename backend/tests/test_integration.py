@@ -19,6 +19,20 @@ SMALL_DATA = [
 ]
 
 
+def _server_reachable() -> bool:
+    try:
+        httpx.get(f"{BASE_URL}/", timeout=3)
+        return True
+    except Exception:
+        return False
+
+
+server_available = pytest.mark.skipif(
+    not _server_reachable(),
+    reason=f"Backend server not reachable at {BASE_URL}",
+)
+
+
 @pytest.fixture(scope="module")
 def http():
     with httpx.Client(base_url=BASE_URL, timeout=15) as client:
@@ -27,6 +41,7 @@ def http():
 
 # ── Root & health ─────────────────────────────────────────────────────────────
 
+@server_available
 def test_root(http):
     r = http.get("/")
     assert r.status_code == 200
@@ -34,11 +49,13 @@ def test_root(http):
     assert body["status"] == "running"
 
 
+@server_available
 def test_health(http):
     r = http.get("/health/")
     assert r.status_code == 200
 
 
+@server_available
 def test_health_detailed(http):
     r = http.get("/health/detailed")
     assert r.status_code == 200
@@ -46,12 +63,14 @@ def test_health_detailed(http):
 
 # ── Analysis — input validation (no Supabase needed) ─────────────────────────
 
+@server_available
 def test_analyze_empty_data_rejected(http):
     """Empty dataset must be rejected before touching Supabase."""
     r = http.post("/api/analysis/analyze", json={"data": [], "filename": "empty.csv"})
     assert r.status_code == 400
 
 
+@server_available
 def test_analyze_oversized_data_rejected(http):
     """Datasets over the row limit must be rejected before touching Supabase."""
     big = [{"x": i} for i in range(50001)]
@@ -59,12 +78,14 @@ def test_analyze_oversized_data_rejected(http):
     assert r.status_code == 400
 
 
+@server_available
 def test_analyze_missing_data_field_rejected(http):
     """Request without the data field must be rejected (422)."""
     r = http.post("/api/analysis/analyze", json={"filename": "test.csv"})
     assert r.status_code in (400, 422)
 
 
+@server_available
 def test_analyze_invalid_body_rejected(http):
     """Non-JSON / completely wrong body must be rejected."""
     r = http.post(
@@ -77,12 +98,14 @@ def test_analyze_invalid_body_rejected(http):
 
 # ── Analysis — status endpoint ────────────────────────────────────────────────
 
+@server_available
 def test_status_unknown_id_returns_404(http):
     """Status for a non-existent dataset must return 404."""
     r = http.get("/api/analysis/status/00000000-0000-0000-0000-000000000000")
     assert r.status_code == 404
 
 
+@server_available
 def test_results_unknown_id_returns_404(http):
     """Results for a non-existent dataset must return 404."""
     r = http.get("/api/analysis/results/00000000-0000-0000-0000-000000000000")

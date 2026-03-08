@@ -175,6 +175,7 @@ export class RecommendationProcessor {
     const justifications: Record<ChartType, string> = {
       'line': 'Perfect for showing trends and changes over time, making it easy to identify patterns and trajectories in your data.',
       'bar': 'Ideal for comparing values across different categories, providing clear visual comparison of quantities.',
+      'column': 'Ideal for comparing values across different categories with vertical bars, providing clear visual comparison of quantities.',
       'scatter': 'Excellent for exploring relationships and correlations between two numeric variables, revealing patterns and outliers.',
       'pie': 'Great for showing proportional relationships and part-to-whole comparisons in categorical data.',
       'histogram': 'Perfect for understanding the distribution and frequency of values in your dataset.',

@@ -48,11 +48,12 @@ export class SharingService {
       const { data, error } = await supabase
         .from('visualizations')
         .insert({
+          dataset_id: '',
           user_id: user.id,
           chart_type: options.chartType,
           title: options.title || options.chartConfig.title,
           description: options.description,
-          chart_config: options.chartConfig,
+          chart_config: options.chartConfig as any,
           is_shared: true,
         })
         .select('share_token, id')
@@ -63,7 +64,7 @@ export class SharingService {
       const shareUrl = `${window.location.origin}/shared/${data.share_token}`;
 
       return {
-        shareToken: data.share_token,
+        shareToken: data.share_token as string,
         shareUrl,
         ...(options.expiresIn && {
           expiresAt: new Date(Date.now() + options.expiresIn * 60 * 60 * 1000)
@@ -116,12 +117,12 @@ export class SharingService {
 
       return {
         id: data.id,
-        title: data.title,
-        description: data.description,
+        title: data.title ?? '',
+        description: data.description ?? undefined,
         chartType: data.chart_type,
-        chartConfig: data.chart_config,
-        shareToken: data.share_token,
-        isShared: data.is_shared,
+        chartConfig: data.chart_config as unknown as ChartConfig,
+        shareToken: data.share_token as string,
+        isShared: data.is_shared as boolean,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
@@ -153,12 +154,12 @@ export class SharingService {
 
       return data.map(item => ({
         id: item.id,
-        title: item.title,
-        description: item.description,
+        title: item.title ?? '',
+        description: item.description ?? undefined,
         chartType: item.chart_type,
-        chartConfig: item.chart_config,
-        shareToken: item.share_token,
-        isShared: item.is_shared,
+        chartConfig: item.chart_config as unknown as ChartConfig,
+        shareToken: item.share_token as string,
+        isShared: item.is_shared as boolean,
         createdAt: item.created_at,
         updatedAt: item.updated_at,
       }));

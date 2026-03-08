@@ -273,7 +273,7 @@ export class ChartParameterExtractor {
       case 'sankey':
         return 'Flow Diagram';
       default:
-        return `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart`;
+        return `${String(chartType).charAt(0).toUpperCase() + String(chartType).slice(1)} Chart`;
     }
   }
 

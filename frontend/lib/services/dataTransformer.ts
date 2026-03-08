@@ -195,12 +195,11 @@ export class DataTransformer {
       return acc;
     }, {} as Record<string, number>);
 
-    return Object.entries(aggregated)
+    return (Object.entries(aggregated) as [string, number][])
       .map(([name, value]) => ({
         name,
         value,
         [category]: name,
-        [value]: value,
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10); // Limit to 10 slices
@@ -302,13 +301,12 @@ export class DataTransformer {
       return acc;
     }, {} as Record<string, number>);
 
-    return Object.entries(aggregated)
+    return (Object.entries(aggregated) as [string, number][])
       .map(([name, value]) => ({
         name,
         value,
         size: value,
         [category]: name,
-        [value]: value,
       }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 20);

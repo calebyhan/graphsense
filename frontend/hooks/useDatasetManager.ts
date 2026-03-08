@@ -397,7 +397,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
     await DatasetService.updateProcessingStatus(datasetId, status, errorMessage);
 
     // Invalidate cache to refetch data
-    queryClient.invalidateQueries({ queryKey: ['datasets', userId || 'dev-user'] });
+    queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
   }, [user?.id, queryClient]);
 
   // Add refresh functionality for manual data reload

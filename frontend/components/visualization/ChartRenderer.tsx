@@ -607,7 +607,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
   }, [config, processedData, performanceInfo]);
 
   const renderChart = useCallback(() => {
-    if (!processedConfig) return null;
+    if (!processedConfig) return <g />;
     switch (chartType) {
       case 'line':
         // Auto-detect fields for line chart  

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
 export function useKeyboardShortcuts() {
-  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, toggleDatasetPanel, canvasElements, updateViewport, viewport } = useCanvasStore();
+  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, canvasElements, updateViewport, viewport } = useCanvasStore();
 
   const handleZoomIn = () => {
     // Zoom in by 10% increments for finer control
@@ -96,12 +96,6 @@ export function useKeyboardShortcuts() {
             e.preventDefault();
           }
           break;
-        case 'd':
-          if (!e.ctrlKey && !e.metaKey) {
-            toggleDatasetPanel();
-            e.preventDefault();
-          }
-          break;
         case 't':
           if (e.shiftKey) {
             setSelectedTool('text');
@@ -169,5 +163,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, toggleDatasetPanel, handleFitToScreen, handleZoomIn, handleZoomOut, viewport]);
+  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, handleFitToScreen, handleZoomIn, handleZoomOut, viewport]);
 }
