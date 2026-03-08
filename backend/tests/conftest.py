@@ -5,9 +5,24 @@ These tests use FastAPI's TestClient with mocked Supabase and Gemini dependencie
 so they run without real credentials.
 """
 
+# Set clean env vars BEFORE any app imports trigger get_settings() at module level.
+# This overrides Doppler values that may contain inline comments (e.g. "true  # comment").
+import os
+os.environ.update({
+    "SUPABASE_URL": "https://test.supabase.co",
+    "SUPABASE_SECRET_KEY": "test-secret-key",
+    "GEMINI_API_KEY": "test-gemini-key",
+    "DEBUG": "false",
+    "MAX_FILE_SIZE": "104857600",
+    "REDIS_URL": "redis://localhost:6379/0",
+})
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
+
+from app.core.config import get_settings
+get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -30,11 +45,29 @@ def mock_supabase():
 
 
 @pytest.fixture
-def app(mock_supabase):
-    """FastAPI test app with Supabase and Celery mocked out."""
+def mock_redis():
+    """Redis client with no cached dedup entries by default."""
+    redis = MagicMock()
+    redis.get.return_value = None
+    redis.setex.return_value = True
+    return redis
+
+
+@pytest.fixture
+def app(mock_supabase, mock_redis):
+    """FastAPI test app with Supabase, Redis, and Celery mocked out."""
     with (
-        patch("app.database.supabase_client.get_supabase_client", return_value=mock_supabase),
-        patch("app.worker.run_analysis") as mock_task,
+        # Patch at usage sites — required because routes use `from X import fn`
+        patch("app.api.routes.analysis.get_supabase_client", return_value=mock_supabase),
+        patch("app.api.routes.visualizations.get_supabase_client", return_value=mock_supabase),
+        # PipelineOrchestrator stores supabase at __init__ time; patch before lazy init
+        patch("app.services.pipeline_orchestrator.get_supabase_client", return_value=mock_supabase),
+        # Reset lazy orchestrator so each test gets a fresh instance with the mocked client
+        patch("app.api.routes.analysis._orchestrator", None),
+        # Mock Redis to avoid real connections and control dedup behaviour
+        patch("app.api.routes.analysis._redis", mock_redis),
+        # Patch run_analysis at its import site in the routes module
+        patch("app.api.routes.analysis.run_analysis") as mock_task,
     ):
         mock_task.delay = MagicMock()
         from main import app as _app

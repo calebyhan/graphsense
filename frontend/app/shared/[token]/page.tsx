@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { BarChart3, ExternalLink, Download, AlertCircle, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { BarChart3, ExternalLink, AlertCircle, Loader2 } from 'lucide-react';
 import { SharingService, SharedVisualization } from '@/lib/services/sharingService';
 import ChartRenderer from '@/components/visualization/ChartRenderer';
 import ExportButton from '@/components/canvas/ExportButton';
@@ -71,13 +72,13 @@ export default function SharedVisualizationPage() {
             <p className="text-gray-600 mb-6">
               {error || 'This shared chart could not be found or is no longer available.'}
             </p>
-            <a
+            <Link
               href="/"
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <ExternalLink className="h-4 w-4" />
               Create Your Own Chart
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -109,13 +110,13 @@ export default function SharedVisualizationPage() {
                 <p className="text-sm text-gray-600">Shared Chart</p>
               </div>
             </div>
-            <a
+            <Link
               href="/"
               className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <ExternalLink className="h-4 w-4" />
               Create Your Own
-            </a>
+            </Link>
           </div>
         </div>
       </header>
@@ -199,13 +200,13 @@ export default function SharedVisualizationPage() {
             <p className="text-gray-600 mb-6">
               Upload your dataset and let our 3-agent AI pipeline analyze your data and recommend the best visualizations.
             </p>
-            <a
+            <Link
               href="/"
               className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               <BarChart3 className="h-5 w-5" />
               Get Started for Free
-            </a>
+            </Link>
           </div>
         </div>
       </main>

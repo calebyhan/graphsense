@@ -171,6 +171,7 @@ async def analyze_dataset(
             return AnalysisResponse(
                 success=True,
                 dataset_id=existing_id,
+                recommendations=[],
                 message="Analysis already in progress for this dataset",
                 processing_time_ms=0
             )

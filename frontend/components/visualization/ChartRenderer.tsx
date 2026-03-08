@@ -606,15 +606,8 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
     };
   }, [config, processedData, performanceInfo]);
 
-  if (!processedConfig) {
-    return (
-      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
-        <p className="text-gray-500">No data available for visualization</p>
-      </div>
-    );
-  }
-
   const renderChart = useCallback(() => {
+    if (!processedConfig) return null;
     switch (chartType) {
       case 'line':
         // Auto-detect fields for line chart  
@@ -1031,6 +1024,14 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
         );
     }
   }, [chartType, processedConfig]);
+
+  if (!processedConfig) {
+    return (
+      <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+        <p className="text-gray-500">No data available for visualization</p>
+      </div>
+    );
+  }
 
   // D3 charts need to be rendered directly, not wrapped in ResponsiveContainer
   const isD3Chart = ['histogram', 'box_plot', 'heatmap', 'sankey'].includes(chartType);

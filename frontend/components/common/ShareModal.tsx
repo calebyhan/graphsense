@@ -113,7 +113,7 @@ export default function ShareModal({ isOpen, onClose, shareOptions }: ShareModal
                   <div className="text-sm">
                     <p className="text-blue-800 font-medium mb-1">Public Sharing</p>
                     <p className="text-blue-700">
-                      Anyone with the link will be able to view this chart. The link doesn't expire unless you delete the shared chart.
+                      Anyone with the link will be able to view this chart. The link does not expire unless you delete the shared chart.
                     </p>
                   </div>
                 </div>
