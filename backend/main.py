@@ -15,7 +15,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.core.logging_config import setup_logging
-from app.api.routes import datasets, analysis, visualizations, health
+from app.api.routes import datasets, analysis, visualizations, health, canvases
 from app.database.supabase_client import get_supabase_client
 
 
@@ -93,6 +93,11 @@ app.include_router(
     visualizations.router,
     prefix="/api/visualizations",
     tags=["Visualization Management"]
+)
+app.include_router(
+    canvases.router,
+    prefix="/api/canvases",
+    tags=["Canvas Collaboration"]
 )
 
 
