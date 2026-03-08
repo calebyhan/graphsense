@@ -41,14 +41,14 @@ Closes #
 ### Test Commands
 
 ```bash
-# Backend tests
+# Backend unit tests
 cd backend && pytest
 
-# Integration tests
-node test/test-integration.js
+# Integration tests (requires backend running on :8000)
+cd backend && pytest tests/test_integration.py -v
 
-# Frontend tests (if applicable)
-cd frontend && npm test
+# Frontend lint + type-check
+cd frontend && npm run lint && npx tsc --noEmit
 ```
 
 ### Manual Testing Steps
