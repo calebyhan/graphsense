@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreHorizontal, Share2, Trash2, LogOut, Database, BarChart2 } from 'lucide-react';
+import { MoreHorizontal, Share2, Trash2, Database } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Canvas, SharedCanvas } from '@/lib/api/backendClient';

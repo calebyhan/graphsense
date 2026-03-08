@@ -222,6 +222,7 @@ async def get_canvas(canvas_id: str, user_id: str = Depends(require_user)):
         "permission": permission,
         "has_share_link": canvas.data["share_permission"] is not None,
         "datasets": datasets,
+        "dataset_count": len(datasets),
     }
 
 
@@ -370,18 +371,15 @@ async def list_collaborators(canvas_id: str, user_id: str = Depends(require_user
     from app.database.supabase_client import get_supabase_admin_client
     admin = get_supabase_admin_client()
 
-    result = []
-    for row in collabs.data:
-        email = None
-        try:
-            resp = await asyncio.to_thread(
-                lambda uid=row["user_id"]: admin.auth.admin.get_user_by_id(uid)
-            )
-            email = resp.user.email if resp.user else None
-        except Exception:
-            pass
-        result.append({**row, "email": email})
-    return result
+    responses = await asyncio.gather(
+        *[asyncio.to_thread(lambda uid=row["user_id"]: admin.auth.admin.get_user_by_id(uid))
+          for row in collabs.data],
+        return_exceptions=True,
+    )
+    return [
+        {**row, "email": resp.user.email if not isinstance(resp, Exception) and getattr(resp, "user", None) else None}
+        for row, resp in zip(collabs.data, responses)
+    ]
 
 
 # ---------------------------------------------------------------------------

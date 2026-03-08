@@ -14,7 +14,7 @@ interface UseCanvasPermissionResult {
 }
 
 export function useCanvasPermission(canvasId: string): UseCanvasPermissionResult {
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const accessToken = session?.access_token;
 
   const [permission, setPermission] = useState<Permission>(null);
@@ -34,10 +34,13 @@ export function useCanvasPermission(canvasId: string): UseCanvasPermissionResult
   }, [canvasId]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (accessToken) {
       fetchPermission(accessToken);
+    } else {
+      setLoading(false);
     }
-  }, [fetchPermission, accessToken]);
+  }, [fetchPermission, accessToken, authLoading]);
 
   const joinViaToken = useCallback(async (token: string): Promise<{ error: string | null }> => {
     try {
