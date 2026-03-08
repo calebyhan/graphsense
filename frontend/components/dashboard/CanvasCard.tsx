@@ -10,7 +10,7 @@ import { ShareDialog } from '@/components/canvas/ShareDialog';
 
 interface OwnedCanvasCardProps {
   canvas: Canvas;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void>;
 }
 
 export function OwnedCanvasCard({ canvas, onDelete }: OwnedCanvasCardProps) {
@@ -23,7 +23,7 @@ export function OwnedCanvasCard({ canvas, onDelete }: OwnedCanvasCardProps) {
     if (!confirm(`Delete "${canvas.name}"? This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      onDelete(canvas.id);
+      await onDelete(canvas.id);
     } finally {
       setDeleting(false);
       setMenuOpen(false);

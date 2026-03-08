@@ -7,7 +7,8 @@ import { supabase } from '@/lib/supabase/client';
 
 function SignupForm() {
   const searchParams = useSearchParams();
-  const redirect = searchParams.get('redirect') || '/dashboard';
+  const rawRedirect = searchParams.get('redirect') || '';
+  const redirect = rawRedirect.startsWith('/') ? rawRedirect : '/dashboard';
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

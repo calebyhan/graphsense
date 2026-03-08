@@ -424,7 +424,7 @@ export default function AutoVizAgent({ readOnly = false }: { readOnly?: boolean 
                   element={element}
                   isSelected={selectedVizId === element.id}
                   onSelect={() => handleVisualizationSelect(element.id)}
-                  onDelete={() => handleVisualizationDelete(element.id)}
+                  onDelete={readOnly ? undefined : () => handleVisualizationDelete(element.id)}
                 >
                   {element.type === 'chart' && (
                     <ChartCard
@@ -453,25 +453,29 @@ export default function AutoVizAgent({ readOnly = false }: { readOnly?: boolean 
             </div>
           </InfiniteCanvas>
 
-          {/* Floating Toolbar */}
-          <FloatingToolbar
-            onAddVisualization={handleAutoViz}
-            onDeleteSelected={handleDeleteSelected}
-            hasSelection={selectedVizId !== null}
-          />
+          {/* Floating Toolbar — hidden in read-only mode */}
+          {!readOnly && (
+            <FloatingToolbar
+              onAddVisualization={handleAutoViz}
+              onDeleteSelected={handleDeleteSelected}
+              hasSelection={selectedVizId !== null}
+            />
+          )}
 
 
         </div>
 
-        {/* Visualization Panel - Right Sidebar */}
-        <VisualizationPanel 
-          selectedDataset={selectedDataset}
-          recommendations={recommendations}
-          isAnalyzing={isAnalyzing}
-          onCreateVisualization={createVisualizationFromRecommendation}
-          onAutoViz={handleAutoViz}
-          visualizationPositions={visualizationPositions}
-        />
+        {/* Visualization Panel - Right Sidebar — hidden in read-only mode */}
+        {!readOnly && (
+          <VisualizationPanel
+            selectedDataset={selectedDataset}
+            recommendations={recommendations}
+            isAnalyzing={isAnalyzing}
+            onCreateVisualization={createVisualizationFromRecommendation}
+            onAutoViz={handleAutoViz}
+            visualizationPositions={visualizationPositions}
+          />
+        )}
       </div>
     </div>
   );

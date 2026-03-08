@@ -90,20 +90,24 @@ async def list_canvases(user_id: str = Depends(require_user)):
         .execute()
     )
 
-    result = []
-    for canvas in canvases.data:
-        dataset_count = await asyncio.to_thread(
-            lambda cid=canvas["id"]: supabase.table("canvas_datasets")
+    async def get_dataset_count(cid: str) -> int:
+        r = await asyncio.to_thread(
+            lambda: supabase.table("canvas_datasets")
             .select("dataset_id", count="exact")
             .eq("canvas_id", cid)
             .execute()
         )
-        result.append({
+        return r.count or 0
+
+    counts = await asyncio.gather(*[get_dataset_count(c["id"]) for c in canvases.data])
+    return [
+        {
             **canvas,
             "has_share_link": canvas["share_permission"] is not None,
-            "dataset_count": dataset_count.count or 0,
-        })
-    return result
+            "dataset_count": count,
+        }
+        for canvas, count in zip(canvases.data, counts)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -124,37 +128,47 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
     from app.database.supabase_client import get_supabase_admin_client
     admin = get_supabase_admin_client()
 
-    result = []
-    for row in collabs.data:
-        canvas = row.get("canvases") or {}
-        owner_email = None
-        if canvas.get("owner_id"):
-            try:
-                owner_resp = await asyncio.to_thread(
-                    lambda oid=canvas["owner_id"]: admin.auth.admin.get_user_by_id(oid)
-                )
-                owner_email = owner_resp.user.email if owner_resp.user else None
-            except Exception:
-                pass
+    async def get_owner_email(owner_id: Optional[str]) -> Optional[str]:
+        if not owner_id:
+            return None
+        try:
+            resp = await asyncio.to_thread(
+                lambda: admin.auth.admin.get_user_by_id(owner_id)
+            )
+            return resp.user.email if resp.user else None
+        except Exception:
+            return None
 
-        dataset_count = await asyncio.to_thread(
-            lambda cid=canvas.get("id"): supabase.table("canvas_datasets")
+    async def get_dataset_count_shared(cid: Optional[str]) -> int:
+        if not cid:
+            return 0
+        r = await asyncio.to_thread(
+            lambda: supabase.table("canvas_datasets")
             .select("dataset_id", count="exact")
             .eq("canvas_id", cid)
             .execute()
         )
+        return r.count or 0
 
-        result.append({
+    rows_data = [(row, row.get("canvases") or {}) for row in collabs.data]
+    owner_emails, dataset_counts = await asyncio.gather(
+        asyncio.gather(*[get_owner_email(canvas.get("owner_id")) for _, canvas in rows_data]),
+        asyncio.gather(*[get_dataset_count_shared(canvas.get("id")) for _, canvas in rows_data]),
+    )
+
+    return [
+        {
             "id": canvas.get("id"),
             "name": canvas.get("name"),
             "description": canvas.get("description"),
-            "owner": {"id": canvas.get("owner_id"), "email": owner_email},
+            "owner": {"id": canvas.get("owner_id"), "email": email},
             "permission": row["permission"],
-            "dataset_count": dataset_count.count or 0,
+            "dataset_count": count,
             "joined_at": row["joined_at"],
             "updated_at": canvas.get("updated_at"),
-        })
-    return result
+        }
+        for (row, canvas), email, count in zip(rows_data, owner_emails, dataset_counts)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +184,7 @@ async def create_canvas(body: CreateCanvasRequest, user_id: str = Depends(requir
         .execute()
     )
     canvas = result.data[0]
-    return {**canvas, "has_share_link": False}
+    return {**canvas, "has_share_link": False, "dataset_count": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -302,18 +316,37 @@ async def revoke_share_link(canvas_id: str, user_id: str = Depends(require_user)
 @router.post("/join", response_model=Dict[str, Any])
 async def join_canvas(body: JoinRequest, user_id: str = Depends(require_user)):
     supabase = get_supabase_client()
-    try:
-        result = await asyncio.to_thread(
-            lambda: supabase.rpc("join_canvas_via_token", {"p_token": body.token}).execute()
+
+    # Look up canvas by token directly — the RPC relies on auth.uid() which is NULL
+    # when using the service-role key, so we resolve the token and insert ourselves.
+    canvas_result = await asyncio.to_thread(
+        lambda: supabase.table("canvases")
+        .select("id, share_permission")
+        .eq("share_token", body.token)
+        .maybe_single()
+        .execute()
+    )
+    if not canvas_result.data:
+        raise HTTPException(status_code=404, detail="Invalid or expired share token")
+
+    canvas_id = canvas_result.data["id"]
+    permission = canvas_result.data["share_permission"]
+
+    # Skip if already the owner
+    owner_check = await asyncio.to_thread(
+        lambda: supabase.table("canvases").select("id").eq("id", canvas_id).eq("owner_id", user_id).maybe_single().execute()
+    )
+    if not owner_check.data:
+        await asyncio.to_thread(
+            lambda: supabase.table("canvas_collaborators")
+            .upsert(
+                {"canvas_id": canvas_id, "user_id": user_id, "permission": permission},
+                on_conflict="canvas_id,user_id",
+            )
+            .execute()
         )
-    except Exception as e:
-        raise HTTPException(status_code=404, detail="Invalid or expired share token")
 
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Invalid or expired share token")
-
-    row = result.data[0]
-    return {"canvas_id": row["canvas_id"], "permission": row["permission"]}
+    return {"canvas_id": canvas_id, "permission": permission}
 
 
 # ---------------------------------------------------------------------------

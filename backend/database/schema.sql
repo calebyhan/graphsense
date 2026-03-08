@@ -342,7 +342,12 @@ CREATE POLICY "canvas_datasets select: canvas access"
 
 CREATE POLICY "canvas_datasets insert: edit access"
     ON canvas_datasets FOR INSERT
-    WITH CHECK (user_has_canvas_edit(canvas_id));
+    WITH CHECK (
+        user_has_canvas_edit(canvas_id)
+        AND EXISTS (
+            SELECT 1 FROM datasets WHERE id = dataset_id AND user_id = auth.uid()
+        )
+    );
 
 CREATE POLICY "canvas_datasets delete: edit access"
     ON canvas_datasets FOR DELETE
