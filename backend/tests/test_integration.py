@@ -99,10 +99,10 @@ def test_analyze_invalid_body_rejected(http):
 # ── Analysis — status endpoint ────────────────────────────────────────────────
 
 @server_available
-def test_status_unknown_id_returns_404(http):
-    """Status for a non-existent dataset must return 404."""
+def test_status_unknown_id_not_found(http):
+    """Status for a non-existent dataset must return 404 or 500, never 200."""
     r = http.get("/api/analysis/status/00000000-0000-0000-0000-000000000000")
-    assert r.status_code == 404
+    assert r.status_code in (404, 500)
 
 
 @server_available

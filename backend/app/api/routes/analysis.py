@@ -260,11 +260,11 @@ async def get_analysis_status(dataset_id: str):
         status = await _get_orchestrator().get_status(dataset_id)
         
         if status.get("status") == "not_found":
-            raise HTTPException(
-                status_code=404,
-                detail="Dataset not found"
-            )
-        
+            raise HTTPException(status_code=404, detail="Dataset not found")
+
+        if status.get("status") == "error":
+            raise HTTPException(status_code=500, detail=status.get("error", "Internal error"))
+
         return status
 
     except HTTPException:
