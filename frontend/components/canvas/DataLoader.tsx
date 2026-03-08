@@ -4,10 +4,10 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 
 
-export default function DataLoader() {
+export default function DataLoader({ readOnly = false }: { readOnly?: boolean }) {
   const [isVisible, setIsVisible] = useState(true);
 
-  if (!isVisible) {
+  if (!isVisible || readOnly) {
     return null;
   }
 

@@ -65,7 +65,7 @@ export interface ChartRecommendation {
   config?: any;
 }
 
-export default function AutoVizAgent() {
+export default function AutoVizAgent({ readOnly = false }: { readOnly?: boolean }) {
   console.log('AutoVizAgent component mounting...');
   
   // State management
