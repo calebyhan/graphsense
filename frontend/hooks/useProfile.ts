@@ -53,7 +53,8 @@ export function useProfile() {
 
       // No profile row yet — create one from user_metadata (set during signup)
       const meta = user.user_metadata ?? {};
-      const display_name: string = meta.display_name || user.email?.split('@')[0] || 'User';
+      const derived = meta.display_name || user.email?.split('@')[0] || '';
+      const display_name: string = derived.length >= 2 ? derived : `User-${user.id.slice(0, 4)}`;
       const avatar_color: string = meta.avatar_color || getAvatarColor(user.email ?? user.id);
 
       // Use upsert to handle concurrent tab race conditions gracefully
@@ -93,14 +94,13 @@ export function useProfile() {
       if (!user) return;
       const { data, error } = await supabase
         .from('profiles')
-        .update(updates)
-        .eq('id', user.id)
+        .upsert({ id: user.id, display_name: profile?.display_name ?? 'User', avatar_color: profile?.avatar_color ?? '#4F46E5', ...updates }, { onConflict: 'id' })
         .select('id, display_name, avatar_color')
         .single();
       if (!error && data) setProfile(data);
       return error;
     },
-    [user]
+    [user, profile]
   );
 
   return { profile, loading, updateProfile };

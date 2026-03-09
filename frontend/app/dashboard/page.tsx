@@ -85,7 +85,6 @@ function DashboardContent() {
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(v => !v)}
-            aria-haspopup="menu"
             aria-expanded={menuOpen}
             className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
@@ -94,20 +93,15 @@ function DashboardContent() {
           </button>
 
           {menuOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 py-1"
-            >
+            <div className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 py-1">
               <Link
                 href="/settings"
-                role="menuitem"
                 onClick={() => setMenuOpen(false)}
                 className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Edit profile
               </Link>
               <button
-                role="menuitem"
                 onClick={async () => {
                   const { supabase } = await import('@/lib/supabase/client');
                   await supabase.auth.signOut();

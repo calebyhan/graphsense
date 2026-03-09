@@ -28,6 +28,10 @@ function SignupForm() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (displayName.trim().length < 2) {
+      setError('Display name must be at least 2 characters.');
+      return;
+    }
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email,

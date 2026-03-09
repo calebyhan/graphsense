@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Profiles are publicly readable"
-    ON profiles FOR SELECT USING (true);
+CREATE POLICY "Profiles are readable by authenticated users"
+    ON profiles FOR SELECT USING (auth.uid() IS NOT NULL);
 
 CREATE POLICY "Users can insert their own profile"
     ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
