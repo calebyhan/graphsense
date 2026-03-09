@@ -1,9 +1,12 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { useProfile } from '@/hooks/useProfile';
+import { Avatar } from '@/components/ui/Avatar';
+import { getAvatarColor } from '@/lib/utils/avatarColor';
 import { MyCanvases } from '@/components/dashboard/MyCanvases';
 import { SharedCanvases } from '@/components/dashboard/SharedCanvases';
 
@@ -16,10 +19,13 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 function DashboardContent() {
   const { user, loading } = useAuth();
+  const { profile } = useProfile();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>('mine');
   const [toast, setToast] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const errorParam = searchParams.get('error');
   useEffect(() => {
@@ -36,6 +42,17 @@ function DashboardContent() {
     }
   }, [loading, user, router]);
 
+  // Close menu on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
+
   if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -43,6 +60,9 @@ function DashboardContent() {
       </div>
     );
   }
+
+  const displayName = profile?.display_name ?? user.email?.split('@')[0] ?? 'User';
+  const avatarColor = profile?.avatar_color ?? getAvatarColor(user.email ?? user.id);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -52,18 +72,37 @@ function DashboardContent() {
           <img src="/favicon.ico" alt="Logo" className="h-8 w-8" />
           <span className="text-lg font-semibold text-gray-900 dark:text-white">GraphSense</span>
         </Link>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-500 dark:text-gray-400">{user.email}</span>
+
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={async () => {
-              const { supabase } = await import('@/lib/supabase/client');
-              await supabase.auth.signOut();
-              router.push('/');
-            }}
-            className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+            onClick={() => setMenuOpen(v => !v)}
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
-            Sign out
+            <Avatar displayName={displayName} avatarColor={avatarColor} size="sm" />
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{displayName}</span>
           </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 py-1">
+              <Link
+                href="/settings"
+                onClick={() => setMenuOpen(false)}
+                className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Edit profile
+              </Link>
+              <button
+                onClick={async () => {
+                  const { supabase } = await import('@/lib/supabase/client');
+                  await supabase.auth.signOut();
+                  router.push('/');
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

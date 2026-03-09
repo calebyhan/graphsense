@@ -20,6 +20,7 @@ DROP TABLE IF EXISTS canvases CASCADE;
 DROP TABLE IF EXISTS visualizations CASCADE;
 DROP TABLE IF EXISTS agent_analyses CASCADE;
 DROP TABLE IF EXISTS datasets CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE;
 
 -- ============================================================
 -- Schema
@@ -46,6 +47,28 @@ CREATE TABLE IF NOT EXISTS datasets (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Profiles table (display_name + avatar_color per user)
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    display_name VARCHAR(50) NOT NULL,
+    avatar_color CHAR(7) NOT NULL DEFAULT '#4F46E5',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_profiles_id ON profiles(id);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Profiles are publicly readable"
+    ON profiles FOR SELECT USING (true);
+
+CREATE POLICY "Users can insert their own profile"
+    ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can update their own profile"
+    ON profiles FOR UPDATE USING (auth.uid() = id);
 
 -- Agent analyses table
 CREATE TABLE IF NOT EXISTS agent_analyses (
@@ -168,6 +191,11 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers for updated_at
+CREATE TRIGGER update_profiles_updated_at
+    BEFORE UPDATE ON profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_datasets_updated_at
     BEFORE UPDATE ON datasets
     FOR EACH ROW
@@ -430,3 +458,6 @@ CREATE POLICY "Agent analyses: canvas collaborator read"
             WHERE cd.dataset_id = agent_analyses.dataset_id AND cc.user_id = auth.uid()
         )
     );
+
+-- Note: Profile rows are created client-side on first login via useProfile hook,
+-- seeded from user_metadata set during signup.

@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Canvas, SharedCanvas } from '@/lib/api/backendClient';
 import { ShareDialog } from '@/components/canvas/ShareDialog';
+import { Avatar } from '@/components/ui/Avatar';
+import { getAvatarColor } from '@/lib/utils/avatarColor';
+import type { Profile } from '@/hooks/useProfile';
 
 interface OwnedCanvasCardProps {
   canvas: Canvas;
@@ -119,19 +122,23 @@ export function OwnedCanvasCard({ canvas, onDelete }: OwnedCanvasCardProps) {
 
 interface SharedCanvasCardProps {
   canvas: SharedCanvas;
+  ownerProfile?: Profile;
 }
 
-export function SharedCanvasCard({ canvas }: SharedCanvasCardProps) {
+export function SharedCanvasCard({ canvas, ownerProfile }: SharedCanvasCardProps) {
   const router = useRouter();
+  const ownerName = ownerProfile?.display_name ?? canvas.owner.email ?? canvas.owner.id.slice(0, 8) + '...';
+  const ownerColor = ownerProfile?.avatar_color ?? getAvatarColor(canvas.owner.email ?? canvas.owner.id);
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-gray-900 dark:text-white truncate">{canvas.name}</h3>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            by {canvas.owner.email || canvas.owner.id.slice(0, 8) + '...'}
-          </p>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <Avatar displayName={ownerName} avatarColor={ownerColor} size="sm" />
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{ownerName}</p>
+          </div>
         </div>
         <Badge
           variant={canvas.permission === 'edit' ? 'default' : 'secondary'}
