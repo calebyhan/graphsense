@@ -35,8 +35,13 @@ export default function SettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    const trimmed = displayName.trim();
+    if (trimmed.length < 2) {
+      setError('Display name must be at least 2 characters.');
+      return;
+    }
     setSaving(true);
-    const err = await updateProfile({ display_name: displayName.trim(), avatar_color: avatarColor });
+    const err = await updateProfile({ display_name: trimmed, avatar_color: avatarColor });
     setSaving(false);
     if (err) {
       setError(err.message);
@@ -109,13 +114,14 @@ export default function SettingsPage() {
                 <button
                   key={color}
                   type="button"
+                  aria-label={`Select avatar color ${color}`}
+                  aria-pressed={avatarColor === color}
                   onClick={() => setAvatarColor(color)}
                   className="w-8 h-8 rounded-full transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   style={{
                     backgroundColor: color,
                     boxShadow: avatarColor === color ? `0 0 0 3px white, 0 0 0 5px ${color}` : undefined,
                   }}
-                  title={color}
                 />
               ))}
             </div>

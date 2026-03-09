@@ -28,7 +28,7 @@ export function useProfile() {
     setLoading(true);
 
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('id, display_name, avatar_color')
         .eq('id', user.id)
@@ -42,25 +42,42 @@ export function useProfile() {
         return;
       }
 
+      // Only attempt creation when the row is genuinely missing (PGRST116 = no rows).
+      // Any other error (network, RLS, etc.) is surfaced as a fallback-only state.
+      if (error?.code !== 'PGRST116') {
+        const display_name = user.email?.split('@')[0] ?? 'User';
+        setProfile({ id: user.id, display_name, avatar_color: getAvatarColor(user.email ?? user.id) });
+        setLoading(false);
+        return;
+      }
+
       // No profile row yet — create one from user_metadata (set during signup)
       const meta = user.user_metadata ?? {};
-      const display_name: string =
-        meta.display_name || user.email?.split('@')[0] || 'User';
-      const avatar_color: string =
-        meta.avatar_color || getAvatarColor(user.email ?? user.id);
+      const display_name: string = meta.display_name || user.email?.split('@')[0] || 'User';
+      const avatar_color: string = meta.avatar_color || getAvatarColor(user.email ?? user.id);
 
-      const { data: created } = await supabase
+      // Use upsert to handle concurrent tab race conditions gracefully
+      const { data: upserted, error: upsertError } = await supabase
         .from('profiles')
-        .insert({ id: user.id, display_name, avatar_color })
+        .upsert({ id: user.id, display_name, avatar_color }, { onConflict: 'id', ignoreDuplicates: true })
         .select('id, display_name, avatar_color')
         .single();
 
-      if (!cancelled) {
-        setProfile(
-          created ?? { id: user.id, display_name, avatar_color }
-        );
-        setLoading(false);
+      if (cancelled) return;
+
+      if (upserted) {
+        setProfile(upserted);
+      } else if (upsertError) {
+        // Upsert failed (e.g. RLS) — fall back to a SELECT in case the row exists
+        const { data: refetched } = await supabase
+          .from('profiles')
+          .select('id, display_name, avatar_color')
+          .eq('id', user.id)
+          .single();
+        if (!cancelled) setProfile(refetched ?? { id: user.id, display_name, avatar_color });
       }
+
+      if (!cancelled) setLoading(false);
     })();
 
     return () => { cancelled = true; };
@@ -93,6 +110,7 @@ export function useProfiles(userIds: string[]) {
     const ids = [...new Set(userIds)].filter(Boolean);
     if (ids.length === 0) {
       setProfiles({});
+      setLoading(false);
       return;
     }
 
@@ -103,11 +121,13 @@ export function useProfiles(userIds: string[]) {
       .from('profiles')
       .select('id, display_name, avatar_color')
       .in('id', ids)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (cancelled) return;
-        const map: Record<string, Profile> = {};
-        for (const p of data ?? []) map[p.id] = p;
-        setProfiles(map);
+        if (!error) {
+          const map: Record<string, Profile> = {};
+          for (const p of data ?? []) map[p.id] = p;
+          setProfiles(map);
+        }
         setLoading(false);
       });
 

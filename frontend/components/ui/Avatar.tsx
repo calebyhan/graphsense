@@ -17,13 +17,14 @@ export function Avatar({ displayName, avatarColor, size = 'md', className }: Ava
   const initial = displayName.trim().charAt(0).toUpperCase() || '?';
   return (
     <div
+      role="img"
+      aria-label={displayName}
       className={cn(
         'rounded-full flex items-center justify-center font-semibold text-white flex-shrink-0 select-none',
         SIZE_CLASSES[size],
         className
       )}
       style={{ backgroundColor: avatarColor }}
-      title={displayName}
     >
       {initial}
     </div>
