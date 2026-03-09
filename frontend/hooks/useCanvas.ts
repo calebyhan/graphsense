@@ -27,6 +27,7 @@ export function useMyCanvases() {
 
   useEffect(() => {
     if (accessToken) fetch(accessToken);
+    else setLoading(false);
   }, [fetch, accessToken]);
 
   const createCanvas = useCallback(async (name: string, description?: string) => {
@@ -66,6 +67,7 @@ export function useSharedCanvases() {
 
   useEffect(() => {
     if (accessToken) fetch(accessToken);
+    else setLoading(false);
   }, [fetch, accessToken]);
 
   return { canvases, loading, error, refresh: () => accessToken && fetch(accessToken) };

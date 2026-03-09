@@ -43,14 +43,15 @@ export function useCanvasPermission(canvasId: string): UseCanvasPermissionResult
   }, [fetchPermission, accessToken, authLoading]);
 
   const joinViaToken = useCallback(async (token: string): Promise<{ error: string | null }> => {
+    if (!accessToken) return { error: 'You must be signed in to join a canvas' };
     try {
-      const result = await canvasAPI.join(token);
+      const result = await canvasAPI.join(token, accessToken);
       setPermission(result.permission as Permission);
       return { error: null };
     } catch (e: any) {
       return { error: e.message || 'Invalid or expired share token' };
     }
-  }, []);
+  }, [accessToken]);
 
   return {
     permission,

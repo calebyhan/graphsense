@@ -160,23 +160,23 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
     else:
         shared_counts_map = {}
 
-    # Fetch owner emails in parallel
-    owner_emails = await asyncio.gather(
-        *[get_owner_email(canvas.get("owner_id")) for _, canvas in rows_data]
-    )
+    # Fetch owner emails deduped — one call per unique owner_id
+    unique_owner_ids = {canvas.get("owner_id") for _, canvas in rows_data if canvas.get("owner_id")}
+    email_results = await asyncio.gather(*[get_owner_email(oid) for oid in unique_owner_ids])
+    owner_email_map: Dict[str, Optional[str]] = dict(zip(unique_owner_ids, email_results))
 
     return [
         {
             "id": canvas.get("id"),
             "name": canvas.get("name"),
             "description": canvas.get("description"),
-            "owner": {"id": canvas.get("owner_id"), "email": email},
+            "owner": {"id": canvas.get("owner_id"), "email": owner_email_map.get(canvas.get("owner_id"))},
             "permission": row["permission"],
             "dataset_count": shared_counts_map.get(canvas.get("id"), 0),
             "joined_at": row["joined_at"],
             "updated_at": canvas.get("updated_at"),
         }
-        for (row, canvas), email in zip(rows_data, owner_emails)
+        for row, canvas in rows_data
     ]
 
 
@@ -194,6 +194,47 @@ async def create_canvas(body: CreateCanvasRequest, user_id: str = Depends(requir
     )
     canvas = result.data[0]
     return {**canvas, "has_share_link": False, "dataset_count": 0}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/canvases/join — join via share token
+# (declared before /{canvas_id} routes so FastAPI matches the literal segment first)
+# ---------------------------------------------------------------------------
+
+@router.post("/join", response_model=Dict[str, Any])
+async def join_canvas(body: JoinRequest, user_id: str = Depends(require_user)):
+    supabase = get_supabase_client()
+
+    # Look up canvas by token directly — the RPC relies on auth.uid() which is NULL
+    # when using the service-role key, so we resolve the token and insert ourselves.
+    canvas_result = await asyncio.to_thread(
+        lambda: supabase.table("canvases")
+        .select("id, share_permission")
+        .eq("share_token", body.token)
+        .maybe_single()
+        .execute()
+    )
+    if not canvas_result.data:
+        raise HTTPException(status_code=404, detail="Invalid or expired share token")
+
+    canvas_id = canvas_result.data["id"]
+    permission = canvas_result.data["share_permission"]
+
+    # Skip if already the owner
+    owner_check = await asyncio.to_thread(
+        lambda: supabase.table("canvases").select("id").eq("id", canvas_id).eq("owner_id", user_id).maybe_single().execute()
+    )
+    if not owner_check.data:
+        await asyncio.to_thread(
+            lambda: supabase.table("canvas_collaborators")
+            .upsert(
+                {"canvas_id": canvas_id, "user_id": user_id, "permission": permission},
+                on_conflict="canvas_id,user_id",
+            )
+            .execute()
+        )
+
+    return {"canvas_id": canvas_id, "permission": permission}
 
 
 # ---------------------------------------------------------------------------
@@ -314,46 +355,6 @@ async def revoke_share_link(canvas_id: str, user_id: str = Depends(require_user)
         .eq("id", canvas_id)
         .execute()
     )
-
-
-# ---------------------------------------------------------------------------
-# POST /api/canvases/join — join via share token
-# ---------------------------------------------------------------------------
-
-@router.post("/join", response_model=Dict[str, Any])
-async def join_canvas(body: JoinRequest, user_id: str = Depends(require_user)):
-    supabase = get_supabase_client()
-
-    # Look up canvas by token directly — the RPC relies on auth.uid() which is NULL
-    # when using the service-role key, so we resolve the token and insert ourselves.
-    canvas_result = await asyncio.to_thread(
-        lambda: supabase.table("canvases")
-        .select("id, share_permission")
-        .eq("share_token", body.token)
-        .maybe_single()
-        .execute()
-    )
-    if not canvas_result.data:
-        raise HTTPException(status_code=404, detail="Invalid or expired share token")
-
-    canvas_id = canvas_result.data["id"]
-    permission = canvas_result.data["share_permission"]
-
-    # Skip if already the owner
-    owner_check = await asyncio.to_thread(
-        lambda: supabase.table("canvases").select("id").eq("id", canvas_id).eq("owner_id", user_id).maybe_single().execute()
-    )
-    if not owner_check.data:
-        await asyncio.to_thread(
-            lambda: supabase.table("canvas_collaborators")
-            .upsert(
-                {"canvas_id": canvas_id, "user_id": user_id, "permission": permission},
-                on_conflict="canvas_id,user_id",
-            )
-            .execute()
-        )
-
-    return {"canvas_id": canvas_id, "permission": permission}
 
 
 # ---------------------------------------------------------------------------

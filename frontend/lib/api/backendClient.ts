@@ -403,8 +403,8 @@ export const canvasAPI = {
     }, token),
   revokeShareLink: (id: string, token?: string) =>
     canvasRequest<void>(`/api/canvases/${id}/share`, { method: 'DELETE' }, token),
-  join: (token: string) =>
-    canvasRequest<JoinCanvasResponse>('/api/canvases/join', { method: 'POST', body: JSON.stringify({ token }) }),
+  join: (shareToken: string, accessToken?: string) =>
+    canvasRequest<JoinCanvasResponse>('/api/canvases/join', { method: 'POST', body: JSON.stringify({ token: shareToken }) }, accessToken),
   listCollaborators: (id: string, token?: string) =>
     canvasRequest<Collaborator[]>(`/api/canvases/${id}/collaborators`, {}, token),
   removeCollaborator: (canvasId: string, userId: string, token?: string) =>

@@ -19,11 +19,16 @@ export function OwnedCanvasCard({ canvas, onDelete }: OwnedCanvasCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const handleDelete = async () => {
     if (!confirm(`Delete "${canvas.name}"? This cannot be undone.`)) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
       await onDelete(canvas.id);
+    } catch (e: any) {
+      setDeleteError(e.message || 'Failed to delete canvas');
     } finally {
       setDeleting(false);
       setMenuOpen(false);
@@ -99,6 +104,9 @@ export function OwnedCanvasCard({ canvas, onDelete }: OwnedCanvasCardProps) {
           </Button>
         </div>
 
+        {deleteError && (
+          <p className="text-xs text-red-500 mt-2">{deleteError}</p>
+        )}
         <p className="text-xs text-gray-400 mt-3">
           Updated {new Date(canvas.updated_at).toLocaleDateString()}
         </p>

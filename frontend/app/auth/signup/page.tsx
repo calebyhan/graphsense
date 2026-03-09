@@ -8,23 +8,32 @@ import { supabase } from '@/lib/supabase/client';
 function SignupForm() {
   const searchParams = useSearchParams();
   const rawRedirect = searchParams.get('redirect') || '';
-  const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/dashboard';
+  const isSafeRedirect = (() => {
+    try { return new URL(rawRedirect, window.location.origin).origin === window.location.origin; }
+    catch { return false; }
+  })();
+  const redirect = isSafeRedirect ? rawRedirect : '/dashboard';
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
       setError(error.message);
       setLoading(false);
-    } else {
+    } else if (data.session) {
       router.push(redirect);
+    } else {
+      // Email confirmation required — session is null until user confirms
+      setLoading(false);
+      setConfirmEmail(true);
     }
   };
 
@@ -44,6 +53,14 @@ function SignupForm() {
           </Link>
         </p>
 
+        {confirmEmail ? (
+          <div className="text-center py-4">
+            <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">Check your email</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
+            </p>
+          </div>
+        ) : (
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -84,6 +101,7 @@ function SignupForm() {
             {loading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
+        )}
       </div>
     </div>
   );

@@ -150,9 +150,8 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     e.preventDefault();
     e.stopPropagation();
     if (!onDelete) return;
-    onDelete();
-    removeElement(element.id);
-  }, [element.id, removeElement, onDelete]);
+    onDelete(); // onDelete is responsible for removing from store
+  }, [onDelete]);
 
   // Add global event listeners for drag/resize
   React.useEffect(() => {

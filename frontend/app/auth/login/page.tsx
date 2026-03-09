@@ -8,7 +8,11 @@ import { supabase } from '@/lib/supabase/client';
 function LoginForm() {
   const searchParams = useSearchParams();
   const rawRedirect = searchParams.get('redirect') || '';
-  const redirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/dashboard';
+  const isSafeRedirect = (() => {
+    try { return new URL(rawRedirect, window.location.origin).origin === window.location.origin; }
+    catch { return false; }
+  })();
+  const redirect = isSafeRedirect ? rawRedirect : '/dashboard';
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
