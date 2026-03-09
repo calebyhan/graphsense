@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS datasets (
 -- Profiles table (display_name + avatar_color per user)
 CREATE TABLE IF NOT EXISTS profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    display_name VARCHAR(50) NOT NULL,
-    avatar_color CHAR(7) NOT NULL DEFAULT '#4F46E5',
+    display_name VARCHAR(50) NOT NULL CHECK (char_length(trim(display_name)) >= 2),
+    avatar_color CHAR(7) NOT NULL DEFAULT '#4F46E5' CHECK (avatar_color ~ '^#[0-9A-Fa-f]{6}$'),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -66,7 +66,7 @@ CREATE POLICY "Users can insert their own profile"
     ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
 
 CREATE POLICY "Users can update their own profile"
-    ON profiles FOR UPDATE USING (auth.uid() = id);
+    ON profiles FOR UPDATE USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
 -- Agent analyses table
 CREATE TABLE IF NOT EXISTS agent_analyses (

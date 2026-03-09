@@ -67,17 +67,22 @@ export function useProfile() {
 
       if (upserted) {
         setProfile(upserted);
-      } else if (upsertError) {
-        // Upsert failed (e.g. RLS) — fall back to a SELECT in case the row exists
-        const { data: refetched } = await supabase
-          .from('profiles')
-          .select('id, display_name, avatar_color')
-          .eq('id', user.id)
-          .single();
-        if (!cancelled) setProfile(refetched ?? { id: user.id, display_name, avatar_color });
+        if (!cancelled) setLoading(false);
+        return;
       }
 
-      if (!cancelled) setLoading(false);
+      // upserted is null when conflict was ignored (ignoreDuplicates: true) OR on error —
+      // refetch in both cases to get the existing row.
+      const { data: refetched } = await supabase
+        .from('profiles')
+        .select('id, display_name, avatar_color')
+        .eq('id', user.id)
+        .single();
+
+      if (!cancelled) {
+        setProfile(refetched ?? { id: user.id, display_name, avatar_color });
+        setLoading(false);
+      }
     })();
 
     return () => { cancelled = true; };

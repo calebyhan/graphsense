@@ -42,15 +42,24 @@ function DashboardContent() {
     }
   }, [loading, user, router]);
 
-  // Close menu on outside click
+  // Close menu on outside click or Escape
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
     }
-    if (menuOpen) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false);
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClick);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [menuOpen]);
 
   if (loading || !user) {
@@ -85,15 +94,20 @@ function DashboardContent() {
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 py-1">
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-1.5 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-50 py-1"
+            >
               <Link
                 href="/settings"
+                role="menuitem"
                 onClick={() => setMenuOpen(false)}
                 className="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Edit profile
               </Link>
               <button
+                role="menuitem"
                 onClick={async () => {
                   const { supabase } = await import('@/lib/supabase/client');
                   await supabase.auth.signOut();
