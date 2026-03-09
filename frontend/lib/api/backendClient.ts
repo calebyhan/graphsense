@@ -324,9 +324,15 @@ export interface Canvas {
   }>;
 }
 
-export interface SharedCanvas extends Canvas {
+export interface SharedCanvas {
+  id: string;
+  name: string;
+  description: string | null;
   owner: { id: string; email: string | null };
+  permission: string;
+  dataset_count: number;
   joined_at: string;
+  updated_at: string;
 }
 
 export interface Collaborator {

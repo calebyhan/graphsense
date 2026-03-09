@@ -149,9 +149,8 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (onDelete) {
-      onDelete();
-    }
+    if (!onDelete) return;
+    onDelete();
     removeElement(element.id);
   }, [element.id, removeElement, onDelete]);
 
@@ -194,16 +193,18 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
           </span>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleDelete}
-            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors relative z-10"
-            title="Delete element"
-            style={{ pointerEvents: 'auto' }}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        {onDelete && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={handleDelete}
+              className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors relative z-10"
+              title="Delete element"
+              style={{ pointerEvents: 'auto' }}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Element Content */}

@@ -5,7 +5,7 @@ Canvas collaboration endpoints — CRUD, sharing, and collaborator management.
 import asyncio
 import logging
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -68,7 +68,7 @@ class UpdateCanvasRequest(BaseModel):
 
 
 class ShareRequest(BaseModel):
-    permission: str  # "view" or "edit"
+    permission: Literal["view", "edit"]
 
 
 class JoinRequest(BaseModel):
@@ -90,23 +90,27 @@ async def list_canvases(user_id: str = Depends(require_user)):
         .execute()
     )
 
-    async def get_dataset_count(cid: str) -> int:
-        r = await asyncio.to_thread(
-            lambda: supabase.table("canvas_datasets")
-            .select("dataset_id", count="exact")
-            .eq("canvas_id", cid)
-            .execute()
-        )
-        return r.count or 0
+    if not canvases.data:
+        return []
 
-    counts = await asyncio.gather(*[get_dataset_count(c["id"]) for c in canvases.data])
+    canvas_ids = [c["id"] for c in canvases.data]
+    cd_rows = await asyncio.to_thread(
+        lambda: supabase.table("canvas_datasets")
+        .select("canvas_id")
+        .in_("canvas_id", canvas_ids)
+        .execute()
+    )
+    counts_map: Dict[str, int] = {}
+    for row in (cd_rows.data or []):
+        counts_map[row["canvas_id"]] = counts_map.get(row["canvas_id"], 0) + 1
+
     return [
         {
             **canvas,
             "has_share_link": canvas["share_permission"] is not None,
-            "dataset_count": count,
+            "dataset_count": counts_map.get(canvas["id"], 0),
         }
-        for canvas, count in zip(canvases.data, counts)
+        for canvas in canvases.data
     ]
 
 
@@ -139,21 +143,26 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
         except Exception:
             return None
 
-    async def get_dataset_count_shared(cid: Optional[str]) -> int:
-        if not cid:
-            return 0
-        r = await asyncio.to_thread(
+    rows_data = [(row, row.get("canvases") or {}) for row in collabs.data]
+
+    # Batch dataset counts in a single query
+    shared_canvas_ids = [canvas.get("id") for _, canvas in rows_data if canvas.get("id")]
+    if shared_canvas_ids:
+        cd_rows = await asyncio.to_thread(
             lambda: supabase.table("canvas_datasets")
-            .select("dataset_id", count="exact")
-            .eq("canvas_id", cid)
+            .select("canvas_id")
+            .in_("canvas_id", shared_canvas_ids)
             .execute()
         )
-        return r.count or 0
+        shared_counts_map: Dict[str, int] = {}
+        for r in (cd_rows.data or []):
+            shared_counts_map[r["canvas_id"]] = shared_counts_map.get(r["canvas_id"], 0) + 1
+    else:
+        shared_counts_map = {}
 
-    rows_data = [(row, row.get("canvases") or {}) for row in collabs.data]
-    owner_emails, dataset_counts = await asyncio.gather(
-        asyncio.gather(*[get_owner_email(canvas.get("owner_id")) for _, canvas in rows_data]),
-        asyncio.gather(*[get_dataset_count_shared(canvas.get("id")) for _, canvas in rows_data]),
+    # Fetch owner emails in parallel
+    owner_emails = await asyncio.gather(
+        *[get_owner_email(canvas.get("owner_id")) for _, canvas in rows_data]
     )
 
     return [
@@ -163,11 +172,11 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
             "description": canvas.get("description"),
             "owner": {"id": canvas.get("owner_id"), "email": email},
             "permission": row["permission"],
-            "dataset_count": count,
+            "dataset_count": shared_counts_map.get(canvas.get("id"), 0),
             "joined_at": row["joined_at"],
             "updated_at": canvas.get("updated_at"),
         }
-        for (row, canvas), email, count in zip(rows_data, owner_emails, dataset_counts)
+        for (row, canvas), email in zip(rows_data, owner_emails)
     ]
 
 
@@ -269,9 +278,6 @@ async def delete_canvas(canvas_id: str, user_id: str = Depends(require_user)):
 
 @router.post("/{canvas_id}/share", response_model=Dict[str, Any])
 async def generate_share_link(canvas_id: str, body: ShareRequest, user_id: str = Depends(require_user)):
-    if body.permission not in ("view", "edit"):
-        raise HTTPException(status_code=400, detail="Permission must be 'view' or 'edit'")
-
     supabase = get_supabase_client()
     permission = await get_canvas_permission(canvas_id, user_id, supabase)
     if permission != "owner":
