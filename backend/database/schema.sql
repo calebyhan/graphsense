@@ -1,6 +1,30 @@
 -- GraphSense Database Schema
 -- Supabase PostgreSQL Schema
 
+-- ============================================================
+-- Hard Reset: Drop everything in reverse dependency order
+-- ============================================================
+
+-- Functions
+DROP FUNCTION IF EXISTS join_canvas_via_token(VARCHAR) CASCADE;
+DROP FUNCTION IF EXISTS user_has_canvas_edit(UUID) CASCADE;
+DROP FUNCTION IF EXISTS user_has_canvas_access(UUID) CASCADE;
+DROP FUNCTION IF EXISTS auto_generate_share_token() CASCADE;
+DROP FUNCTION IF EXISTS generate_share_token() CASCADE;
+DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
+
+-- Tables (reverse FK order)
+DROP TABLE IF EXISTS canvas_collaborators CASCADE;
+DROP TABLE IF EXISTS canvas_datasets CASCADE;
+DROP TABLE IF EXISTS canvases CASCADE;
+DROP TABLE IF EXISTS visualizations CASCADE;
+DROP TABLE IF EXISTS agent_analyses CASCADE;
+DROP TABLE IF EXISTS datasets CASCADE;
+
+-- ============================================================
+-- Schema
+-- ============================================================
+
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -179,3 +203,230 @@ CREATE TRIGGER auto_share_token_trigger
     BEFORE UPDATE ON visualizations
     FOR EACH ROW
     EXECUTE FUNCTION auto_generate_share_token();
+
+-- ============================================================
+-- Canvas Collaboration Tables
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS canvases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    share_token VARCHAR(64) UNIQUE,
+    share_permission VARCHAR(4) CHECK (share_permission IN ('view', 'edit')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT share_fields_consistent CHECK (
+        (share_token IS NULL AND share_permission IS NULL) OR
+        (share_token IS NOT NULL AND share_permission IS NOT NULL)
+    )
+);
+
+CREATE TABLE IF NOT EXISTS canvas_datasets (
+    canvas_id UUID NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+    dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
+    added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (canvas_id, dataset_id)
+);
+
+CREATE TABLE IF NOT EXISTS canvas_collaborators (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    canvas_id UUID NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    permission VARCHAR(4) NOT NULL CHECK (permission IN ('view', 'edit')),
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE (canvas_id, user_id)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_canvases_owner_id ON canvases(owner_id);
+CREATE INDEX IF NOT EXISTS idx_canvases_share_token ON canvases(share_token);
+
+CREATE INDEX IF NOT EXISTS idx_canvas_datasets_canvas_id ON canvas_datasets(canvas_id);
+CREATE INDEX IF NOT EXISTS idx_canvas_datasets_dataset_id ON canvas_datasets(dataset_id);
+
+CREATE INDEX IF NOT EXISTS idx_canvas_collaborators_canvas_id ON canvas_collaborators(canvas_id);
+CREATE INDEX IF NOT EXISTS idx_canvas_collaborators_user_id ON canvas_collaborators(user_id);
+
+-- Trigger: updated_at for canvases
+CREATE TRIGGER update_canvases_updated_at
+    BEFORE UPDATE ON canvases
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- RLS
+ALTER TABLE canvases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE canvas_datasets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE canvas_collaborators ENABLE ROW LEVEL SECURITY;
+
+-- Helper functions
+CREATE OR REPLACE FUNCTION user_has_canvas_access(p_canvas_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM canvases WHERE id = p_canvas_id AND owner_id = auth.uid()
+        UNION
+        SELECT 1 FROM canvas_collaborators WHERE canvas_id = p_canvas_id AND user_id = auth.uid()
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION user_has_canvas_edit(p_canvas_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM canvases WHERE id = p_canvas_id AND owner_id = auth.uid()
+        UNION
+        SELECT 1 FROM canvas_collaborators
+        WHERE canvas_id = p_canvas_id AND user_id = auth.uid() AND permission = 'edit'
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- join_canvas_via_token: SECURITY DEFINER so users cannot bypass RLS to self-insert
+CREATE OR REPLACE FUNCTION join_canvas_via_token(p_token VARCHAR(64))
+RETURNS TABLE(canvas_id UUID, permission VARCHAR(4)) AS $$
+DECLARE
+    v_canvas_id UUID;
+    v_permission VARCHAR(4);
+BEGIN
+    SELECT id, share_permission INTO v_canvas_id, v_permission
+    FROM canvases
+    WHERE share_token = p_token;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Invalid or expired share token';
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM canvases WHERE id = v_canvas_id AND owner_id = auth.uid()) THEN
+        RETURN QUERY SELECT v_canvas_id, v_permission;
+        RETURN;
+    END IF;
+
+    INSERT INTO canvas_collaborators (canvas_id, user_id, permission)
+    VALUES (v_canvas_id, auth.uid(), v_permission)
+    ON CONFLICT (canvas_id, user_id) DO NOTHING;
+
+    RETURN QUERY SELECT v_canvas_id, v_permission;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- canvases policies
+CREATE POLICY "Canvas access: owner and collaborators"
+    ON canvases FOR SELECT
+    USING (
+        owner_id = auth.uid() OR
+        EXISTS (
+            SELECT 1 FROM canvas_collaborators
+            WHERE canvas_id = canvases.id AND user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Canvas insert: owner only"
+    ON canvases FOR INSERT
+    WITH CHECK (owner_id = auth.uid());
+
+CREATE POLICY "Canvas update: owner only"
+    ON canvases FOR UPDATE
+    USING (owner_id = auth.uid());
+
+CREATE POLICY "Canvas delete: owner only"
+    ON canvases FOR DELETE
+    USING (owner_id = auth.uid());
+
+-- canvas_datasets policies
+CREATE POLICY "canvas_datasets select: canvas access"
+    ON canvas_datasets FOR SELECT
+    USING (user_has_canvas_access(canvas_id));
+
+CREATE POLICY "canvas_datasets insert: edit access"
+    ON canvas_datasets FOR INSERT
+    WITH CHECK (
+        user_has_canvas_edit(canvas_id)
+        AND EXISTS (
+            SELECT 1 FROM datasets WHERE id = dataset_id AND user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "canvas_datasets delete: edit access"
+    ON canvas_datasets FOR DELETE
+    USING (user_has_canvas_edit(canvas_id));
+
+-- SECURITY DEFINER helper so canvas_collaborators SELECT policy can check canvas
+-- ownership without triggering canvases RLS (which queries canvas_collaborators,
+-- which would re-enter this policy → infinite recursion).
+CREATE OR REPLACE FUNCTION is_canvas_owner(p_canvas_id UUID)
+RETURNS BOOLEAN AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM canvases WHERE id = p_canvas_id AND owner_id = auth.uid()
+    )
+$$ LANGUAGE SQL SECURITY DEFINER;
+
+-- canvas_collaborators policies
+CREATE POLICY "canvas_collaborators select"
+    ON canvas_collaborators FOR SELECT
+    USING (
+        user_id = auth.uid() OR
+        is_canvas_owner(canvas_id)
+    );
+
+CREATE POLICY "canvas_collaborators delete: owner only"
+    ON canvas_collaborators FOR DELETE
+    USING (
+        EXISTS (SELECT 1 FROM canvases WHERE id = canvas_id AND owner_id = auth.uid())
+    );
+
+-- Extended datasets policies for canvas collaborators
+CREATE POLICY "Datasets: canvas collaborator read access"
+    ON datasets FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM canvas_datasets cd
+            JOIN canvas_collaborators cc ON cc.canvas_id = cd.canvas_id
+            WHERE cd.dataset_id = datasets.id AND cc.user_id = auth.uid()
+        )
+    );
+
+-- Extended visualizations policies for canvas collaborators
+CREATE POLICY "Visualizations: canvas collaborator read"
+    ON visualizations FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM canvas_datasets cd
+            JOIN canvas_collaborators cc ON cc.canvas_id = cd.canvas_id
+            WHERE cd.dataset_id = visualizations.dataset_id AND cc.user_id = auth.uid()
+        )
+    );
+
+CREATE POLICY "Visualizations: canvas collaborator insert"
+    ON visualizations FOR INSERT
+    WITH CHECK (
+        auth.uid() = user_id AND
+        EXISTS (
+            SELECT 1 FROM canvas_datasets cd
+            WHERE cd.dataset_id = visualizations.dataset_id
+            AND user_has_canvas_edit(cd.canvas_id)
+        )
+    );
+
+CREATE POLICY "Visualizations: canvas collaborator update"
+    ON visualizations FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM canvas_datasets cd
+            WHERE cd.dataset_id = visualizations.dataset_id
+            AND user_has_canvas_edit(cd.canvas_id)
+        )
+    );
+
+-- Extended agent_analyses policies for canvas collaborators
+CREATE POLICY "Agent analyses: canvas collaborator read"
+    ON agent_analyses FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM canvas_datasets cd
+            JOIN canvas_collaborators cc ON cc.canvas_id = cd.canvas_id
+            WHERE cd.dataset_id = agent_analyses.dataset_id AND cc.user_id = auth.uid()
+        )
+    );

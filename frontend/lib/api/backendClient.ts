@@ -299,3 +299,114 @@ export class BackendAPIClient {
 
 // Default instance
 export const backendAPI = new BackendAPIClient();
+
+// ---------------------------------------------------------------------------
+// Canvas API
+// ---------------------------------------------------------------------------
+
+export interface Canvas {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_id?: string;
+  permission?: string;
+  share_permission: 'view' | 'edit' | null;
+  has_share_link: boolean;
+  dataset_count: number;
+  created_at: string;
+  updated_at: string;
+  datasets?: Array<{
+    id: string;
+    filename: string;
+    processing_status: string;
+    metadata: Record<string, any> | null;
+    created_at: string;
+  }>;
+}
+
+export interface SharedCanvas {
+  id: string;
+  name: string;
+  description: string | null;
+  owner: { id: string; email: string | null };
+  permission: string;
+  dataset_count: number;
+  joined_at: string;
+  updated_at: string;
+}
+
+export interface Collaborator {
+  user_id: string;
+  email: string | null;
+  permission: 'view' | 'edit';
+  joined_at: string;
+}
+
+export interface ShareLinkResponse {
+  share_token: string;
+  share_permission: 'view' | 'edit';
+  share_url: string;
+}
+
+export interface JoinCanvasResponse {
+  canvas_id: string;
+  permission: 'view' | 'edit';
+}
+
+async function makeRequest(path: string, options: RequestInit, token?: string) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return fetch(`${BACKEND_URL}${path}`, {
+    ...options,
+    headers: { ...headers, ...((options.headers as Record<string, string>) || {}) },
+  });
+}
+
+// accessToken is passed explicitly from hooks (avoids a race where getSession()
+// returns null briefly after onAuthStateChange has fired but before the SDK's
+// internal state has been fully propagated to the next getSession() caller).
+// On 401, refreshes the session and retries once to handle expired access tokens.
+async function canvasRequest<T>(path: string, options: RequestInit = {}, accessToken?: string): Promise<T> {
+  let token = accessToken ?? (await supabase.auth.getSession()).data.session?.access_token;
+  let response = await makeRequest(path, options, token);
+
+  if (response.status === 401) {
+    // Access token may be expired — attempt a silent refresh and retry once.
+    const { data: { session } } = await supabase.auth.refreshSession();
+    if (session?.access_token) {
+      token = session.access_token;
+      response = await makeRequest(path, options, token);
+    }
+  }
+
+  if (response.status === 204) return undefined as T;
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
+    throw new Error(err.detail || `Request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export const canvasAPI = {
+  list: (token?: string) => canvasRequest<Canvas[]>('/api/canvases', {}, token),
+  listShared: (token?: string) => canvasRequest<SharedCanvas[]>('/api/canvases/shared', {}, token),
+  get: (id: string, token?: string) => canvasRequest<Canvas>(`/api/canvases/${id}`, {}, token),
+  create: (name: string, description?: string, token?: string) =>
+    canvasRequest<Canvas>('/api/canvases', { method: 'POST', body: JSON.stringify({ name, description }) }, token),
+  update: (id: string, data: { name?: string; description?: string }, token?: string) =>
+    canvasRequest<Canvas>(`/api/canvases/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token),
+  delete: (id: string, token?: string) => canvasRequest<void>(`/api/canvases/${id}`, { method: 'DELETE' }, token),
+  generateShareLink: (id: string, permission: 'view' | 'edit', token?: string) =>
+    canvasRequest<ShareLinkResponse>(`/api/canvases/${id}/share`, {
+      method: 'POST',
+      body: JSON.stringify({ permission }),
+    }, token),
+  revokeShareLink: (id: string, token?: string) =>
+    canvasRequest<void>(`/api/canvases/${id}/share`, { method: 'DELETE' }, token),
+  join: (shareToken: string, accessToken?: string) =>
+    canvasRequest<JoinCanvasResponse>('/api/canvases/join', { method: 'POST', body: JSON.stringify({ token: shareToken }) }, accessToken),
+  listCollaborators: (id: string, token?: string) =>
+    canvasRequest<Collaborator[]>(`/api/canvases/${id}/collaborators`, {}, token),
+  removeCollaborator: (canvasId: string, userId: string, token?: string) =>
+    canvasRequest<void>(`/api/canvases/${canvasId}/collaborators/${userId}`, { method: 'DELETE' }, token),
+};

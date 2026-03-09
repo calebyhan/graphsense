@@ -20,8 +20,17 @@ export function useAuth() {
   });
 
   useEffect(() => {
-    // onAuthStateChange fires INITIAL_SESSION immediately on subscribe,
-    // so no separate getSession() call is needed.
+    // Eagerly read the stored session so `loading` resolves before INITIAL_SESSION
+    // fires asynchronously. This eliminates the brief window where child hooks
+    // (e.g. useMyCanvases) mount with session=null and skip their first fetch.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthState(prev =>
+        prev.loading
+          ? { user: session?.user ?? null, session, loading: false, error: null }
+          : prev
+      );
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setAuthState({
@@ -70,6 +79,16 @@ export function useAuth() {
     }
   }, []);
 
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    return { user: data?.user ?? null, error };
+  }, []);
+
+  const signUp = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    return { user: data?.user ?? null, error };
+  }, []);
+
   // Calls getSession() directly to avoid reading stale closed-over state.
   const ensureAuth = useCallback(async (): Promise<User | null> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -85,6 +104,8 @@ export function useAuth() {
     error: authState.error,
     isAuthenticated: !!authState.user,
     signInAnonymously,
+    signIn,
+    signUp,
     signOut,
     ensureAuth,
   };

@@ -1,10 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Share, Download, History, Users, Settings, Edit3, Bell, ChevronDown, Sun, Moon } from 'lucide-react';
+import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, LayoutDashboard, LogOut } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
+import { useAuth } from '@/hooks/useAuth';
 
 interface TopNavigationProps {
   isDarkMode: boolean;
@@ -13,9 +16,11 @@ interface TopNavigationProps {
 }
 
 export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false }: TopNavigationProps) {
-  const [projectName, setProjectName] = useState('Auto Viz Analysis');
+  const [projectName, setProjectName] = useState('GraphSense');
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(projectName);
+  const { user, signOut } = useAuth();
+  const router = useRouter();
 
   const handleNameSubmit = () => {
     setProjectName(tempName);
@@ -115,18 +120,9 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
           <History className="w-4 h-4" />
         </Button>
 
-        {/* Share Button */}
-        <div className="relative">
-          <Button className="bg-indigo-600 hover:bg-indigo-700 hover:scale-105 text-white transition-all duration-300 cursor-pointer">
-            <Share className="w-4 h-4 mr-2" />
-            Share
-            <ChevronDown className="w-3 h-3 ml-1" />
-          </Button>
-        </div>
-
         {/* Export Options */}
         <div className="relative">
-          <Button 
+          <Button
             variant="outline"
             className="hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
           >
@@ -135,6 +131,29 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
             <ChevronDown className="w-3 h-3 ml-1" />
           </Button>
         </div>
+
+        {/* Dashboard link */}
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        >
+          <LayoutDashboard className="w-4 h-4" />
+          Dashboard
+        </Link>
+
+        {/* User menu */}
+        {user && (
+          <button
+            onClick={async () => {
+              await signOut();
+              router.push('/');
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        )}
       </div>
     </div>
   );

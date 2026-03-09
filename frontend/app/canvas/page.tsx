@@ -1,22 +1,12 @@
 'use client';
 
-import AutoVizAgent from '@/components/AutoVizAgent';
-import DataLoader from '@/components/canvas/DataLoader';
-import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function CanvasPage() {
-  useKeyboardShortcuts();
-
-
-  return (
-    <>
-      {/* Main Auto Viz Agent Application */}
-      <AutoVizAgent />
-      
-      {/* Data Loader */}
-      <DataLoader />
-
-  
-    </>
-  );
+export default function CanvasIndexPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/dashboard');
+  }, [router]);
+  return null;
 }

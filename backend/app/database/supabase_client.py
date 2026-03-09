@@ -30,6 +30,11 @@ def get_supabase_client() -> Client:
 
     return _supabase_client
 
+def get_supabase_admin_client() -> Client:
+    """Alias for get_supabase_client — uses secret key so has admin access."""
+    return get_supabase_client()
+
+
 async def test_connection() -> bool:
     """Test Supabase connection"""
     try:

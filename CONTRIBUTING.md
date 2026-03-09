@@ -16,7 +16,7 @@ Thank you for contributing to GraphSense! This guide will help you get started.
 ## Prerequisites
 
 - Node.js 18+
-- Python 3.11+
+- Python 3.13+
 - Docker & Docker Compose
 - [Doppler CLI](https://docs.doppler.com/docs/install-cli) (replaces manual `.env` management)
 - Git
@@ -76,6 +76,8 @@ Services will be available at:
 ```bash
 # Terminal 1: Backend
 cd backend
+python3.13 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 doppler run -- uvicorn main:app --reload --port 8000
 
@@ -88,11 +90,13 @@ doppler run -- npm run dev
 ### 4. Verify Installation
 
 ```bash
-# Run integration tests
-node test/test-integration.js
-
-# Run backend tests
+# Backend unit tests
 cd backend && pytest
+
+# Integration tests (requires backend running)
+cd backend
+doppler run -- uvicorn main:app --port 8000 &
+pytest tests/test_integration.py -v
 ```
 
 ## Development Workflow
@@ -132,7 +136,6 @@ We use **Git Flow** with the following branches:
 ### Main Branches
 
 - **`main`** — Production-ready code. Protected branch.
-- **`develop`** — Integration branch for features (if needed for major releases)
 
 ### Supporting Branches
 
@@ -154,11 +157,11 @@ We use **Git Flow** with the following branches:
 
 1. **Ensure tests pass**
    ```bash
-   # Backend
+   # Backend unit tests
    cd backend && pytest
-   
-   # Integration
-   node test/test-integration.js
+
+   # Integration tests (requires backend running on :8000)
+   cd backend && pytest tests/test_integration.py -v
    ```
 
 2. **Check code quality**
@@ -307,19 +310,33 @@ pytest
 # Backend with coverage
 pytest --cov=app --cov-report=html
 
-# Frontend (when implemented)
-cd frontend
-npm test
+# Integration tests (requires live backend on :8000)
+# Start backend first:
+doppler run -- uvicorn main:app --port 8000 &
+# Then run:
+pytest tests/test_integration.py -v
+# Tests automatically skip if the server isn't reachable.
 
-# Integration tests
-node test/test-integration.js
+# Frontend lint + type-check
+cd frontend
+npm run lint
+npx tsc --noEmit
 ```
+
+### Test Structure
+
+| Directory | What it tests |
+|---|---|
+| `backend/tests/test_api_*.py` | FastAPI route unit tests (mocked Supabase/Redis) |
+| `backend/tests/test_data_profiler.py` | DataProfilerAgent logic |
+| `backend/tests/test_integration.py` | Live server smoke tests via HTTP |
 
 ### Writing Tests
 
 - **Every bug fix** must include a regression test
 - **New features** should have unit + integration tests
-- Test files go in `backend/tests/` (mirror app structure)
+- Unit test files go in `backend/tests/` and mock all external services via `conftest.py`
+- Integration tests go in `backend/tests/test_integration.py` and must tolerate a missing server (use `@server_available`)
 - Use descriptive test names: `test_data_profiler_handles_missing_columns`
 
 **Backend test example:**

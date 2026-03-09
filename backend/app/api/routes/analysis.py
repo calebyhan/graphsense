@@ -49,6 +49,7 @@ class AnalysisRequest(BaseModel):
     filename: Optional[str] = "dataset.csv"
     file_type: Optional[str] = "csv"
     dataset_id: Optional[str] = None  # If provided, use existing dataset instead of creating new one
+    canvas_id: Optional[str] = None   # If provided, link dataset to this canvas after creation
     options: Optional[Dict[str, Any]] = {}
 
 
@@ -228,6 +229,19 @@ async def analyze_dataset(
                 lambda: supabase.table("datasets").insert(dataset_data).execute()
             )
             logger.info(f"Created dataset record: {dataset_id} with {len(body.data)} rows and {len(df.columns)} columns")
+
+        # Link dataset to canvas if canvas_id provided
+        if body.canvas_id and not duplicate_found:
+            from app.api.routes.canvases import get_canvas_permission
+            perm = await get_canvas_permission(body.canvas_id, user_id or "", supabase)
+            if perm not in ("owner", "edit"):
+                raise HTTPException(status_code=403, detail="No edit access to this canvas")
+            await asyncio.to_thread(
+                lambda: supabase.table("canvas_datasets").insert({
+                    "canvas_id": body.canvas_id,
+                    "dataset_id": dataset_id,
+                }).execute()
+            )
 
         # Enqueue analysis as a Celery task (survives worker restarts)
         run_analysis.delay(body.data, dataset_id)
