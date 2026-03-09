@@ -1,11 +1,16 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Users } from 'lucide-react';
 import { SharedCanvasCard } from '@/components/dashboard/CanvasCard';
 import { useSharedCanvases } from '@/hooks/useCanvas';
+import { useProfiles } from '@/hooks/useProfile';
 
 export function SharedCanvases() {
   const { canvases, loading, error } = useSharedCanvases();
+
+  const ownerIds = useMemo(() => canvases.map(c => c.owner.id), [canvases]);
+  const { profiles } = useProfiles(ownerIds);
 
   if (loading) {
     return (
@@ -33,7 +38,11 @@ export function SharedCanvases() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {canvases.map(canvas => (
-            <SharedCanvasCard key={canvas.id} canvas={canvas} />
+            <SharedCanvasCard
+              key={canvas.id}
+              canvas={canvas}
+              ownerProfile={profiles[canvas.owner.id]}
+            />
           ))}
         </div>
       )}
