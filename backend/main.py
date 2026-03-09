@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.core.limiter import limiter
 from app.core.logging_config import setup_logging
 from app.api.routes import datasets, analysis, visualizations, health, canvases
+from app.api.ws.canvas_ws import router as ws_router
 from app.database.supabase_client import get_supabase_client
 
 
@@ -98,6 +99,10 @@ app.include_router(
     canvases.router,
     prefix="/api/canvases",
     tags=["Canvas Collaboration"]
+)
+app.include_router(
+    ws_router,
+    tags=["WebSocket"]
 )
 
 

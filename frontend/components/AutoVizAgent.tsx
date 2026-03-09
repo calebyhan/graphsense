@@ -11,6 +11,7 @@ import { TopNavigation } from '@/components/navigation/TopNavigation';
 import { VisualizationCard } from '@/components/visualization/VisualizationCard';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
+import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useDatasetManager } from '@/hooks/useDatasetManager';
 import { RecommendationProcessor } from '@/lib/services/recommendationProcessor';
@@ -65,7 +66,7 @@ export interface ChartRecommendation {
   config?: any;
 }
 
-export default function AutoVizAgent({ readOnly = false }: { readOnly?: boolean }) {
+export default function AutoVizAgent({ readOnly = false, emitCursor }: { readOnly?: boolean; emitCursor?: (x: number, y: number) => void }) {
   console.log('AutoVizAgent component mounting...');
   
   // State management
@@ -339,6 +340,20 @@ export default function AutoVizAgent({ readOnly = false }: { readOnly?: boolean 
       rawPosition: position
     });
     addElement(canvasElement);
+
+    // Broadcast new element to collaborators
+    const store = useCanvasStore.getState();
+    const justAdded = store.canvasElements[store.canvasElements.length - 1];
+    if (justAdded) {
+      getActiveWebSocket()?.sendElementAdd({
+        id: justAdded.id,
+        type: justAdded.type,
+        position: justAdded.position,
+        size: justAdded.size,
+        data: justAdded.data,
+        zIndex: justAdded.zIndex,
+      });
+    }
   }, [addElement]);
 
   // Visualization management - now sync with canvas store
@@ -347,6 +362,9 @@ export default function AutoVizAgent({ readOnly = false }: { readOnly?: boolean 
   }, []);
 
   const handleVisualizationDelete = useCallback((id: string) => {
+    // Broadcast removal to collaborators
+    getActiveWebSocket()?.sendElementRemove(id);
+
     // Remove from canvas store
     const { removeElement } = useCanvasStore.getState();
     removeElement(id);
@@ -396,6 +414,7 @@ export default function AutoVizAgent({ readOnly = false }: { readOnly?: boolean 
         {/* Canvas Area - Center */}
         <div className="flex-1 relative overflow-hidden">
           <InfiniteCanvas
+            onCursorMove={emitCursor}
             onCanvasClick={(e) => {
               // Handle canvas clicks for adding elements
               if (e.detail === 2) { // Double click

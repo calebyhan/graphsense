@@ -4,21 +4,31 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useCanvasPermission } from '@/hooks/useCanvasPermission';
+import { useRealtimeCanvas } from '@/hooks/useRealtimeCanvas';
 import AutoVizAgent from '@/components/AutoVizAgent';
 import DataLoader from '@/components/canvas/DataLoader';
 import { ShareDialog } from '@/components/canvas/ShareDialog';
+import CollaboratorAvatarStack from '@/components/canvas/CollaboratorAvatarStack';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 function CanvasContent() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const { permission, loading: permLoading, joinViaToken } = useCanvasPermission(id);
   const [shareOpen, setShareOpen] = useState(false);
 
   useKeyboardShortcuts();
+
+  // Real-time collaboration
+  const { emitCursor } = useRealtimeCanvas(
+    id,
+    session?.access_token ?? null,
+    user?.id ?? null,
+    permission === 'view'
+  );
 
   useEffect(() => {
     if (authLoading || permLoading) return;
@@ -72,6 +82,11 @@ function CanvasContent() {
         </div>
       )}
 
+      {/* Collaborator avatar stack */}
+      <div className="fixed top-4 right-4 z-20">
+        <CollaboratorAvatarStack />
+      </div>
+
       {/* Share button for owners */}
       {isOwner && (
         <>
@@ -85,7 +100,7 @@ function CanvasContent() {
         </>
       )}
 
-      <AutoVizAgent readOnly={isReadOnly} />
+      <AutoVizAgent readOnly={isReadOnly} emitCursor={emitCursor} />
       <DataLoader readOnly={isReadOnly} />
     </>
   );

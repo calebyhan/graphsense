@@ -2,7 +2,8 @@
 
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { useCanvasStore, CanvasElement as CanvasElementType } from '@/store/useCanvasStore';
-import { Move, X, Maximize2, Minimize2 } from 'lucide-react';
+import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
+import { Move, X, Maximize2 } from 'lucide-react';
 
 function useOptimizedRaf<T extends (...args: any[]) => void>(func: T): T {
   const rafId = useRef<number | undefined>(undefined);
@@ -50,6 +51,9 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
   const [localPosition, setLocalPosition] = useState(element.position);
   const [localSize, setLocalSize] = useState(element.size);
 
+  // Lock renew interval
+  const lockRenewTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Sync local state with element props
   useEffect(() => {
     if (!isDragging) setLocalPosition(element.position);
@@ -61,11 +65,14 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
 
   const {
     updateElement,
-    removeElement,
     selectElements,
     selectedElements,
-    viewport
+    viewport,
+    isElementLockedByOther,
   } = useCanvasStore();
+
+  const lockedByOther = isElementLockedByOther(element.id);
+  const lockHolder = useCanvasStore((s) => s.getElementLockHolder(element.id));
 
   // Throttled update functions
   const throttledPositionUpdate = useOptimizedRaf(useCallback((id: string, position: { x: number; y: number }) => {
@@ -75,6 +82,11 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
   const throttledSizeUpdate = useOptimizedRaf(useCallback((id: string, size: { width: number; height: number }) => {
     updateElement(id, { size });
   }, [updateElement]));
+
+  // Broadcast live position to collaborators (throttled via RAF)
+  const throttledWsMove = useOptimizedRaf(useCallback((id: string, position: { x: number; y: number }) => {
+    getActiveWebSocket()?.sendElementMove(id, position);
+  }, []));
 
   const isStoreSelected = selectedElements.includes(element.id);
   const isActuallySelected = isSelected || isStoreSelected;
@@ -93,18 +105,26 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     e.preventDefault();
     e.stopPropagation();
 
+    // Block interaction if locked by another user
+    if (lockedByOther) {
+      return;
+    }
+
     // Select this element if not already selected
     if (!isActuallySelected && onSelect) {
       onSelect();
       selectElements([element.id]);
     }
 
+    // Request lock via WS
+    getActiveWebSocket()?.sendLockRequest(element.id);
+
     setIsDragging(true);
     setDragStart({
       x: e.clientX - element.position.x * viewport.zoom,
       y: e.clientY - element.position.y * viewport.zoom,
     });
-  }, [element.id, element.position, isSelected, selectElements, viewport.zoom]);
+  }, [element.id, element.position, isSelected, selectElements, viewport.zoom, lockedByOther, isActuallySelected, onSelect]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isDragging) {
@@ -116,6 +136,8 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       setLocalPosition(newPosition);
       // Throttle the store update
       throttledPositionUpdate(element.id, newPosition);
+      // Broadcast live position to collaborators
+      throttledWsMove(element.id, newPosition);
     } else if (isResizing) {
       const newWidth = Math.max(200, resizeStart.width + (e.clientX - resizeStart.x) / viewport.zoom);
       const newHeight = Math.max(150, resizeStart.height + (e.clientY - resizeStart.y) / viewport.zoom);
@@ -126,16 +148,33 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       // Throttle the store update
       throttledSizeUpdate(element.id, newSize);
     }
-  }, [isDragging, isResizing, dragStart, resizeStart, element.id, throttledPositionUpdate, throttledSizeUpdate, viewport.zoom]);
+  }, [isDragging, isResizing, dragStart, resizeStart, element.id, throttledPositionUpdate, throttledSizeUpdate, throttledWsMove, viewport.zoom]);
 
   const handleMouseUp = useCallback(() => {
+    if (isDragging) {
+      // Commit final position via WS (triggers DB write + lock release on server)
+      getActiveWebSocket()?.sendElementCommit(
+        element.id,
+        localPosition,
+        localSize,
+        element.data
+      );
+    }
     setIsDragging(false);
     setIsResizing(false);
-  }, []);
+
+    // Clear lock renew timer
+    if (lockRenewTimer.current) {
+      clearInterval(lockRenewTimer.current);
+      lockRenewTimer.current = null;
+    }
+  }, [isDragging, element.id, localPosition, localSize, element.data]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (lockedByOther) return;
 
     setIsResizing(true);
     setResizeStart({
@@ -144,14 +183,15 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       width: element.size.width,
       height: element.size.height,
     });
-  }, [element.size]);
+  }, [element.size, lockedByOther]);
 
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!onDelete) return;
-    onDelete(); // onDelete is responsible for removing from store
-  }, [onDelete]);
+    if (lockedByOther) return;
+    onDelete();
+  }, [onDelete, lockedByOther]);
 
   // Add global event listeners for drag/resize
   React.useEffect(() => {
@@ -170,8 +210,8 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     <div
       ref={elementRef}
       className={`absolute bg-white rounded-lg shadow-lg border-2 canvas-element-optimized ${isDragging || isResizing ? 'performance-mode' : 'smooth-transition'} ${
-        isActuallySelected ? 'border-blue-500 shadow-xl' : 'border-gray-200'
-      } ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        isActuallySelected ? 'border-blue-500 shadow-xl' : lockedByOther ? 'border-orange-400' : 'border-gray-200'
+      } ${lockedByOther ? 'cursor-not-allowed' : isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
       style={{
         left: localPosition.x,
         top: localPosition.y,
@@ -190,9 +230,14 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
           <span className="text-sm font-medium text-gray-700 capitalize">
             {element.type}
           </span>
+          {lockedByOther && lockHolder && (
+            <span className="text-xs text-orange-500 font-medium">
+              Locked by {lockHolder.displayName}
+            </span>
+          )}
         </div>
 
-        {onDelete && (
+        {onDelete && !lockedByOther && (
           <div className="flex items-center gap-1">
             <button
               onClick={handleDelete}
@@ -217,7 +262,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       </div>
 
       {/* Resize Handle */}
-      {isSelected && (
+      {isSelected && !lockedByOther && (
         <div
           className="absolute bottom-0 right-0 w-4 h-4 bg-blue-500 rounded-tl-lg cursor-se-resize opacity-75 hover:opacity-100 transition-opacity"
           onMouseDown={handleResizeStart}
@@ -230,7 +275,6 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       {/* Selection Indicators */}
       {isSelected && (
         <>
-          {/* Corner indicators */}
           <div className="absolute -top-1 -left-1 w-2 h-2 bg-blue-500 rounded-full" />
           <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
           <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-blue-500 rounded-full" />
