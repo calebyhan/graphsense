@@ -310,6 +310,7 @@ export interface Canvas {
   description: string | null;
   owner_id?: string;
   permission?: string;
+  share_token?: string;
   share_permission: 'view' | 'edit' | null;
   has_share_link: boolean;
   dataset_count: number;
@@ -382,7 +383,7 @@ async function canvasRequest<T>(path: string, options: RequestInit = {}, accessT
   if (response.status === 204) return undefined as T;
   if (!response.ok) {
     const err = await response.json().catch(() => ({ detail: `HTTP ${response.status}` }));
-    throw new Error(err.detail || `Request failed: ${response.status}`);
+    throw new Error(err.detail || err.error || `Request failed: ${response.status}`);
   }
   return response.json();
 }

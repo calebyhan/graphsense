@@ -34,6 +34,11 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
       setCollaborators(collabs);
       if (c.has_share_link && c.share_permission) {
         setSelectedPermission(c.share_permission);
+        // Populate the share URL from the token returned by the server so the
+        // copy button works even when the dialog is opened in a new session.
+        if (c.share_token) {
+          setShareUrl(`${window.location.origin}/canvas/${canvasId}?token=${c.share_token}`);
+        }
       }
     } catch {
       // ignore
@@ -79,10 +84,6 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
 
   if (!isOpen) return null;
 
-  const currentUrl = shareUrl || (canvas?.has_share_link
-    ? `${window.location.origin}/canvas/${canvasId}?token=[regenerate to view]`
-    : null);
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
@@ -127,7 +128,7 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
           </div>
 
           {/* Active link */}
-          {currentUrl && (
+          {shareUrl && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                 Active link
@@ -135,7 +136,7 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
               <div className="flex gap-2">
                 <input
                   readOnly
-                  value={currentUrl}
+                  value={shareUrl}
                   className="flex-1 px-3 py-2 text-xs bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 truncate"
                 />
                 <button
