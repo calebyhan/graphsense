@@ -1,14 +1,12 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useCanvasPermission } from '@/hooks/useCanvasPermission';
 import { useRealtimeCanvas } from '@/hooks/useRealtimeCanvas';
 import AutoVizAgent from '@/components/AutoVizAgent';
 import DataLoader from '@/components/canvas/DataLoader';
-import { ShareDialog } from '@/components/canvas/ShareDialog';
-import CollaboratorAvatarStack from '@/components/canvas/CollaboratorAvatarStack';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 function CanvasContent() {
@@ -18,8 +16,6 @@ function CanvasContent() {
   const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const { permission, loading: permLoading, joinViaToken } = useCanvasPermission(id);
-  const [shareOpen, setShareOpen] = useState(false);
-
   useKeyboardShortcuts();
 
   // Real-time collaboration
@@ -82,25 +78,7 @@ function CanvasContent() {
         </div>
       )}
 
-      {/* Collaborator avatar stack */}
-      <div className="fixed top-4 right-4 z-20">
-        <CollaboratorAvatarStack />
-      </div>
-
-      {/* Share button for owners */}
-      {isOwner && (
-        <>
-          <button
-            onClick={() => setShareOpen(true)}
-            className="fixed bottom-6 right-6 z-20 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium transition-colors"
-          >
-            Share Canvas
-          </button>
-          <ShareDialog canvasId={id} isOpen={shareOpen} onClose={() => setShareOpen(false)} />
-        </>
-      )}
-
-      <AutoVizAgent readOnly={isReadOnly} emitCursor={emitCursor} />
+      <AutoVizAgent readOnly={isReadOnly} emitCursor={emitCursor} canvasId={id} isOwner={isOwner} />
       <DataLoader readOnly={isReadOnly} />
     </>
   );

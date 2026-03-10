@@ -66,7 +66,7 @@ export interface ChartRecommendation {
   config?: any;
 }
 
-export default function AutoVizAgent({ readOnly = false, emitCursor }: { readOnly?: boolean; emitCursor?: (x: number, y: number) => void }) {
+export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, isOwner }: { readOnly?: boolean; emitCursor?: (x: number, y: number) => void; canvasId?: string; isOwner?: boolean }) {
   console.log('AutoVizAgent component mounting...');
   
   // State management
@@ -396,10 +396,12 @@ export default function AutoVizAgent({ readOnly = false, emitCursor }: { readOnl
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-gray-50 dark:bg-gray-900 prevent-zoom">
       {/* Top Navigation */}
-      <TopNavigation 
+      <TopNavigation
         isDarkMode={isDarkMode}
         onToggleDarkMode={toggleTheme}
         isTransitioning={isTransitioning}
+        canvasId={canvasId}
+        isOwner={isOwner}
       />
 
       <div className="flex-1 flex overflow-hidden">

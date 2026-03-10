@@ -1,26 +1,26 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, LayoutDashboard, LogOut } from 'lucide-react';
+import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, Share2 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
-import { useAuth } from '@/hooks/useAuth';
-
+import CollaboratorAvatarStack from '@/components/canvas/CollaboratorAvatarStack';
+import { ShareDialog } from '@/components/canvas/ShareDialog';
 interface TopNavigationProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   isTransitioning?: boolean;
+  canvasId?: string;
+  isOwner?: boolean;
 }
 
-export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false }: TopNavigationProps) {
+export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false, canvasId, isOwner }: TopNavigationProps) {
   const [projectName, setProjectName] = useState('GraphSense');
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(projectName);
-  const { user, signOut } = useAuth();
-  const router = useRouter();
+  const [shareOpen, setShareOpen] = useState(false);
 
   const handleNameSubmit = () => {
     setProjectName(tempName);
@@ -41,7 +41,9 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
       {/* Left Section - Project Name */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
-          <img src="/favicon.ico" alt="Logo" className="h-12 w-12" />
+          <Link href="/dashboard">
+            <img src="/favicon.ico" alt="Logo" className="h-12 w-12 cursor-pointer hover:opacity-80 transition-opacity" />
+          </Link>
           <div className="flex items-center gap-2">
             {isEditing ? (
               <input
@@ -82,6 +84,9 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
 
       {/* Right Section - Actions */}
       <div className="flex items-center gap-2">
+        {/* Collaborator avatars */}
+        {canvasId && <CollaboratorAvatarStack />}
+
         {/* Dark Mode Toggle */}
         <Button
           variant="ghost"
@@ -102,9 +107,9 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
         </Button>
 
         {/* Notifications */}
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <Button
+          variant="ghost"
+          size="sm"
           className="relative hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
         >
           <Bell className="w-4 h-4" />
@@ -112,8 +117,8 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
         </Button>
 
         {/* Version History */}
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           size="sm"
           className="hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
         >
@@ -132,28 +137,20 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
           </Button>
         </div>
 
-        {/* Dashboard link */}
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-        >
-          <LayoutDashboard className="w-4 h-4" />
-          Dashboard
-        </Link>
-
-        {/* User menu */}
-        {user && (
-          <button
-            onClick={async () => {
-              await signOut();
-              router.push('/');
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign out
-          </button>
+        {/* Share button — owners only */}
+        {isOwner && canvasId && (
+          <>
+            <button
+              onClick={() => setShareOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+            >
+              <Share2 className="w-4 h-4" />
+              Share
+            </button>
+            <ShareDialog canvasId={canvasId} isOpen={shareOpen} onClose={() => setShareOpen(false)} />
+          </>
         )}
+
       </div>
     </div>
   );
