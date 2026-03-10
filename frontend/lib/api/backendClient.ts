@@ -310,7 +310,7 @@ export interface Canvas {
   description: string | null;
   owner_id?: string;
   permission?: string;
-  share_token?: string;
+  share_token?: string | null;
   share_permission: 'view' | 'edit' | null;
   has_share_link: boolean;
   dataset_count: number;

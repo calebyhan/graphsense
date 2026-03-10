@@ -134,9 +134,9 @@ def test_join_canvas_owner_skips_collaborator_upsert():
         app.dependency_overrides.pop(get_user_id, None)
 
     assert r.status_code == 200
-    # Verify canvas_collaborators.upsert was never called for the owner
-    for call in supabase.table.call_args_list:
-        if call.args[0] == "canvas_collaborators":
-            collab_table = supabase.table("canvas_collaborators")
-            assert not collab_table.upsert.called, "owner path must not upsert a collaborator row"
-            break
+    # Verify the canvas_collaborators table was never touched for the owner path
+    collab_calls = [
+        call for call in supabase.table.call_args_list
+        if call.args and call.args[0] == "canvas_collaborators"
+    ]
+    assert not collab_calls, "owner path must not touch canvas_collaborators table"
