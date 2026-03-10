@@ -32,13 +32,14 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
       ]);
       setCanvas(c);
       setCollaborators(collabs);
-      if (c.has_share_link && c.share_permission) {
+      if (c.has_share_link && c.share_permission && c.share_token) {
         setSelectedPermission(c.share_permission);
         // Populate the share URL from the token returned by the server so the
         // copy button works even when the dialog is opened in a new session.
-        if (c.share_token) {
-          setShareUrl(`${window.location.origin}/canvas/${canvasId}?token=${c.share_token}`);
-        }
+        setShareUrl(`${window.location.origin}/canvas/${canvasId}?token=${c.share_token}`);
+      } else {
+        // Clear any stale share URL when there is no active link or token.
+        setShareUrl(null);
       }
     } catch {
       // ignore
