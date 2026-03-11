@@ -342,15 +342,17 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     addElement(canvasElement);
 
     // Broadcast new element to collaborators
+    // Strip raw dataset rows — chart renders from config.data which is already embedded
     const store = useCanvasStore.getState();
     const justAdded = store.canvasElements[store.canvasElements.length - 1];
     if (justAdded) {
+      const { dataset: _dataset, ...dataWithoutRows } = justAdded.data ?? {};
       getActiveWebSocket()?.sendElementAdd({
         id: justAdded.id,
         type: justAdded.type,
         position: justAdded.position,
         size: justAdded.size,
-        data: justAdded.data,
+        data: dataWithoutRows,
         zIndex: justAdded.zIndex,
       });
     }

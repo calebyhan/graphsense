@@ -238,10 +238,16 @@ async def canvas_websocket(
         # 6. Message loop
         while True:
             data = await websocket.receive_json()
-            await _handle_message(
-                websocket, canvas_id, user_id, permission, data,
-                manager, lock_mgr,
-            )
+            try:
+                await _handle_message(
+                    websocket, canvas_id, user_id, permission, data,
+                    manager, lock_mgr,
+                )
+            except Exception:
+                logger.exception(
+                    "Error handling message type=%s from user %s",
+                    data.get("type"), user_id
+                )
 
     except WebSocketDisconnect:
         pass
@@ -322,7 +328,10 @@ async def _handle_message(
     elif msg_type == "element_commit":
         if is_readonly:
             return
-        await upsert_element(canvas_id, data)
+        try:
+            await upsert_element(canvas_id, data)
+        except Exception:
+            logger.exception("Failed to upsert element %s to DB", data.get("element_id"))
         await lock_mgr.release(canvas_id, data["element_id"], user_id)
         await manager.broadcast(canvas_id, {
             "type": "element_committed",
@@ -337,7 +346,11 @@ async def _handle_message(
         if is_readonly:
             return
         element = data["element"]
-        await insert_element(canvas_id, element, user_id)
+        try:
+            await insert_element(canvas_id, element, user_id)
+        except Exception:
+            logger.exception("Failed to persist element %s to DB", element.get("id"))
+        # Always broadcast even if DB write failed so collaborators see the element
         await manager.broadcast(canvas_id, {
             "type": "element_added",
             "element": element,
@@ -347,7 +360,10 @@ async def _handle_message(
     elif msg_type == "element_remove":
         if is_readonly:
             return
-        await delete_element(data["element_id"])
+        try:
+            await delete_element(data["element_id"])
+        except Exception:
+            logger.exception("Failed to delete element %s from DB", data.get("element_id"))
         await lock_mgr.release(canvas_id, data["element_id"], user_id)
         await manager.broadcast(canvas_id, {
             "type": "element_removed",
