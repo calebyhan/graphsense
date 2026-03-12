@@ -63,7 +63,6 @@ export default function RecommendationCard({
     const { config, chartType } = recommendation;
 
     if (config.xAxis && config.yAxis) {
-      const chartTypeLabel = chartType ? (chartType.charAt(0).toUpperCase() + chartType.slice(1)) : 'Chart';
       return `${config.yAxis} vs ${config.xAxis}`;
     } else if (config.category && config.value) {
       return `${config.value} by ${config.category}`;

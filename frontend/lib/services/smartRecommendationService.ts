@@ -60,7 +60,7 @@ export class SmartRecommendationService {
   private static analyzeRecommendation(
     recommendation: ChartRecommendation,
     dataProfile: DataProfile,
-    rawData: any[]
+    _rawData: any[]
   ): {
     suitabilityScore: number;
     reasoning: string;
@@ -68,7 +68,7 @@ export class SmartRecommendationService {
     bestFor: string[];
     limitations: string[];
   } {
-    const { chartType, config } = recommendation;
+    const { chartType } = recommendation;
     const insights: string[] = [];
     const bestFor: string[] = [];
     const limitations: string[] = [];

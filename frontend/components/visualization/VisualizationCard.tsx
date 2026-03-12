@@ -35,7 +35,7 @@ export function VisualizationCard({
   isSelected,
   onSelect,
   onPositionChange,
-  onSizeChange,
+  onSizeChange: _onSizeChange,
   onDelete
 }: VisualizationCardProps) {
   const [isEditing, setIsEditing] = useState(false);
@@ -80,6 +80,7 @@ export function VisualizationCard({
         document.removeEventListener('mouseup', handleMouseUp);
       };
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDragging, dragOffset]);
 
   const handleTitleSubmit = () => {

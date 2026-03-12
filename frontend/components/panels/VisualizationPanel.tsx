@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Wand2, TrendingUp, BarChart3, PieChart, LineChart, Zap, Map, Calendar, Grid3X3, Info, Sparkles } from 'lucide-react';
+import { Wand2, TrendingUp, BarChart3, PieChart, LineChart, Zap, Grid3X3, Info, Sparkles } from 'lucide-react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -41,7 +42,7 @@ export function VisualizationPanel({
   isAnalyzing,
   onCreateVisualization,
   onAutoViz,
-  visualizationPositions = []
+  visualizationPositions: _visualizationPositions = []
 }: VisualizationPanelProps) {
   // Get canvas elements for minimap
   const [activeTab, setActiveTab] = useState<'analysis' | 'recommendations' | 'manual'>('analysis');
@@ -205,7 +206,7 @@ export function VisualizationPanel({
           <div className="space-y-4">
             {!rawData ? (
               <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
-                <img src="/favicon.ico" alt="Logo" className="w-20 h-20 mx-auto mb-3 opacity-30" />
+                <Image src="/favicon.ico" alt="Logo" width={80} height={80} className="mx-auto mb-3 opacity-30" />
                 <h3 className="text-sm font-medium mb-2"></h3>
                 <p className="text-xs mb-2">Upload a dataset to start AI analysis</p>
                 <div className="text-xs text-gray-400 dark:text-gray-500">
@@ -229,7 +230,7 @@ export function VisualizationPanel({
         ) : !selectedDataset ? (
           // No dataset selected state
           <div className="text-center text-gray-500 dark:text-gray-400 mt-12">
-            <img src="/favicon.ico" alt="Logo" className="w-16 h-16 mx-auto mb-4 opacity-30" />
+            <Image src="/favicon.ico" alt="Logo" width={64} height={64} className="mx-auto mb-4 opacity-30" />
             <h3 className="text-lg font-medium mb-2">No Dataset Selected</h3>
             <p className="text-sm mb-4">Select a dataset from the left panel to see AI-powered visualization recommendations</p>
             <div className="text-xs text-gray-400 dark:text-gray-500">
@@ -326,7 +327,7 @@ export function VisualizationPanel({
             ) : (
               // No recommendations yet
               <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
-                <img src="/favicon.ico" alt="Logo" className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <Image src="/favicon.ico" alt="Logo" width={48} height={48} className="mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Analyzing dataset...</p>
                 <p className="text-xs">AI recommendations will appear here</p>
               </div>

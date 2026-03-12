@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   MousePointer, 
   Hand, 
@@ -33,7 +33,7 @@ const tools = [
 ];
 
 export default function FloatingToolbar({
-  onAddVisualization,
+  onAddVisualization: _onAddVisualization,
   onDeleteSelected,
   hasSelection = false
 }: FloatingToolbarProps) {
@@ -41,7 +41,6 @@ export default function FloatingToolbar({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const toolbarRef = useRef<HTMLDivElement>(null);
 
   // Initialize toolbar position at bottom center
   React.useEffect(() => {

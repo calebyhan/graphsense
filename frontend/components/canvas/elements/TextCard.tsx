@@ -18,8 +18,8 @@ export default function TextCard({
   const [content, setContent] = useState(initialContent);
   const [fontSize, setFontSize] = useState('14');
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right'>('left');
-  const [isBold, setIsBold] = useState(false);
-  const [isItalic, setIsItalic] = useState(false);
+  const [isBold] = useState(false);
+  const [isItalic] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -28,7 +28,7 @@ export default function TextCard({
       textareaRef.current.focus();
       textareaRef.current.setSelectionRange(content.length, content.length);
     }
-  }, [isEditing]);
+  }, [isEditing, content.length]);
 
   const handleSave = () => {
     setIsEditing(false);

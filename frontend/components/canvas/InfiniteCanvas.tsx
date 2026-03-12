@@ -2,6 +2,8 @@
 
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import CollaboratorCursors from './CollaboratorCursors';
+import ElementLockOverlay from './ElementLockOverlay';
 
 function useOptimizedRaf<T extends (...args: any[]) => void>(func: T): T {
   const rafId = useRef<number | undefined>(undefined);
@@ -33,9 +35,10 @@ function useOptimizedRaf<T extends (...args: any[]) => void>(func: T): T {
 interface InfiniteCanvasProps {
   children: React.ReactNode;
   onCanvasClick?: (e: React.MouseEvent) => void;
+  onCursorMove?: (x: number, y: number) => void;
 }
 
-export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanvasProps) {
+export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove }: InfiniteCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -90,7 +93,24 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
     updateViewportRef.current = updateViewport;
   }, [updateViewport]);
 
+  // Keep a stable ref to onCursorMove to avoid re-creating handleMouseMove
+  const onCursorMoveRef = useRef(onCursorMove);
+  useEffect(() => { onCursorMoveRef.current = onCursorMove; }, [onCursorMove]);
+
   const handleMouseMove = useOptimizedRaf((e: React.MouseEvent) => {
+    // Emit cursor position to collaborators (world coords) on every move
+    if (onCursorMoveRef.current) {
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (rect) {
+        const cv = viewportRef.current;
+        const screenX = e.clientX - rect.left - rect.width / 2;
+        const screenY = e.clientY - rect.top - rect.height / 2;
+        const worldX = (screenX - cv.x) / cv.zoom;
+        const worldY = (screenY - cv.y) / cv.zoom;
+        onCursorMoveRef.current(worldX, worldY);
+      }
+    }
+
     if (!isDragging.current) return;
 
     const deltaX = e.clientX - lastMousePos.current.x;
@@ -567,7 +587,11 @@ export default function InfiniteCanvas({ children, onCanvasClick }: InfiniteCanv
         }}
       >
         {children}
+        <ElementLockOverlay />
       </div>
+
+      {/* Collaborator cursors — rendered outside canvas transform (screen-space) */}
+      <CollaboratorCursors />
 
       {/* Zoom Indicator */}
       {isZooming && (

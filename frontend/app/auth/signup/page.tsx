@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { getAvatarColor } from '@/lib/utils/avatarColor';
@@ -53,7 +54,7 @@ function SignupForm() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="w-full max-w-sm bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8">
         <div className="flex items-center gap-3 mb-8">
-          <img src="/favicon.ico" alt="Logo" className="h-8 w-8" />
+          <Image src="/favicon.ico" alt="Logo" width={32} height={32} />
           <span className="text-xl font-semibold text-gray-900 dark:text-white">GraphSense</span>
         </div>
 

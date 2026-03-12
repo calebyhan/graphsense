@@ -14,6 +14,7 @@ DROP FUNCTION IF EXISTS generate_share_token() CASCADE;
 DROP FUNCTION IF EXISTS update_updated_at_column() CASCADE;
 
 -- Tables (reverse FK order)
+DROP TABLE IF EXISTS canvas_elements CASCADE;
 DROP TABLE IF EXISTS canvas_collaborators CASCADE;
 DROP TABLE IF EXISTS canvas_datasets CASCADE;
 DROP TABLE IF EXISTS canvases CASCADE;
@@ -459,3 +460,43 @@ CREATE POLICY "Agent analyses: canvas collaborator read"
 
 -- Note: Profile rows are created client-side on first login via useProfile hook,
 -- seeded from user_metadata set during signup.
+
+-- ============================================================
+-- Canvas Elements Table (for real-time collaboration)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS canvas_elements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    canvas_id UUID NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK (element_type IN ('dataset', 'chart', 'table', 'map', 'text')),
+    position JSONB NOT NULL,   -- { x: number, y: number }  (world coordinates)
+    size JSONB NOT NULL,       -- { width: number, height: number }
+    data JSONB,                -- element-specific payload (chart config, dataset ref, etc.)
+    z_index INTEGER NOT NULL DEFAULT 0,
+    created_by UUID REFERENCES auth.users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_canvas_elements_canvas_id ON canvas_elements(canvas_id);
+
+CREATE TRIGGER update_canvas_elements_updated_at
+    BEFORE UPDATE ON canvas_elements
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE canvas_elements ENABLE ROW LEVEL SECURITY;
+
+-- SELECT: anyone with canvas access (owner or collaborator)
+CREATE POLICY "canvas_elements_select" ON canvas_elements
+    FOR SELECT USING (user_has_canvas_access(canvas_id));
+
+-- INSERT/UPDATE/DELETE: owner or edit collaborators
+CREATE POLICY "canvas_elements_write" ON canvas_elements
+    FOR ALL
+        USING (user_has_canvas_edit(canvas_id))
+        WITH CHECK (user_has_canvas_edit(canvas_id));
+
+-- Service role bypass (for backend writes via FastAPI)
+CREATE POLICY "canvas_elements_service_role" ON canvas_elements
+    FOR ALL TO service_role USING (true);

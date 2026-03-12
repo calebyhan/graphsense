@@ -1,24 +1,29 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useCanvasPermission } from '@/hooks/useCanvasPermission';
+import { useRealtimeCanvas } from '@/hooks/useRealtimeCanvas';
 import AutoVizAgent from '@/components/AutoVizAgent';
 import DataLoader from '@/components/canvas/DataLoader';
-import { ShareDialog } from '@/components/canvas/ShareDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 function CanvasContent() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const { permission, loading: permLoading, joinViaToken } = useCanvasPermission(id);
-  const [shareOpen, setShareOpen] = useState(false);
 
-  useKeyboardShortcuts();
+  // Real-time collaboration
+  const { emitCursor } = useRealtimeCanvas(
+    id,
+    session?.access_token ?? null,
+    user?.id ?? null,
+    permission === 'view'
+  );
 
   useEffect(() => {
     if (authLoading || permLoading) return;
@@ -49,6 +54,10 @@ function CanvasContent() {
     }
   }, [authLoading, permLoading, user, token, permission, id, router, joinViaToken]);
 
+  const isReadOnly = permission === 'view';
+  const isOwner = permission === 'owner';
+  useKeyboardShortcuts(isReadOnly);
+
   if (authLoading || permLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -60,9 +69,6 @@ function CanvasContent() {
   // Still resolving (joining or redirecting)
   if (!permission) return null;
 
-  const isReadOnly = permission === 'view';
-  const isOwner = permission === 'owner';
-
   return (
     <>
       {/* View-only banner */}
@@ -72,20 +78,7 @@ function CanvasContent() {
         </div>
       )}
 
-      {/* Share button for owners */}
-      {isOwner && (
-        <>
-          <button
-            onClick={() => setShareOpen(true)}
-            className="fixed bottom-6 right-6 z-20 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium transition-colors"
-          >
-            Share Canvas
-          </button>
-          <ShareDialog canvasId={id} isOpen={shareOpen} onClose={() => setShareOpen(false)} />
-        </>
-      )}
-
-      <AutoVizAgent readOnly={isReadOnly} />
+      <AutoVizAgent readOnly={isReadOnly} emitCursor={emitCursor} canvasId={id} isOwner={isOwner} />
       <DataLoader readOnly={isReadOnly} />
     </>
   );

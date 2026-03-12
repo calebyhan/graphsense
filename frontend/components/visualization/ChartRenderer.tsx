@@ -39,10 +39,7 @@ const COLORS = [
 ];
 
 // Performance optimization constants
-const MAX_POINTS_SCATTER = 1000;
 const MAX_POINTS_LINE = 2000;
-const MAX_POINTS_BAR = 500;
-const MAX_POINTS_HEATMAP = 10000;
 const SAMPLE_SIZE_DETECTION = 100; // For field type detection
 
 // Intelligent data sampling function
@@ -236,6 +233,7 @@ const D3Histogram = memo(({ config }: { config: ChartConfig }) => {
         .attr("font-size", "12px")
         .text(`Mean: ${mean.toFixed(2)}`);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processedData]);
 
   if (!processedData) {
@@ -672,7 +670,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
             <YAxis tick={{ fontSize: 12 }} />
             <Tooltip
               labelFormatter={(label) => `${lineXField}: ${label}`}
-              formatter={(value: any, name: string) => [Number(value).toFixed(2), lineYField]}
+              formatter={(value: any, _name: string) => [Number(value).toFixed(2), lineYField]}
             />
             <Legend />
             <Line
@@ -740,7 +738,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip
             labelFormatter={(label) => `${barXField}: ${label}`}
-            formatter={(value: any, name: string) => [Number(value).toFixed(2), barYField]}
+            formatter={(value: any, _name: string) => [Number(value).toFixed(2), barYField]}
           />
           <Legend />
           <Bar
@@ -940,7 +938,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip
             labelFormatter={(label) => `${areaXField}: ${label}`}
-            formatter={(value: any, name: string) => [Number(value).toFixed(2), areaYField]}
+            formatter={(value: any, _name: string) => [Number(value).toFixed(2), areaYField]}
           />
           <Legend />
           <Area

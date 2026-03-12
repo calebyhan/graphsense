@@ -4,6 +4,7 @@ import "./globals.css";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import QueryProvider from "@/components/providers/QueryProvider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
             </ErrorBoundary>
           </AuthProvider>
         </QueryProvider>
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );

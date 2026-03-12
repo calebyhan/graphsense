@@ -1,4 +1,4 @@
-import { ChartRecommendation, DataProfile, Pattern, ChartConfig } from '@/lib/types';
+import { ChartRecommendation, DataProfile, Pattern } from '@/lib/types';
 
 export class VisualizationRecommenderAgent {
   async recommend(profile: DataProfile, patterns: Pattern[]): Promise<ChartRecommendation[]> {
