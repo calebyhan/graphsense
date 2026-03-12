@@ -395,13 +395,14 @@ async def _handle_message(
         if is_readonly:
             return
         element_id = data["element_id"]
-        released = await lock_mgr.release(canvas_id, element_id, user_id)
-        if not released:
+        holder = await lock_mgr.get_holder(canvas_id, element_id)
+        if holder is not None and holder != user_id:
             logger.warning(
-                "User %s attempted to remove element %s without holding the lock",
-                user_id, element_id,
+                "User %s attempted to remove element %s locked by %s",
+                user_id, element_id, holder,
             )
             return
+        await lock_mgr.release(canvas_id, element_id, user_id)
         try:
             await delete_element(element_id)
         except Exception:
