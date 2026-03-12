@@ -1,21 +1,18 @@
 'use client';
 
 import React, { useState, useRef, useCallback } from 'react';
-import { motion } from 'motion/react';
 import InfiniteCanvas from '@/components/canvas/InfiniteCanvas';
 import FloatingToolbar from '@/components/canvas/FloatingToolbar';
 import { DataPanel } from '@/components/panels/DataPanel';
 import { VisualizationPanel } from '@/components/panels/VisualizationPanel';
 import { TopNavigation } from '@/components/navigation/TopNavigation';
 
-import { VisualizationCard } from '@/components/visualization/VisualizationCard';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
 import { useDatasetManager } from '@/hooks/useDatasetManager';
 import { RecommendationProcessor } from '@/lib/services/recommendationProcessor';
-import { DatasetAttributeBuilder } from '@/lib/services/datasetAttributeBuilder';
 import CanvasElement from '@/components/canvas/CanvasElement';
 import ChartCard from '@/components/canvas/elements/ChartCard';
 import DatasetCard from '@/components/canvas/elements/DatasetCard';
@@ -70,7 +67,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   console.log('AutoVizAgent component mounting...');
   
   // State management
-  const [visualizations, setVisualizations] = useState<Visualization[]>([]);
+  const [_visualizations, setVisualizations] = useState<Visualization[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const [selectedVizId, setSelectedVizId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -80,8 +77,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const { datasets } = useDatasetManager();
   
   // Canvas state
-  const { viewport, updateViewport, canvasElements, addElement } = useCanvasStore();
-  const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, setRecommendations: setStoreRecommendations, startAnalysis } = useAnalysisStore();
+  const { viewport, canvasElements, addElement } = useCanvasStore();
+  const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
   
   // Debug logging for state changes
   React.useEffect(() => {
@@ -218,6 +215,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         // Note: Don't start analysis here - let the selection effect handle it
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawData, selectedDataset, datasets]);
 
   // Handle dataset selection from DataPanel
@@ -233,49 +231,6 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       console.warn('Selected dataset has no data:', dataset.name);
     }
   }, [startAnalysis]);
-
-  // Handle drag & drop from DataPanel to Canvas
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const datasetId = e.dataTransfer.getData('text/plain');
-    const rect = canvasRef.current?.getBoundingClientRect();
-    
-    if (rect && selectedDataset) {
-      // Convert screen coordinates to canvas coordinates
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-      const canvasX = (screenX - viewport.x) / viewport.zoom;
-      const canvasY = (screenY - viewport.y) / viewport.zoom;
-      
-      createVisualization(selectedDataset, { x: canvasX, y: canvasY });
-    }
-  }, [selectedDataset, viewport]);
-
-  // Create visualization from recommendation
-  const createVisualizationFromRecommendation = useCallback((
-    recommendation: ChartRecommendation
-  ) => {
-    if (!selectedDataset) return;
-
-    // Use the viewport-aware positioning from canvas store
-    const centerPosition = useCanvasStore.getState().getViewportCenterPosition();
-
-    createVisualization(
-      selectedDataset,
-      { x: centerPosition.x - 250, y: centerPosition.y - 200 },
-      recommendation.type,
-      recommendation
-    );
-  }, [selectedDataset]);
-
-  // Auto-Viz function
-  const handleAutoViz = useCallback(async () => {
-    if (!selectedDataset || recommendations.length === 0) return;
-    
-    // Create the top recommendation automatically
-    const topRecommendation = recommendations[0];
-    createVisualizationFromRecommendation(topRecommendation);
-  }, [selectedDataset, recommendations, createVisualizationFromRecommendation]);
 
   const createVisualization = useCallback((
     dataset: Dataset,
@@ -356,7 +311,49 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         zIndex: justAdded.zIndex,
       });
     }
-  }, [addElement]);
+  }, [addElement, viewport]);
+
+  // Handle drag & drop from DataPanel to Canvas
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const rect = canvasRef.current?.getBoundingClientRect();
+
+    if (rect && selectedDataset) {
+      // Convert screen coordinates to canvas coordinates
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const canvasX = (screenX - viewport.x) / viewport.zoom;
+      const canvasY = (screenY - viewport.y) / viewport.zoom;
+
+      createVisualization(selectedDataset, { x: canvasX, y: canvasY });
+    }
+  }, [selectedDataset, viewport, createVisualization]);
+
+  // Create visualization from recommendation
+  const createVisualizationFromRecommendation = useCallback((
+    recommendation: ChartRecommendation
+  ) => {
+    if (!selectedDataset) return;
+
+    // Use the viewport-aware positioning from canvas store
+    const centerPosition = useCanvasStore.getState().getViewportCenterPosition();
+
+    createVisualization(
+      selectedDataset,
+      { x: centerPosition.x - 250, y: centerPosition.y - 200 },
+      recommendation.type,
+      recommendation
+    );
+  }, [selectedDataset, createVisualization]);
+
+  // Auto-Viz function
+  const handleAutoViz = useCallback(async () => {
+    if (!selectedDataset || recommendations.length === 0) return;
+
+    // Create the top recommendation automatically
+    const topRecommendation = recommendations[0];
+    createVisualizationFromRecommendation(topRecommendation);
+  }, [selectedDataset, recommendations, createVisualizationFromRecommendation]);
 
   // Visualization management - now sync with canvas store
   const handleVisualizationSelect = useCallback((id: string) => {

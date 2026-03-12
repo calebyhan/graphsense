@@ -54,6 +54,10 @@ function CanvasContent() {
     }
   }, [authLoading, permLoading, user, token, permission, id, router, joinViaToken]);
 
+  const isReadOnly = permission === 'view';
+  const isOwner = permission === 'owner';
+  useKeyboardShortcuts(isReadOnly);
+
   if (authLoading || permLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -64,10 +68,6 @@ function CanvasContent() {
 
   // Still resolving (joining or redirecting)
   if (!permission) return null;
-
-  const isReadOnly = permission === 'view';
-  const isOwner = permission === 'owner';
-  useKeyboardShortcuts(isReadOnly);
 
   return (
     <>

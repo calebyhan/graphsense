@@ -76,6 +76,7 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
     if (parsedData && chartConfig.xAxis && chartConfig.yAxis) {
       updatePreview();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chartConfig, selectedChartType, parsedData]);
 
   const updatePreview = () => {

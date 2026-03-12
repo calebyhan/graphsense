@@ -33,7 +33,7 @@ export function AnimatedGridPattern({
   className,
   maxOpacity = 0.5,
   duration = 4,
-  repeatDelay = 0.5,
+  repeatDelay: _repeatDelay = 0.5,
   ...props
 }: AnimatedGridPatternProps) {
   const id = useId()
@@ -75,12 +75,13 @@ export function AnimatedGridPattern({
     if (dimensions.width && dimensions.height) {
       setSquares(generateSquares(numSquares))
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dimensions, numSquares])
 
   // Resize observer to update container dimensions
   useEffect(() => {
     const resizeObserver = new ResizeObserver((entries) => {
-      for (let entry of entries) {
+      for (const entry of entries) {
         setDimensions({
           width: entry.contentRect.width,
           height: entry.contentRect.height,
@@ -88,16 +89,17 @@ export function AnimatedGridPattern({
       }
     })
 
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
+    const el = containerRef.current
+    if (el) {
+      resizeObserver.observe(el)
     }
 
     return () => {
-      if (containerRef.current) {
-        resizeObserver.unobserve(containerRef.current)
+      if (el) {
+        resizeObserver.unobserve(el)
       }
     }
-  }, [containerRef])
+  }, [])
 
   return (
     <svg

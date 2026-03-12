@@ -500,7 +500,7 @@ def get_intelligent_cache() -> IntelligentCache:
 
 def clear_global_cache() -> None:
     """Clear the global cache instance"""
-    global _cache_instance
-    
+    global _cache_instance  # noqa: F824
+
     if _cache_instance is not None:
         _cache_instance.clear_cache()

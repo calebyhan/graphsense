@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfile } from '@/hooks/useProfile';
 import { Avatar } from '@/components/ui/Avatar';
@@ -78,7 +79,7 @@ function DashboardContent() {
       {/* Navbar */}
       <header className="h-14 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shadow-sm">
         <Link href="/" className="flex items-center gap-3">
-          <img src="/favicon.ico" alt="Logo" className="h-8 w-8" />
+          <Image src="/favicon.ico" alt="Logo" width={32} height={32} />
           <span className="text-lg font-semibold text-gray-900 dark:text-white">GraphSense</span>
         </Link>
 

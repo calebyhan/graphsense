@@ -24,7 +24,7 @@ export class RecommendationProcessor {
     // Build comprehensive dataset attributes
     const datasetAttributes = DatasetAttributeBuilder.buildDatasetAttributes(rawData, dataProfile);
 
-    return agenticRecommendations.map((rec, index) => {
+    return agenticRecommendations.map((rec, _index) => {
       const chartType = this.normalizeChartType(rec.chart_type || rec.type || 'bar');
       
       // Extract chart configuration using the new parameter extraction system

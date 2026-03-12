@@ -76,6 +76,7 @@ export default function ErrorNotification({
         return () => clearTimeout(timer);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVisible, errorType, autoHideDuration]);
 
   const handleClose = () => {

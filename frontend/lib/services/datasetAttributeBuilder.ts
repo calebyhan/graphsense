@@ -14,7 +14,7 @@ export class DatasetAttributeBuilder {
   static buildDatasetAttributes(
     rawData: any[], 
     dataProfile?: DataProfile,
-    filename?: string
+    _filename?: string
   ): DatasetAttributes {
     const columns = dataProfile?.columns || this.inferColumnProfiles(rawData);
     const attributes: DatasetAttributes = {

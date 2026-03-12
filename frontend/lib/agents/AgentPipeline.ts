@@ -1,7 +1,7 @@
 import { DataProfilerAgent } from './DataProfilerAgent';
 import { PatternRecognizerAgent } from './PatternRecognizerAgent';
 import { VisualizationRecommenderAgent } from './VisualizationRecommenderAgent';
-import { AnalysisResult, DataProfile, Pattern, ChartRecommendation } from '@/lib/types';
+import { AnalysisResult, ChartRecommendation } from '@/lib/types';
 
 export class AgentPipeline {
   private profiler: DataProfilerAgent;

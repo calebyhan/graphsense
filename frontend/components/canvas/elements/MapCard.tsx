@@ -36,7 +36,7 @@ export default function MapCard({
   const processedData = useMemo(() => {
     if (!data || data.length === 0) return [];
 
-    return data.map((row, index) => {
+    return data.map((row, _index) => {
       const point: DataPoint = { ...row };
 
       // Try to extract coordinates

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, Share2 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
@@ -42,7 +43,7 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-3">
           <Link href="/dashboard">
-            <img src="/favicon.ico" alt="Logo" className="h-12 w-12 cursor-pointer hover:opacity-80 transition-opacity" />
+            <Image src="/favicon.ico" alt="Logo" width={48} height={48} className="cursor-pointer hover:opacity-80 transition-opacity" />
           </Link>
           <div className="flex items-center gap-2">
             {isEditing ? (

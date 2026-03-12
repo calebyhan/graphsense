@@ -1,7 +1,7 @@
 'use client';
 
 import { AgentState } from '@/lib/types';
-import { CheckCircle, Loader2, Brain, Database, BarChart3, Shield, AlertTriangle, Clock } from 'lucide-react';
+import { CheckCircle, Loader2, Database, BarChart3, Shield, AlertTriangle } from 'lucide-react';
 import ErrorNotification, { ErrorType } from '@/components/common/ErrorNotification';
 
 interface AgentProgressProps {
@@ -54,21 +54,6 @@ export default function AgentProgress({
         return <CheckCircle className="h-5 w-5 text-green-500" />;
       default:
         return <AgentIcon className="h-5 w-5 text-gray-400" />;
-    }
-  };
-
-  const getStateColor = (state: string, hasError: boolean) => {
-    if (hasError && state === 'running') {
-      return 'text-red-600';
-    }
-    
-    switch (state) {
-      case 'running':
-        return 'text-blue-600';
-      case 'complete':
-        return 'text-green-600';
-      default:
-        return 'text-gray-500';
     }
   };
 

@@ -48,7 +48,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
     }
   });
 
-  const { setRawData, startAnalysis } = useAnalysisStore();
+  const { setRawData } = useAnalysisStore();
   const { isAuthenticated } = useAuthContext();
 
   // Debug logging and dataset management
@@ -113,7 +113,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
       setUploadError(error instanceof Error ? error.message : 'Failed to process file');
       setProcessingStatus('failed');
     }
-  }, [createDatasetWithLifecycle]);
+  }, [createDatasetWithLifecycle, setRawData]);
 
   const { openFileDialog, fileInputProps } = useFileUpload({
     accept: '.csv,.json,.xlsx,.xls,.tsv,.txt',

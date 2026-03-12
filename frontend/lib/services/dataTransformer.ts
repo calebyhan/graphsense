@@ -46,7 +46,7 @@ export class DataTransformer {
     });
     const color = data_mapping?.color;
     const size = data_mapping?.size;
-    const facet = data_mapping?.facet;
+    const _facet = data_mapping?.facet;
 
     // Generate chart title
     const title = this.generateChartTitle(chartType, xAxis, yAxis);

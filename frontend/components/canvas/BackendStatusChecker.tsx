@@ -6,7 +6,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, XCircle, Wifi, WifiOff, Activity } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, WifiOff, Activity } from 'lucide-react';
 import { backendAPI } from '@/lib/api/backendClient';
 
 interface BackendStatus {
@@ -108,20 +108,8 @@ export default function BackendStatusChecker() {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('keydown', handleKeyDown);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy':
-        return 'text-green-600 bg-green-50 border-green-200';
-      case 'degraded':
-        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'unhealthy':
-        return 'text-red-600 bg-red-50 border-red-200';
-      default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
-    }
-  };
 
   const getStatusIcon = () => {
     if (!isOnline) {

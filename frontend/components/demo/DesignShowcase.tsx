@@ -22,7 +22,6 @@ interface DesignShowcaseProps {
 
 export function DesignShowcase({ onClose }: DesignShowcaseProps) {
   const [isDark, setIsDark] = useState(false);
-  const [selectedVariant, setSelectedVariant] = useState<'default' | 'secondary' | 'outline'>('default');
 
   React.useEffect(() => {
     if (isDark) {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -19,8 +19,6 @@ export function ZoomDebugger() {
   const [isVisible, setIsVisible] = useState(false);
   const [events, setEvents] = useState<WheelEventData[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const debugRef = useRef<HTMLDivElement>(null);
-
   // Listen for Ctrl+Shift+D to toggle debugger
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -145,7 +143,7 @@ export function ZoomDebugger() {
               {isRecording ? 'Perform zoom gestures to see events...' : 'Click Record to start debugging'}
             </div>
           ) : (
-            events.map((event, index) => (
+            events.map((event, _index) => (
               <div
                 key={event.timestamp}
                 className={`p-2 rounded text-xs border ${getEventColor(event.detected)}`}

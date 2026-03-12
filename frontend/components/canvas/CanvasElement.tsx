@@ -72,6 +72,17 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     };
   }, []);
 
+  const {
+    updateElement,
+    selectElements,
+    selectedElements,
+    viewport,
+    isElementLockedByOther,
+  } = useCanvasStore();
+
+  const lockedByOther = isElementLockedByOther(element.id);
+  const lockHolder = useCanvasStore((s) => s.getElementLockHolder(element.id));
+
   // If another user grabs the lock mid-drag/resize, abort the interaction and revert
   useEffect(() => {
     if (!lockedByOther) return;
@@ -86,17 +97,6 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       setLocalSize(element.size);
     }
   }, [lockedByOther, isDragging, isResizing, element.position, element.size]);
-
-  const {
-    updateElement,
-    selectElements,
-    selectedElements,
-    viewport,
-    isElementLockedByOther,
-  } = useCanvasStore();
-
-  const lockedByOther = isElementLockedByOther(element.id);
-  const lockHolder = useCanvasStore((s) => s.getElementLockHolder(element.id));
 
   // Throttled update functions
   const throttledPositionUpdate = useOptimizedRaf(useCallback((id: string, position: { x: number; y: number }) => {
@@ -154,7 +154,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       x: e.clientX - element.position.x * viewport.zoom,
       y: e.clientY - element.position.y * viewport.zoom,
     });
-  }, [element.id, element.position, isSelected, selectElements, viewport.zoom, lockedByOther, isActuallySelected, onSelect]);
+  }, [element.id, element.position, selectElements, viewport.zoom, lockedByOther, isActuallySelected, onSelect]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isDragging) {

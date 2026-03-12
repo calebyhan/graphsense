@@ -282,8 +282,8 @@ export class ChartParameterExtractor {
    */
   private static getChartSpecificConfig(
     chartType: ChartType,
-    datasetAttributes: DatasetAttributes,
-    recommendation?: ChartRecommendation
+    _datasetAttributes: DatasetAttributes,
+    _recommendation?: ChartRecommendation
   ): Record<string, any> {
     const config: Record<string, any> = {};
 
