@@ -493,7 +493,9 @@ CREATE POLICY "canvas_elements_select" ON canvas_elements
 
 -- INSERT/UPDATE/DELETE: owner or edit collaborators
 CREATE POLICY "canvas_elements_write" ON canvas_elements
-    FOR ALL USING (user_has_canvas_edit(canvas_id));
+    FOR ALL
+        USING (user_has_canvas_edit(canvas_id))
+        WITH CHECK (user_has_canvas_edit(canvas_id));
 
 -- Service role bypass (for backend writes via FastAPI)
 CREATE POLICY "canvas_elements_service_role" ON canvas_elements

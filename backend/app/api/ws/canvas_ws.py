@@ -416,13 +416,21 @@ async def _handle_message(
     elif msg_type == "element_update":
         if is_readonly:
             return
+        element_id = data["element_id"]
+        holder = await lock_mgr.get_holder(canvas_id, element_id)
+        if holder is not None and holder != user_id:
+            logger.warning(
+                "User %s attempted to update element %s locked by %s",
+                user_id, element_id, holder,
+            )
+            return
         try:
-            await patch_element(data["element_id"], data["updates"])
+            await patch_element(element_id, data["updates"])
         except Exception:
-            logger.exception("Failed to patch element %s in DB", data.get("element_id"))
+            logger.exception("Failed to patch element %s in DB", element_id)
         await manager.broadcast(canvas_id, {
             "type": "element_updated",
-            "element_id": data["element_id"],
+            "element_id": element_id,
             "updates": data["updates"],
             "user_id": user_id,
         }, exclude_user=user_id)
