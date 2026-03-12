@@ -39,7 +39,7 @@ class CanvasWebSocket {
     const host = process.env.NEXT_PUBLIC_BACKEND_URL
       ? new URL(process.env.NEXT_PUBLIC_BACKEND_URL).host
       : 'localhost:8000';
-    const url = `${protocol}//${host}/ws/canvas/${this.canvasId}?token=${this.token}`;
+    const url = `${protocol}//${host}/ws/canvas/${this.canvasId}?token=${encodeURIComponent(this.token)}`;
 
     this.ws = new WebSocket(url);
 
@@ -131,11 +131,12 @@ class CanvasWebSocket {
     this.send({ type: 'element_move', element_id: elementId, position });
   }
 
-  sendElementCommit(elementId: string, position: Position, size?: Size, data?: any): void {
+  sendElementCommit(elementId: string, elementType: string, position: Position, size?: Size, data?: any): void {
     this.send({
       type: 'element_commit',
       element_id: elementId,
       id: elementId,
+      element_type: elementType,
       position,
       ...(size && { size }),
       ...(data !== undefined && { data }),

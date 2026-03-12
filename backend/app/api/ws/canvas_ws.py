@@ -135,7 +135,7 @@ async def upsert_element(canvas_id: str, element: dict) -> None:
         .upsert({
             "id": element["id"],
             "canvas_id": canvas_id,
-            "element_type": element.get("type", element.get("element_type", "chart")),
+            "element_type": element.get("element_type", element.get("type", "chart")),
             "position": element["position"],
             "size": element["size"],
             "data": element.get("data"),
@@ -152,7 +152,7 @@ async def insert_element(canvas_id: str, element: dict, user_id: str) -> None:
         .insert({
             "id": element["id"],
             "canvas_id": canvas_id,
-            "element_type": element.get("type", element.get("element_type", "chart")),
+            "element_type": element.get("element_type", element.get("type", "chart")),
             "position": element["position"],
             "size": element["size"],
             "data": element.get("data"),

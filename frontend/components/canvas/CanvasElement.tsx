@@ -185,6 +185,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       // Commit final position/size via WS (triggers DB write + lock release on server)
       getActiveWebSocket()?.sendElementCommit(
         element.id,
+        element.type,
         localPosition,
         localSize,
         element.data
