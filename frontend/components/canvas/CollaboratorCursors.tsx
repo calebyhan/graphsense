@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
 function CursorIcon({ color }: { color: string }) {
@@ -20,9 +20,11 @@ function CursorIcon({ color }: { color: string }) {
 export default function CollaboratorCursors() {
   const collaborators = useCanvasStore((s) => s.collaborators);
   const viewport = useCanvasStore((s) => s.viewport);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   return (
     <div
+      ref={containerRef}
       style={{
         position: 'absolute',
         inset: 0,
@@ -34,15 +36,16 @@ export default function CollaboratorCursors() {
       {collaborators.map((user) => {
         if (!user.cursor) return null;
 
-        // Convert world coords → screen coords
-        // screen = world * zoom + viewport.offset + canvasCenter
-        // (canvasCenter is handled by the parent container's CSS centering)
+        // Convert world coords → screen coords using actual container dimensions,
+        // matching the InfiniteCanvas content transform:
+        //   translate(containerWidth/2, containerHeight/2) translate(vp.x, vp.y) scale(zoom)
+        const containerWidth = containerRef.current?.clientWidth ?? 0;
+        const containerHeight = containerRef.current?.clientHeight ?? 0;
         const screenX = user.cursor.x * viewport.zoom + viewport.x;
         const screenY = user.cursor.y * viewport.zoom + viewport.y;
 
-        // Offset by half the container (matches InfiniteCanvas centering transform)
-        const finalX = screenX + (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
-        const finalY = screenY + (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
+        const finalX = screenX + containerWidth / 2;
+        const finalY = screenY + containerHeight / 2;
 
         return (
           <div

@@ -49,7 +49,7 @@ interface CanvasStore {
   setSelectedTool: (tool: ToolType) => void;
 
   // Element actions
-  addElement: (element: Omit<CanvasElement, 'id'>) => void;
+  addElement: (element: Omit<CanvasElement, 'id'>) => string;
   updateElement: (id: string, updates: Partial<CanvasElement>) => void;
   removeElement: (id: string) => void;
   selectElements: (ids: string[]) => void;

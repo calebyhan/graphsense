@@ -163,6 +163,34 @@ async def insert_element(canvas_id: str, element: dict, user_id: str) -> None:
     )
 
 
+async def patch_element(element_id: str, updates: dict) -> None:
+    """Partial update — only touches the fields present in `updates`."""
+    # Map frontend camelCase keys to DB column names
+    column_map = {
+        "position": "position",
+        "size": "size",
+        "data": "data",
+        "zIndex": "z_index",
+        "z_index": "z_index",
+        "element_type": "element_type",
+        "type": "element_type",
+    }
+    patch: dict = {}
+    for key, value in updates.items():
+        col = column_map.get(key)
+        if col:
+            patch[col] = value
+    if not patch:
+        return
+    supabase = get_supabase_client()
+    await asyncio.to_thread(
+        lambda: supabase.table("canvas_elements")
+        .update(patch)
+        .eq("id", element_id)
+        .execute()
+    )
+
+
 async def delete_element(element_id: str) -> None:
     supabase = get_supabase_client()
     await asyncio.to_thread(
@@ -253,6 +281,7 @@ async def canvas_websocket(
         pass
     except Exception:
         logger.exception("WebSocket error for user %s in canvas %s", user_id, canvas_id)
+        await websocket.close(code=1011)
     finally:
         await _handle_disconnect(canvas_id, user_id, manager, lock_mgr)
 
@@ -332,7 +361,12 @@ async def _handle_message(
             await upsert_element(canvas_id, data)
         except Exception:
             logger.exception("Failed to upsert element %s to DB", data.get("element_id"))
-        await lock_mgr.release(canvas_id, data["element_id"], user_id)
+        released = await lock_mgr.release(canvas_id, data["element_id"], user_id)
+        if released:
+            await manager.broadcast(canvas_id, {
+                "type": "lock_released",
+                "element_id": data["element_id"],
+            })
         await manager.broadcast(canvas_id, {
             "type": "element_committed",
             "element_id": data["element_id"],
@@ -374,10 +408,10 @@ async def _handle_message(
     elif msg_type == "element_update":
         if is_readonly:
             return
-        await upsert_element(canvas_id, {
-            "id": data["element_id"],
-            **data["updates"],
-        })
+        try:
+            await patch_element(data["element_id"], data["updates"])
+        except Exception:
+            logger.exception("Failed to patch element %s in DB", data.get("element_id"))
         await manager.broadcast(canvas_id, {
             "type": "element_updated",
             "element_id": data["element_id"],

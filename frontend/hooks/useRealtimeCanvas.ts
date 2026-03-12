@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import {
   getCanvasWebSocket,
@@ -82,10 +83,13 @@ export function useRealtimeCanvas(
     );
     unsubs.push(
       ws.on('lock_denied', (data) => {
-        // Lock was denied — the element is held by someone else.
         // Update lock state so the UI shows it immediately.
         if (data.locked_by) {
-          useCanvasStore.getState().setElementLock(data.element_id, data.locked_by);
+          const s = useCanvasStore.getState();
+          s.setElementLock(data.element_id, data.locked_by);
+          const holder = s.collaborators.find((c) => c.userId === data.locked_by);
+          const name = holder?.displayName ?? 'someone else';
+          toast.warning(`Locked by ${name}`, { duration: 3000 });
         }
       })
     );

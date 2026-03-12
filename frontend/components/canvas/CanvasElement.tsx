@@ -119,6 +119,12 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     // Request lock via WS
     getActiveWebSocket()?.sendLockRequest(element.id);
 
+    // Renew lock every 10s so the 30s TTL doesn't expire during a long drag
+    if (lockRenewTimer.current) clearInterval(lockRenewTimer.current);
+    lockRenewTimer.current = setInterval(() => {
+      getActiveWebSocket()?.sendLockRenew(element.id);
+    }, 10000);
+
     setIsDragging(true);
     setDragStart({
       x: e.clientX - element.position.x * viewport.zoom,
@@ -151,8 +157,8 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
   }, [isDragging, isResizing, dragStart, resizeStart, element.id, throttledPositionUpdate, throttledSizeUpdate, throttledWsMove, viewport.zoom]);
 
   const handleMouseUp = useCallback(() => {
-    if (isDragging) {
-      // Commit final position via WS (triggers DB write + lock release on server)
+    if (isDragging || isResizing) {
+      // Commit final position/size via WS (triggers DB write + lock release on server)
       getActiveWebSocket()?.sendElementCommit(
         element.id,
         localPosition,
@@ -168,13 +174,20 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       clearInterval(lockRenewTimer.current);
       lockRenewTimer.current = null;
     }
-  }, [isDragging, element.id, localPosition, localSize, element.data]);
+  }, [isDragging, isResizing, element.id, localPosition, localSize, element.data]);
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (lockedByOther) return;
+
+    getActiveWebSocket()?.sendLockRequest(element.id);
+
+    if (lockRenewTimer.current) clearInterval(lockRenewTimer.current);
+    lockRenewTimer.current = setInterval(() => {
+      getActiveWebSocket()?.sendLockRenew(element.id);
+    }, 10000);
 
     setIsResizing(true);
     setResizeStart({
@@ -183,7 +196,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       width: element.size.width,
       height: element.size.height,
     });
-  }, [element.size, lockedByOther]);
+  }, [element.id, element.size, lockedByOther]);
 
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

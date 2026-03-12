@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { X, BarChart3, LineChart, Circle, PieChart, Activity, BarChart2, TreePine, Share2, Square } from 'lucide-react';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 import ChartRenderer from '@/components/visualization/ChartRenderer';
 import { ChartConfig, DatasetAttributes } from '@/lib/types';
 import { ChartParameterExtractor, ChartType } from '@/lib/services/chartParameterExtractor';
@@ -115,7 +116,14 @@ export default function ChartCreationModal({ isOpen, onClose }: ChartCreationMod
       }
     };
 
-    addElement(newElement);
+    const id = addElement(newElement);
+    getActiveWebSocket()?.sendElementAdd({
+      id,
+      type: newElement.type,
+      position: newElement.position,
+      size: newElement.size,
+      data: newElement.data,
+    });
     console.log('ChartCreationModal: Chart added to canvas at position:', viewportCenter);
     onClose();
   };

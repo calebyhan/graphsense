@@ -2,6 +2,7 @@
 
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { useCanvasStore } from '@/store/useCanvasStore';
+import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 import RecommendationCard from './RecommendationCard';
 import { Lightbulb } from 'lucide-react';
 
@@ -50,7 +51,14 @@ export default function RecommendationsPanel() {
       }
     };
 
-    addElement(newElement);
+    const id = addElement(newElement);
+    getActiveWebSocket()?.sendElementAdd({
+      id,
+      type: newElement.type,
+      position: newElement.position,
+      size: newElement.size,
+      data: newElement.data,
+    });
     console.log('RecommendationsPanel: Chart added to canvas at position:', viewportCenter);
   };
 
