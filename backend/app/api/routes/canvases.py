@@ -36,9 +36,10 @@ async def get_canvas_permission(canvas_id: str, user_id: str, supabase) -> Optio
     canvas = await asyncio.to_thread(
         lambda: supabase.table("canvases").select("owner_id").eq("id", canvas_id).maybe_single().execute()
     )
-    if not canvas.data:
+    canvas_data = canvas.data if canvas is not None else None
+    if not canvas_data:
         return None
-    if canvas.data["owner_id"] == user_id:
+    if canvas_data["owner_id"] == user_id:
         return "owner"
     collab = await asyncio.to_thread(
         lambda: supabase.table("canvas_collaborators")
@@ -48,8 +49,9 @@ async def get_canvas_permission(canvas_id: str, user_id: str, supabase) -> Optio
         .maybe_single()
         .execute()
     )
-    if collab.data:
-        return collab.data["permission"]
+    collab_data = collab.data if collab is not None else None
+    if collab_data:
+        return collab_data["permission"]
     return None
 
 
@@ -214,17 +216,19 @@ async def join_canvas(body: JoinRequest, user_id: str = Depends(require_user)):
         .maybe_single()
         .execute()
     )
-    if not canvas_result.data:
+    canvas_result_data = canvas_result.data if canvas_result is not None else None
+    if not canvas_result_data:
         raise HTTPException(status_code=404, detail="Invalid or expired share token")
 
-    canvas_id = canvas_result.data["id"]
-    permission = canvas_result.data["share_permission"]
+    canvas_id = canvas_result_data["id"]
+    permission = canvas_result_data["share_permission"]
 
     # Skip if already the owner
     owner_check = await asyncio.to_thread(
         lambda: supabase.table("canvases").select("id").eq("id", canvas_id).eq("owner_id", user_id).maybe_single().execute()
     )
-    if not owner_check.data:
+    owner_check_data = owner_check.data if owner_check is not None else None
+    if not owner_check_data:
         await asyncio.to_thread(
             lambda: supabase.table("canvas_collaborators")
             .upsert(
@@ -250,7 +254,7 @@ async def get_canvas(canvas_id: str, user_id: str = Depends(require_user)):
 
     canvas = await asyncio.to_thread(
         lambda: supabase.table("canvases")
-        .select("id, name, description, owner_id, share_permission, created_at, updated_at")
+        .select("id, name, description, owner_id, share_token, share_permission, created_at, updated_at")
         .eq("id", canvas_id)
         .single()
         .execute()
@@ -267,13 +271,17 @@ async def get_canvas(canvas_id: str, user_id: str = Depends(require_user)):
     )
     datasets = [row["datasets"] for row in cd_rows.data if row.get("datasets")]
 
-    return {
+    data: Dict[str, Any] = {
         **canvas.data,
         "permission": permission,
         "has_share_link": canvas.data["share_permission"] is not None,
         "datasets": datasets,
         "dataset_count": len(datasets),
     }
+    # Only expose the raw share_token to the canvas owner
+    if permission != "owner":
+        data.pop("share_token", None)
+    return data
 
 
 # ---------------------------------------------------------------------------
