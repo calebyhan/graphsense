@@ -166,7 +166,7 @@ class CanvasWebSocket {
 let instance: CanvasWebSocket | null = null;
 
 export function getCanvasWebSocket(canvasId: string, token: string): CanvasWebSocket {
-  if (!instance || (instance as any).canvasId !== canvasId) {
+  if (!instance || (instance as any).canvasId !== canvasId || (instance as any).token !== token) {
     instance?.disconnect();
     instance = new CanvasWebSocket(canvasId, token);
   }

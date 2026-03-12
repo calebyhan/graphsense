@@ -394,14 +394,21 @@ async def _handle_message(
     elif msg_type == "element_remove":
         if is_readonly:
             return
+        element_id = data["element_id"]
+        released = await lock_mgr.release(canvas_id, element_id, user_id)
+        if not released:
+            logger.warning(
+                "User %s attempted to remove element %s without holding the lock",
+                user_id, element_id,
+            )
+            return
         try:
-            await delete_element(data["element_id"])
+            await delete_element(element_id)
         except Exception:
-            logger.exception("Failed to delete element %s from DB", data.get("element_id"))
-        await lock_mgr.release(canvas_id, data["element_id"], user_id)
+            logger.exception("Failed to delete element %s from DB", element_id)
         await manager.broadcast(canvas_id, {
             "type": "element_removed",
-            "element_id": data["element_id"],
+            "element_id": element_id,
             "user_id": user_id,
         }, exclude_user=user_id)
 
