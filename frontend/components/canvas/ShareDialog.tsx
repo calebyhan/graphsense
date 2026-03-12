@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Copy, Check, Link2, Users, Trash2 } from 'lucide-react';
 import { canvasAPI, Canvas, Collaborator } from '@/lib/api/backendClient';
 import { useAuth } from '@/hooks/useAuth';
@@ -85,7 +86,7 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
@@ -189,6 +190,7 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
