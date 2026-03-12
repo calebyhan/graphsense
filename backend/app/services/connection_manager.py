@@ -40,8 +40,17 @@ class ConnectionManager:
             json.dumps({"user_id": user_id}),
         )
 
-        # Start Redis subscriber for this room if not already running
-        if canvas_id not in self._subscribers:
+        # Start Redis subscriber for this room if not already running (or if prior task died)
+        existing = self._subscribers.get(canvas_id)
+        if existing is None or existing.done():
+            if existing is not None and existing.done():
+                exc = existing.exception() if not existing.cancelled() else None
+                if exc:
+                    logger.warning(
+                        "Redis subscriber for canvas %s died unexpectedly; restarting",
+                        canvas_id,
+                        exc_info=exc,
+                    )
             self._subscribers[canvas_id] = asyncio.create_task(
                 self._redis_subscriber(canvas_id)
             )

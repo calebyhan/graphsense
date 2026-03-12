@@ -72,6 +72,21 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     };
   }, []);
 
+  // If another user grabs the lock mid-drag/resize, abort the interaction and revert
+  useEffect(() => {
+    if (!lockedByOther) return;
+    if (isDragging || isResizing) {
+      setIsDragging(false);
+      setIsResizing(false);
+      if (lockRenewTimer.current) {
+        clearInterval(lockRenewTimer.current);
+        lockRenewTimer.current = null;
+      }
+      setLocalPosition(element.position);
+      setLocalSize(element.size);
+    }
+  }, [lockedByOther, isDragging, isResizing, element.position, element.size]);
+
   const {
     updateElement,
     selectElements,

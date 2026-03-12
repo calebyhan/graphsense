@@ -111,7 +111,7 @@ export function useRealtimeCanvas(
     );
     unsubs.push(
       ws.on('element_committed', (data) => {
-        if (storeRef.current.myLocks.has(data.element_id)) return;
+        if (data.user_id === userId) return;
         useCanvasStore.getState().updateElement(data.element_id, {
           position: data.position,
           ...(data.size && { size: data.size }),
@@ -142,24 +142,30 @@ export function useRealtimeCanvas(
   }, [canvasId, token, userId]);
 
   // Throttled cursor emit (50ms)
-  const emitCursor = useMemo(() => {
-    let lastSent = 0;
-    let pending: ReturnType<typeof setTimeout> | null = null;
+  const cursorPendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cursorLastSent = useRef(0);
 
+  useEffect(() => {
+    return () => {
+      if (cursorPendingTimer.current) clearTimeout(cursorPendingTimer.current);
+    };
+  }, [canvasId, token, isReadOnly]);
+
+  const emitCursor = useMemo(() => {
     return (x: number, y: number) => {
       if (isReadOnly || !token) return;
       const now = Date.now();
       const send = () => {
-        lastSent = Date.now();
+        cursorLastSent.current = Date.now();
         const ws = getCanvasWebSocket(canvasId, token);
         ws.sendCursorMove(x, y);
       };
 
-      if (now - lastSent >= 50) {
+      if (now - cursorLastSent.current >= 50) {
         send();
       } else {
-        if (pending) clearTimeout(pending);
-        pending = setTimeout(send, 50 - (now - lastSent));
+        if (cursorPendingTimer.current) clearTimeout(cursorPendingTimer.current);
+        cursorPendingTimer.current = setTimeout(send, 50 - (now - cursorLastSent.current));
       }
     };
   }, [canvasId, token, isReadOnly]);

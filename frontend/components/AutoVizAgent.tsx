@@ -339,12 +339,12 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       finalPosition,
       rawPosition: position
     });
-    addElement(canvasElement);
+    const newElementId = addElement(canvasElement);
 
     // Broadcast new element to collaborators
     // Strip raw dataset rows — chart renders from config.data which is already embedded
     const store = useCanvasStore.getState();
-    const justAdded = store.canvasElements[store.canvasElements.length - 1];
+    const justAdded = store.canvasElements.find((el) => el.id === newElementId);
     if (justAdded) {
       const { dataset: _dataset, ...dataWithoutRows } = justAdded.data ?? {};
       getActiveWebSocket()?.sendElementAdd({

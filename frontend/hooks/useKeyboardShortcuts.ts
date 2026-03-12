@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 
-export function useKeyboardShortcuts() {
+export function useKeyboardShortcuts(isReadOnly = false) {
   const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, canvasElements, updateViewport, viewport } = useCanvasStore();
 
   const handleZoomIn = () => {
@@ -149,7 +149,7 @@ export function useKeyboardShortcuts() {
           break;
         case 'delete':
         case 'backspace':
-          if (selectedElements.length > 0) {
+          if (!isReadOnly && selectedElements.length > 0) {
             selectedElements.forEach(id => {
               getActiveWebSocket()?.sendElementRemove(id);
               removeElement(id);

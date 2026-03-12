@@ -16,7 +16,6 @@ function CanvasContent() {
   const { user, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const { permission, loading: permLoading, joinViaToken } = useCanvasPermission(id);
-  useKeyboardShortcuts();
 
   // Real-time collaboration
   const { emitCursor } = useRealtimeCanvas(
@@ -68,6 +67,7 @@ function CanvasContent() {
 
   const isReadOnly = permission === 'view';
   const isOwner = permission === 'owner';
+  useKeyboardShortcuts(isReadOnly);
 
   return (
     <>

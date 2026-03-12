@@ -374,7 +374,7 @@ async def _handle_message(
             "size": data.get("size"),
             "data": data.get("data"),
             "user_id": user_id,
-        })
+        }, exclude_user=user_id)
 
     elif msg_type == "element_add":
         if is_readonly:
