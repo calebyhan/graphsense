@@ -96,7 +96,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setSelectedTool: (tool) => set({ selectedTool: tool }),
 
   addElement: (element) => {
-    const id = `element_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = crypto.randomUUID();
     const newElement: CanvasElement = {
       ...element,
       id,

@@ -24,6 +24,7 @@ class CanvasWebSocket {
   private listeners = new Map<string, Set<MessageHandler>>();
   private shouldReconnect = true;
   private messageQueue: object[] = [];
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(canvasId: string, token: string) {
     this.canvasId = canvasId;
@@ -31,7 +32,8 @@ class CanvasWebSocket {
   }
 
   connect(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
+    const state = this.ws?.readyState;
+    if (state === WebSocket.OPEN || state === WebSocket.CONNECTING) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = process.env.NEXT_PUBLIC_BACKEND_URL
@@ -67,7 +69,7 @@ class CanvasWebSocket {
 
     this.ws.onclose = () => {
       if (this.shouldReconnect) {
-        setTimeout(() => this.connect(), this.reconnectDelay);
+        this.reconnectTimer = setTimeout(() => this.connect(), this.reconnectDelay);
         this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
       }
     };
@@ -79,6 +81,10 @@ class CanvasWebSocket {
 
   disconnect(): void {
     this.shouldReconnect = false;
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.ws?.close();
     this.ws = null;
     this.listeners.clear();

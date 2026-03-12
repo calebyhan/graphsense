@@ -63,6 +63,15 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     if (!isResizing) setLocalSize(element.size);
   }, [element.size, isResizing]);
 
+  useEffect(() => {
+    return () => {
+      if (lockRenewTimer.current) {
+        clearInterval(lockRenewTimer.current);
+        lockRenewTimer.current = null;
+      }
+    };
+  }, []);
+
   const {
     updateElement,
     selectElements,
