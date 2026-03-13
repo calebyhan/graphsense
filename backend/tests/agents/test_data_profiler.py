@@ -2,6 +2,8 @@
 Unit tests for DataProfilerAgent — pure Python/pandas, no AI calls.
 """
 
+from unittest.mock import MagicMock, AsyncMock, patch
+
 import pandas as pd
 import pytest
 
@@ -102,8 +104,6 @@ def test_validate_input_rejects_empty(profiler):
     assert profiler.validate_input(ctx) is False
 
 
-# Avoid import error for MagicMock used above
-from unittest.mock import MagicMock, AsyncMock, patch  # noqa: E402
 
 
 # ── Additional coverage ───────────────────────────────────────────────────────
@@ -118,9 +118,8 @@ def test_infer_data_type_temporal(profiler):
 def test_infer_data_type_bool(profiler):
     # In this pandas version, is_numeric_dtype returns True for bool.
     # Patch it to False so the bool branch is reachable.
-    from unittest.mock import patch as _patch
     series = pd.Series([True, False, True])
-    with _patch("app.agents.data_profiler_agent.pd.api.types.is_numeric_dtype", return_value=False):
+    with patch("app.agents.data_profiler_agent.pd.api.types.is_numeric_dtype", return_value=False):
         result = profiler._infer_data_type(series)
     assert result == "categorical"
 
