@@ -6,7 +6,6 @@ are tested via monkeypatching.
 """
 
 import pandas as pd
-import numpy as np
 import pytest
 
 from app.agents.enhanced_profiler_agent import DataProfilerAgent as LegacyProfiler

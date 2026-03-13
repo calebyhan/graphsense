@@ -207,7 +207,7 @@ async def test_process_empty_recommendations_list_returns_error(agent):
 
 
 async def test_process_all_recs_unparseable_returns_error(agent):
-    """All recommendation entries fail to parse → empty list → raises ValueError (line 65)."""
+    """All recommendation entries fail to parse, resulting in an error outcome."""
     ctx = ProcessingContext.create_from_data("ds-1", [{"a": 1}])
     ctx.cache_computation("recommendations", [{"chart_type": "totally_invalid_type"}])
     mock_service = MagicMock()

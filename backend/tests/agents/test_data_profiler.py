@@ -203,7 +203,6 @@ def test_detect_outliers_insufficient_data(profiler):
 
 def test_analyze_distribution_exception_path(profiler):
     """Force stats.normaltest to raise so the except branch is covered."""
-    from scipy import stats as _stats
     series = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     with patch("app.agents.data_profiler_agent.stats.normaltest", side_effect=ValueError("forced")):
         result = profiler._analyze_distribution(series)
@@ -305,7 +304,7 @@ async def test_process_success(profiler, context):
 
 
 async def test_process_exception_returns_error(profiler):
-    """process() with an empty DataFrame hits the exception path."""
+    """process() with a broken context (sample_data raising) hits the exception path."""
     bad_ctx = MagicMock()
     bad_ctx.sample_data = MagicMock(side_effect=Exception("bad data"))
     bad_ctx.dataset_id = "x"
