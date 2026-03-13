@@ -1,8 +1,6 @@
 """
 Unit tests for enhanced_profiler_agent.DataProfilerAgent (legacy interface).
 This agent uses Dict[str, Any] input rather than ProcessingContext.
-_format_output is not defined on the class, so process() and get_fallback_result()
-are tested via monkeypatching.
 """
 
 import pandas as pd
@@ -13,10 +11,7 @@ from app.agents.enhanced_profiler_agent import DataProfilerAgent as LegacyProfil
 
 @pytest.fixture
 def profiler():
-    p = LegacyProfiler()
-    # Inject _format_output so process()/get_fallback_result() work end-to-end
-    p._format_output = lambda data, success=True: {"data": data, "success": success}
-    return p
+    return LegacyProfiler()
 
 
 @pytest.fixture

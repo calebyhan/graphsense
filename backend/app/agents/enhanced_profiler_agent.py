@@ -229,6 +229,10 @@ class DataProfilerAgent(BaseAgent):
         else:
             return "very_weak"
 
+    def _format_output(self, data: Dict[str, Any], success: bool = True) -> Dict[str, Any]:
+        """Format processing output into a consistent response structure."""
+        return {"data": data, "success": success}
+
     def get_fallback_result(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback result when processing fails"""
         return self._format_output({
