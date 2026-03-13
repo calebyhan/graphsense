@@ -367,12 +367,17 @@ CREATE POLICY "canvas_datasets select: canvas access"
     ON canvas_datasets FOR SELECT
     USING (user_has_canvas_access(canvas_id));
 
+-- Intentionally requires the dataset to belong to auth.uid(): a collaborator
+-- may only link their own datasets to a canvas. Canvas owners cannot link
+-- datasets uploaded by others — this prevents privilege escalation where an
+-- owner could expose another user's private data to the shared canvas.
 CREATE POLICY "canvas_datasets insert: edit access"
     ON canvas_datasets FOR INSERT
     WITH CHECK (
         user_has_canvas_edit(canvas_id)
         AND EXISTS (
-            SELECT 1 FROM datasets WHERE id = dataset_id AND user_id = auth.uid()
+            SELECT 1 FROM datasets WHERE id = dataset_id
+            AND user_id = auth.uid()
         )
     );
 
@@ -412,6 +417,17 @@ CREATE POLICY "Datasets: canvas collaborator read access"
             SELECT 1 FROM canvas_datasets cd
             JOIN canvas_collaborators cc ON cc.canvas_id = cd.canvas_id
             WHERE cd.dataset_id = datasets.id AND cc.user_id = auth.uid()
+        )
+    );
+
+-- Canvas owner can read all datasets linked to their canvas (including collaborator uploads)
+CREATE POLICY "Datasets: canvas owner read access"
+    ON datasets FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM canvas_datasets cd
+            JOIN canvases c ON c.id = cd.canvas_id
+            WHERE cd.dataset_id = datasets.id AND c.owner_id = auth.uid()
         )
     );
 
@@ -500,3 +516,10 @@ CREATE POLICY "canvas_elements_write" ON canvas_elements
 -- Service role bypass (for backend writes via FastAPI)
 CREATE POLICY "canvas_elements_service_role" ON canvas_elements
     FOR ALL TO service_role USING (true);
+
+-- ============================================================
+-- Realtime
+-- ============================================================
+
+-- Enable Realtime on canvas_datasets so clients receive live dataset-linked events
+ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets;

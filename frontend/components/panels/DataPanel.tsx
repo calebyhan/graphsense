@@ -16,9 +16,10 @@ import { ProcessingStatus } from '@/lib/services/datasetService';
 interface DataPanelProps {
   selectedDataset: Dataset | null;
   onDatasetSelect: (dataset: Dataset) => void;
+  canvasId?: string;
 }
 
-export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) {
+export function DataPanel({ selectedDataset, onDatasetSelect, canvasId }: DataPanelProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [draggedDataset, setDraggedDataset] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string>('');
@@ -34,6 +35,7 @@ export function DataPanel({ selectedDataset, onDatasetSelect }: DataPanelProps) 
     createWithLifecycleError,
     error: datasetError
   } = useDatasetManager({
+    canvasId,
     onDatasetCreated: (dataset) => {
       console.log('Dataset created and persisted to database:', dataset);
       onDatasetSelect(dataset);

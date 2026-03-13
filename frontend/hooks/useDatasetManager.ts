@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import Papa from 'papaparse';
-import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
 import { Tables, TablesInsert } from '@/lib/supabase/types';
 import { Dataset } from '@/components/AutoVizAgent';
 import { useAuthContext } from '@/components/providers/AuthProvider';
@@ -10,6 +10,7 @@ import { useErrorHandler } from '@/lib/services/errorHandler';
 
 interface DatasetManagerOptions {
   onDatasetCreated?: (dataset: Dataset) => void;
+  canvasId?: string;
 }
 
 type DatabaseDataset = Tables<'datasets'>;
@@ -29,12 +30,13 @@ interface CreateDatasetWithLifecycleParams {
 
 export function useDatasetManager(options: DatasetManagerOptions = {}) {
   const queryClient = useQueryClient();
-  const { user, ensureAuth } = useAuthContext();
+  const { canvasId } = options;
+  const { user, loading: authLoading, ensureAuth } = useAuthContext();
   const { handleError } = useErrorHandler();
 
   // Query to get datasets from Supabase - Enhanced for refresh scenarios
   const { data: datasets = [], isLoading, error, refetch } = useQuery({
-    queryKey: ['datasets', user?.id || 'dev-user'],
+    queryKey: canvasId ? ['datasets', 'canvas', canvasId] : ['datasets', user?.id || 'dev-user'],
     queryFn: async (): Promise<Dataset[]> => {
       // Check if Supabase is properly configured
       if (!isSupabaseConfigured()) {
@@ -45,7 +47,10 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
       // Fetch datasets using the service
       try {
-        const dbDatasets = await DatasetService.getUserDatasets(userId);
+        // When on a canvas, fetch all datasets linked to it (from all collaborators)
+        const dbDatasets = canvasId
+          ? await DatasetService.getCanvasDatasets(canvasId)
+          : await DatasetService.getUserDatasets(userId);
 
         // Transform database datasets to frontend format
         const transformedDatasets: Dataset[] = await Promise.all(
@@ -89,14 +94,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         throw new Error(dbError.userMessage);
       }
     },
-    enabled: true, // Always enabled now that we support null user IDs for dev mode
-    initialData: [],
-    retry: 3, // Increased retry count for better reliability on refresh
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
-    staleTime: 5 * 60 * 1000, // 5 minutes cache time for better performance
-    gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes (React Query v5)
-    refetchOnWindowFocus: true, // Refetch when window gains focus
-    refetchOnMount: true, // Always refetch on mount for fresh data
+    enabled: !authLoading, // Wait for auth to resolve before fetching (avoids unauthenticated empty results)
+    placeholderData: [], // Display while loading — unlike initialData, doesn't count as cached data
+    retry: 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    staleTime: canvasId ? 15 * 1000 : 5 * 60 * 1000, // 15s for canvas (Realtime subscription handles live updates; poll is a safety net)
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: 'always', // Force refetch on every mount regardless of cache
+    // Realtime subscription handles live updates; 30s poll is a safety-net fallback
+    refetchInterval: canvasId ? 30000 : false,
   });
 
   // Mutation to create a new dataset with lifecycle support
@@ -120,9 +127,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       
       try {
         // Check if a dataset with this filename already exists to prevent duplicates
-        const existingDatasets = await DatasetService.getUserDatasets(userId);
+        // Use canvas-scoped datasets when on a canvas so collaborators see each other's uploads
+        const existingDatasets = canvasId
+          ? await DatasetService.getCanvasDatasets(canvasId)
+          : await DatasetService.getUserDatasets(userId);
         const duplicateExists = existingDatasets.some(d => d.filename === file.name);
         if (duplicateExists) {
+          // Clear in-progress flag before early return so the same file can be re-uploaded later
+          if (typeof window !== 'undefined') {
+            delete (window as any)[inProgressKey];
+          }
           // Don't throw error, just return existing dataset to prevent UI issues
           const existing = existingDatasets.find(d => d.filename === file.name)!;
           const metadata = (existing.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
@@ -188,6 +202,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           dataProfile: dataAnalysis.profile,
         });
 
+        // Step 7: Link to canvas — do this before returning so failures are surfaced atomically
+        if (canvasId && userId) {
+          await DatasetService.linkDatasetToCanvas(dbDataset.id, canvasId);
+        } else if (canvasId && !userId) {
+          console.warn(
+            'useDatasetManager: dataset created on canvas but not linked — userId is null (dev mode). ' +
+            'Dataset will disappear after the next refetch because no canvas_datasets row was created.'
+          );
+        }
+
         onStatusChange?.('completed');
         onProgress?.(100);
 
@@ -211,34 +235,37 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           processingStatus: 'completed'
         };
 
-          return newDataset;
-
-        } catch (error) {
-          // Mark as failed if any step fails
-          await DatasetService.updateProcessingStatus(
-            dbDataset.id,
-            'failed',
-            error instanceof Error ? error.message : 'Unknown error'
-          );
-          onStatusChange?.('failed');
-          throw error;
-        } finally {
-          // Clear the in-progress flag
-          if (typeof window !== 'undefined') {
-            delete (window as any)[inProgressKey];
-          }
-        }
+        return newDataset;
       } catch (error) {
-        // Handle outer catch (for duplicate detection and in-progress flag setting)
+        // Mark as failed if any step fails
+        await DatasetService.updateProcessingStatus(
+          dbDataset.id,
+          'failed',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+        onStatusChange?.('failed');
+        throw error;
+      } finally {
+        // Clear the in-progress flag regardless of success or failure
         if (typeof window !== 'undefined') {
           delete (window as any)[inProgressKey];
         }
-        throw error;
       }
+    } catch (error) {
+      // Covers failures before the inner try (e.g. createDataset() throwing) where
+      // the inner finally has not yet run. Always clear the flag so the same file
+      // can be re-uploaded without a page refresh.
+      if (typeof window !== 'undefined') {
+        delete (window as any)[inProgressKey];
+      }
+      throw error;
+    }
     },
     onSuccess: (newDataset, variables) => {
+      const cacheKey = canvasId ? ['datasets', 'canvas', canvasId] : ['datasets', user?.id || 'dev-user'];
+
       // Update React Query cache (avoid duplicates by checking ID)
-      queryClient.setQueryData(['datasets', user?.id || 'dev-user'], (oldData: Dataset[] | undefined) => {
+      queryClient.setQueryData(cacheKey, (oldData: Dataset[] | undefined) => {
         const current = oldData || [];
         const exists = current.some(d => d.id === newDataset.id);
         if (!exists) {
@@ -250,15 +277,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
       // Prevent excessive invalidation that can cause duplicates
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
+        queryClient.invalidateQueries({ queryKey: cacheKey });
       }, 100);
 
-      // Call callbacks if provided
+      // Two separate callback paths are intentional:
+      // - options.onDatasetCreated: registered at hook instantiation (e.g. DataPanel)
+      // - variables.onDatasetCreated: passed per-call (e.g. AutoVizAgent)
+      // They serve different consumers; dedupe is handled by the callers.
       if (options.onDatasetCreated) {
         setTimeout(() => options.onDatasetCreated?.(newDataset), 0);
       }
-      
-      // Call the specific callback from the lifecycle params
       if (variables.onDatasetCreated) {
         setTimeout(() => variables.onDatasetCreated?.(newDataset), 0);
       }
@@ -302,6 +330,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         metadata: dataAnalysis.metadata,
       });
 
+      // Link to canvas — failures surface via onError so the user is informed
+      if (canvasId && userId) {
+        await DatasetService.linkDatasetToCanvas(dbDataset.id, canvasId);
+      } else if (canvasId && !userId) {
+        console.warn(
+          'useDatasetManager: dataset created on canvas but not linked — userId is null (dev mode). ' +
+          'Dataset will disappear after the next refetch because no canvas_datasets row was created.'
+        );
+      }
+
       // Transform to frontend format
       const newDataset: Dataset = {
         id: dbDataset.id,
@@ -325,8 +363,10 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       return newDataset;
     },
     onSuccess: (newDataset) => {
+      const cacheKey = canvasId ? ['datasets', 'canvas', canvasId] : ['datasets', user?.id || 'dev-user'];
+
       // Update React Query cache with the new dataset (prevent duplicates)
-      queryClient.setQueryData(['datasets', user?.id || 'dev-user'], (oldData: Dataset[] | undefined) => {
+      queryClient.setQueryData(cacheKey, (oldData: Dataset[] | undefined) => {
         const current = oldData || [];
         const exists = current.some(d => d.id === newDataset.id);
         if (!exists) {
@@ -338,7 +378,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
       // Prevent excessive invalidation that can cause duplicates
       setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
+        queryClient.invalidateQueries({ queryKey: cacheKey });
       }, 100);
 
       // Call callback if provided (debounced to prevent multiple calls)
@@ -362,13 +402,11 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       return datasetId;
     },
     onSuccess: (deletedId) => {
-      // Update React Query cache
-      queryClient.setQueryData(['datasets', user?.id || 'dev-user'], (oldData: Dataset[] | undefined) => {
+      const cacheKey = canvasId ? ['datasets', 'canvas', canvasId] : ['datasets', user?.id || 'dev-user'];
+      queryClient.setQueryData(cacheKey, (oldData: Dataset[] | undefined) => {
         return (oldData || []).filter(d => d.id !== deletedId);
       });
-
-      // Invalidate related queries
-      queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
+      queryClient.invalidateQueries({ queryKey: cacheKey });
       queryClient.invalidateQueries({ queryKey: ['visualizations'] });
     },
     onError: (error) => {
@@ -395,15 +433,36 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
   // Function to update dataset status
   const updateDatasetStatus = useCallback(async (datasetId: string, status: ProcessingStatus, errorMessage?: string) => {
     await DatasetService.updateProcessingStatus(datasetId, status, errorMessage);
-
-    // Invalidate cache to refetch data
-    queryClient.invalidateQueries({ queryKey: ['datasets', user?.id || 'dev-user'] });
-  }, [user?.id, queryClient]);
+    const cacheKey = canvasId ? ['datasets', 'canvas', canvasId] : ['datasets', user?.id || 'dev-user'];
+    queryClient.invalidateQueries({ queryKey: cacheKey });
+  }, [canvasId, user?.id, queryClient]);
 
   // Add refresh functionality for manual data reload
   const refreshDatasets = useCallback(() => {
     return refetch();
   }, [refetch]);
+
+  // Real-time subscription: invalidate canvas datasets when any collaborator links a new one.
+  // IMPORTANT: Supabase Realtime must be in RLS mode (Realtime > Authorization in the dashboard)
+  // for backend service-role inserts into canvas_datasets to propagate to subscribing clients.
+  // If events are silently missing, check that the table is in the realtime publication
+  // (ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets) AND that RLS mode is enabled.
+  useEffect(() => {
+    if (!canvasId || !isSupabaseConfigured()) return;
+
+    const channel = supabase
+      .channel(`canvas_datasets:${canvasId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'canvas_datasets', filter: `canvas_id=eq.${canvasId}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['datasets', 'canvas', canvasId] });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [canvasId, queryClient]);
 
   // Auto-refresh datasets on page visibility change (when user returns to tab)
   useEffect(() => {
@@ -444,7 +503,8 @@ function formatFileSize(bytes: number): string {
   return Math.round(bytes / Math.pow(k, i)) + ' ' + sizes[i];
 }
 
-function formatDate(dateString: string): string {
+function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return 'Unknown';
   const date = new Date(dateString);
   const now = new Date();
   const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));

@@ -1,7 +1,15 @@
-import { supabase } from '@/lib/supabase/client';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/supabase/types';
 
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+// canvas_datasets is not yet in the generated Supabase types — define it locally
+// until `supabase gen types typescript` is re-run after schema migration.
+interface CanvasDatasetRow {
+  canvas_id: string;
+  dataset_id: string;
+  added_at: string;
+}
 
 export interface DatasetMetadata {
   columns: number;
@@ -111,10 +119,18 @@ export class DatasetService {
       processing_status: status,
     };
 
-    // Update metadata with processing info
+    // Update metadata with processing info — always read-and-merge to avoid clobbering file_info
     if (status === 'processing') {
+      const { data: currentDataset } = await supabase
+        .from('datasets')
+        .select('metadata')
+        .eq('id', datasetId)
+        .single();
+      const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
       updateData.metadata = {
+        ...currentMetadata,
         processing_info: {
+          ...currentMetadata.processing_info,
           started_at: new Date().toISOString(),
         },
       };
@@ -259,8 +275,70 @@ export class DatasetService {
       throw error;
     }
 
-    console.log(`Found ${data?.length || 0} datasets for user:`, userId || 'null (dev mode)');
     return data || [];
+  }
+
+  /**
+   * Get all datasets linked to a canvas (visible to both owner and collaborators)
+   */
+  static async getCanvasDatasets(canvasId: string): Promise<Tables<'datasets'>[]> {
+    if (!isSupabaseConfigured()) return [];
+
+    // Step 1: get dataset IDs linked to canvas (avoids embedded-join RLS edge cases).
+    // TODO: remove 'canvas_datasets' cast once `supabase gen types typescript` is re-run
+    //       after the schema migration adding canvas_datasets has been applied to the project.
+    // Type safety is restored by the explicit annotation below.
+    const { data: links, error: linkError } = await (supabase
+      .from('canvas_datasets' as any)
+      .select('dataset_id')
+      .eq('canvas_id', canvasId)
+      .order('added_at', { ascending: false })) as unknown as {
+        data: Pick<CanvasDatasetRow, 'dataset_id'>[] | null;
+        error: { message: string; code: string } | null;
+      };
+
+    if (linkError) {
+      console.error('Failed to fetch canvas_datasets links:', linkError);
+      throw linkError;
+    }
+
+    const datasetIds = (links || []).map((r) => r.dataset_id).filter(Boolean);
+
+    if (datasetIds.length === 0) return [];
+
+    // Step 2: fetch datasets by ID (RLS: collaborator or owner policy must be applied)
+    const { data, error } = await supabase
+      .from('datasets')
+      .select('*')
+      .in('id', datasetIds);
+
+    if (error) {
+      console.error('Failed to fetch datasets by IDs:', error);
+      throw error;
+    }
+
+    // Restore the added_at ordering from canvas_datasets — .in() doesn't preserve it
+    const idOrder = new Map(datasetIds.map((id, i) => [id, i]));
+    return ((data || []) as Tables<'datasets'>[]).sort(
+      (a, b) => (idOrder.get(a.id) ?? 0) - (idOrder.get(b.id) ?? 0)
+    );
+  }
+
+  /**
+   * Link an existing dataset to a canvas (idempotent — ignores duplicate key errors)
+   */
+  static async linkDatasetToCanvas(datasetId: string, canvasId: string): Promise<void> {
+    // TODO: remove 'canvas_datasets' cast once supabase types are regenerated
+    const { error } = await (supabase
+      .from('canvas_datasets' as any)
+      .insert({ canvas_id: canvasId, dataset_id: datasetId })) as unknown as {
+        error: { message: string; code: string } | null;
+      };
+
+    if (error && error.code !== '23505') { // 23505 = unique_violation (already linked)
+      console.error('Failed to link dataset to canvas:', error);
+      throw error;
+    }
   }
 
   /**
