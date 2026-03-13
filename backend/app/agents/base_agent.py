@@ -47,7 +47,7 @@ class BaseAgent(ABC):
         Returns:
             AgentResult with processing outcome
         """
-        pass
+        pass  # pragma: no cover
 
     def get_fallback_result(self, context: ProcessingContext, error: str = None) -> AgentResult:
         """
