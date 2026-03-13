@@ -64,8 +64,6 @@ export interface ChartRecommendation {
 }
 
 export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, isOwner }: { readOnly?: boolean; emitCursor?: (x: number, y: number) => void; canvasId?: string; isOwner?: boolean }) {
-  console.log('AutoVizAgent component mounting...');
-  
   // State management
   const [_visualizations, setVisualizations] = useState<Visualization[]>([]);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
@@ -73,105 +71,45 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [recommendations, setRecommendations] = useState<ChartRecommendation[]>([]);
   
-  // Dataset management with React Query (read-only for AutoVizAgent)
-  const { datasets } = useDatasetManager();
+  // Dataset management with React Query — scoped to canvas when canvasId is present
+  const { datasets } = useDatasetManager({ canvasId });
   
-  // Canvas state
-  const { viewport, canvasElements, addElement } = useCanvasStore();
+  // Canvas state — use selectors to avoid re-renders from unrelated store updates (e.g. cursor moves)
+  const viewport = useCanvasStore(s => s.viewport);
+  const canvasElements = useCanvasStore(s => s.canvasElements);
+  const addElement = useCanvasStore(s => s.addElement);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
-  
-  // Debug logging for state changes
-  React.useEffect(() => {
-    console.log('AutoVizAgent state changed:', {
-      hasRawData: !!rawData,
-      rawDataLength: rawData?.length,
-      hasDataProfile: !!dataProfile,
-      isLoading,
-      agentStates,
-      datasetsCount: datasets.length
-    });
-  }, [rawData, dataProfile, isLoading, agentStates, datasets.length]);
   
   // Theme transition hook
   const { isDarkMode, isTransitioning, toggleTheme } = useThemeTransition();
   
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Mount effect
-  React.useEffect(() => {
-    console.log('AutoVizAgent mounted successfully');
-    return () => {
-      console.log('AutoVizAgent unmounting');
-    };
-  }, []);
-
   // Sync recommendations from store and process them with our new system
   React.useEffect(() => {
     if (storeRecommendations && storeRecommendations.length > 0 && rawData) {
-      console.log('Processing recommendations with new parameter extraction system:', {
-        recommendationsCount: storeRecommendations.length,
-        rawDataLength: rawData.length,
-        sampleRecommendation: storeRecommendations[0]
-      });
-
-      // Use our new RecommendationProcessor to enhance recommendations
       const processedRecommendations = RecommendationProcessor.processRecommendations(
         storeRecommendations,
         rawData,
         dataProfile
       );
 
-      console.log('Processed recommendations:', processedRecommendations);
-
-      // Debug: Check if data is properly embedded in configs
-      processedRecommendations.forEach((rec, index) => {
-        console.log(`Recommendation ${index} data check:`, {
-          chartType: rec.chartType,
-          hasConfig: !!rec.config,
-          hasData: !!rec.config?.data,
-          dataLength: rec.config?.data?.length,
-          configKeys: rec.config ? Object.keys(rec.config) : [],
-          sampleDataRow: rec.config?.data?.[0]
-        });
-      });
-
-      // Convert to the format expected by the UI
       const formattedRecommendations = processedRecommendations.map((rec, index) => ({
         id: `rec-${index}`,
         type: rec.chartType,
-        chartType: rec.chartType, // Add this for compatibility
+        chartType: rec.chartType,
         name: rec.chartType.charAt(0).toUpperCase() + rec.chartType.slice(1),
         confidence: rec.confidence,
         reasoning: rec.justification,
-        justification: rec.justification, // Add this for compatibility
+        justification: rec.justification,
         description: `Shows data using ${rec.chartType} format`,
         bestFor: ['Data visualization'],
         config: rec.config
       }));
 
-            console.log('Final formatted recommendations:', formattedRecommendations);
-
-            // Debug: Check if data is still present after formatting
-            formattedRecommendations.forEach((rec, index) => {
-              console.log(`Formatted recommendation ${index} data check:`, {
-                chartType: rec.chartType,
-                hasConfig: !!rec.config,
-                hasData: !!rec.config?.data,
-                dataLength: rec.config?.data?.length,
-                configKeys: rec.config ? Object.keys(rec.config) : []
-              });
-            });
-
-            setRecommendations(formattedRecommendations);
+      setRecommendations(formattedRecommendations);
     } else if (storeRecommendations && storeRecommendations.length > 0 && !rawData) {
       console.warn('Recommendations available but no raw data for processing');
-      console.warn('Debug - Store state:', {
-        hasStoreRecommendations: !!storeRecommendations,
-        storeRecommendationsLength: storeRecommendations?.length || 0,
-        hasRawData: !!rawData,
-        rawDataLength: rawData ? (rawData as any[]).length : 0,
-        sampleStoreRecommendation: storeRecommendations?.[0]
-      });
     }
   }, [storeRecommendations, rawData, dataProfile]);
 
@@ -182,15 +120,6 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
 
   // Auto-select dataset when analysis data is available (only if no manual selection)
   React.useEffect(() => {
-    console.log('Auto-selection effect triggered:', {
-      hasRawData: !!rawData,
-      rawDataLength: rawData?.length,
-      hasSelectedDataset: !!selectedDataset,
-      hasDataProfile: !!dataProfile,
-      isLoading,
-      datasetsLength: datasets.length
-    });
-
     // Only auto-select if no dataset is already selected and we have raw data
     if (rawData && !selectedDataset && datasets.length > 0) {
       const matchingDataset = datasets.find((d: Dataset) => {
@@ -210,7 +139,6 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       });
 
       if (matchingDataset) {
-        console.log('Auto-selecting matching dataset:', matchingDataset.name);
         setSelectedDataset(matchingDataset);
         // Note: Don't start analysis here - let the selection effect handle it
       }
@@ -220,12 +148,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
 
   // Handle dataset selection from DataPanel
   const handleDatasetSelect = useCallback(async (dataset: Dataset) => {
-    console.log('Dataset selected in AutoVizAgent:', dataset.name, 'with data length:', dataset.data?.length);
     setSelectedDataset(dataset);
 
-    // Start analysis if dataset has data
     if (dataset.data && dataset.data.length > 0) {
-      console.log('Starting analysis for selected dataset:', dataset.name);
       startAnalysis(dataset.data, dataset.name, dataset.id);
     } else {
       console.warn('Selected dataset has no data:', dataset.name);
@@ -238,15 +163,6 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     type: Visualization['type'] = 'bar',
     recommendation?: ChartRecommendation
   ) => {
-    console.log('createVisualization called:', {
-      type,
-      hasRecommendation: !!recommendation,
-      hasConfig: !!recommendation?.config,
-      hasData: !!recommendation?.config?.data,
-      dataLength: recommendation?.config?.data?.length,
-      configKeys: recommendation?.config ? Object.keys(recommendation.config) : []
-    });
-
     // Create visualization for local state tracking
     const newViz: Visualization = {
       id: `viz-${Date.now()}`,
@@ -288,12 +204,6 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       }
     };
 
-    console.log('🎯 AutoVizAgent: Adding to canvas store:', {
-      canvasElement,
-      viewport,
-      finalPosition,
-      rawPosition: position
-    });
     const newElementId = addElement(canvasElement);
 
     // Broadcast new element to collaborators
@@ -409,6 +319,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
           <DataPanel
             selectedDataset={selectedDataset}
             onDatasetSelect={handleDatasetSelect}
+            canvasId={canvasId}
           />
         </div>
 

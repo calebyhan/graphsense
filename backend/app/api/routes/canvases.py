@@ -38,6 +38,7 @@ async def get_canvas_permission(canvas_id: str, user_id: str, supabase) -> Optio
     )
     canvas_data = canvas.data if canvas is not None else None
     if not canvas_data:
+        logger.warning("get_canvas_permission: canvas %s not found", canvas_id)
         return None
     if canvas_data["owner_id"] == user_id:
         return "owner"
@@ -52,6 +53,7 @@ async def get_canvas_permission(canvas_id: str, user_id: str, supabase) -> Optio
     collab_data = collab.data if collab is not None else None
     if collab_data:
         return collab_data["permission"]
+    logger.warning("get_canvas_permission: user %s has no access to canvas %s", user_id, canvas_id)
     return None
 
 
@@ -222,6 +224,8 @@ async def join_canvas(body: JoinRequest, user_id: str = Depends(require_user)):
 
     canvas_id = canvas_result_data["id"]
     permission = canvas_result_data["share_permission"]
+    if not permission:
+        raise HTTPException(status_code=422, detail="Share link has no associated permission")
 
     # Skip if already the owner
     owner_check = await asyncio.to_thread(
