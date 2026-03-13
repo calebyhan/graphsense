@@ -68,13 +68,11 @@ async def test_process_invalid_input(profiler):
 # ── validate_input ────────────────────────────────────────────────────────────
 
 def test_validate_input_valid(profiler, sample_input):
-    # LegacyProfiler overrides validate_input to check for non-empty dict
-    # It inherits BaseAgent.validate_input which checks context.sample_data
-    # But LegacyProfiler calls validate_input(data) where data is a dict.
-    # BaseAgent.validate_input expects ProcessingContext — it will hit the
-    # try/except path with an AttributeError, returning False.
-    # The process() method handles this via fallback.
-    # So validate_input with a plain dict returns False (expected behaviour).
+    # LegacyProfiler inherits BaseAgent.validate_input, which expects a ProcessingContext
+    # with a sample_data attribute. Here, validate_input(data) is called with a plain dict.
+    # BaseAgent.validate_input hits the try/except path (AttributeError) and returns False.
+    # The process() method handles this via the fallback path.
+    # This test verifies that a boolean is returned for dict input.
     result = profiler.validate_input(sample_input)
     assert isinstance(result, bool)
 

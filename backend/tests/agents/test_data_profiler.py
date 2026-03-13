@@ -305,10 +305,14 @@ async def test_process_success(profiler, context):
 
 async def test_process_exception_returns_error(profiler):
     """process() with a broken context (sample_data raising) hits the exception path."""
-    bad_ctx = MagicMock()
-    bad_ctx.sample_data = MagicMock(side_effect=Exception("bad data"))
-    bad_ctx.dataset_id = "x"
-    result = await profiler.process(bad_ctx)
+    class _BrokenContext:
+        dataset_id = "x"
+
+        @property
+        def sample_data(self):
+            raise Exception("bad data")
+
+    result = await profiler.process(_BrokenContext())
     assert result.success is False
 
 
