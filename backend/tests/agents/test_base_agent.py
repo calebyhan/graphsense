@@ -87,13 +87,13 @@ def test_validate_input_none():
 
 
 def test_validate_input_exception():
-    """sample_data attribute raises — should return False."""
-    from unittest.mock import MagicMock
-    agent = _OkAgent()
-    bad_ctx = MagicMock()
-    bad_ctx.sample_data = MagicMock()
-    bad_ctx.sample_data.empty = MagicMock(side_effect=Exception("oops"))
-    assert agent.validate_input(bad_ctx) is False
+    """sample_data.empty raising — should return False."""
+    class _BrokenCtx:
+        @property
+        def sample_data(self):
+            raise Exception("oops")
+
+    assert _OkAgent().validate_input(_BrokenCtx()) is False
 
 
 # ── get_fallback_result (base implementation) ─────────────────────────────────
