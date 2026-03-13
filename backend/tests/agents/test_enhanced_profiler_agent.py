@@ -31,10 +31,7 @@ def sample_input():
 # ── process() ────────────────────────────────────────────────────────────────
 
 async def test_process_success(profiler, sample_input):
-    """Patch validate_input to return True so the main process body runs."""
-    from unittest.mock import patch as _patch
-    with _patch.object(profiler, "validate_input", return_value=True):
-        result = await profiler.process(sample_input)
+    result = await profiler.process(sample_input)
     assert result["success"] is True
 
 
@@ -63,13 +60,19 @@ async def test_process_invalid_input(profiler):
 # ── validate_input ────────────────────────────────────────────────────────────
 
 def test_validate_input_valid(profiler, sample_input):
-    # LegacyProfiler inherits BaseAgent.validate_input, which expects a ProcessingContext
-    # with a sample_data attribute. Here, validate_input(data) is called with a plain dict.
-    # BaseAgent.validate_input hits the try/except path (AttributeError) and returns False.
-    # The process() method handles this via the fallback path.
-    # This test verifies that a boolean is returned for dict input.
-    result = profiler.validate_input(sample_input)
-    assert isinstance(result, bool)
+    assert profiler.validate_input(sample_input) is True
+
+
+def test_validate_input_rejects_none(profiler):
+    assert profiler.validate_input(None) is False
+
+
+def test_validate_input_rejects_empty_dataset(profiler):
+    assert profiler.validate_input({"dataset": []}) is False
+
+
+def test_validate_input_rejects_missing_dataset(profiler):
+    assert profiler.validate_input({"other": "value"}) is False
 
 
 # ── _statistical_analysis ────────────────────────────────────────────────────

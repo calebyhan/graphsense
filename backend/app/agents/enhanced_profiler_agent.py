@@ -229,6 +229,10 @@ class DataProfilerAgent(BaseAgent):
         else:
             return "very_weak"
 
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        """Validate legacy dict-based input."""
+        return bool(data and isinstance(data, dict) and data.get("dataset"))
+
     def _format_output(self, data: Dict[str, Any], success: bool = True) -> Dict[str, Any]:
         """Format processing output into a consistent response structure."""
         return {"data": data, "success": success}
@@ -242,3 +246,7 @@ class DataProfilerAgent(BaseAgent):
             "patterns": {},
             "data_quality": {"completeness": 0}
         }, success=False)
+
+
+# Backward-compatible alias
+EnhancedDataProfilerAgent = DataProfilerAgent
