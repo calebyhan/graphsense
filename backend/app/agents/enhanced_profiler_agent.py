@@ -21,45 +21,37 @@ class DataProfilerAgent:
     def __init__(self):
         self.agent_type = AgentType.PROFILER
 
+    async def analyze(self, data: Dict[str, Any]) -> ComprehensiveDataAnalysis:
+        """Run profiling and return a ComprehensiveDataAnalysis model (legacy pipeline interface)."""
+        if not self.validate_input(data):
+            raise ValueError("Invalid input data for profiling")
+
+        start_time = datetime.now()
+        dataset = data.get("dataset", [])
+        if not dataset:
+            raise ValueError("No dataset provided in input")
+
+        df = pd.DataFrame(dataset)
+        logger.info(f"Processing dataset with {len(df)} rows and {len(df.columns)} columns")
+
+        processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+
+        return ComprehensiveDataAnalysis(
+            dataset_id=data.get("dataset_id", ""),
+            statistical_summary=self._statistical_analysis(df),
+            correlations=self._correlation_analysis(df),
+            patterns=self._pattern_analysis(df),
+            data_quality=self._data_quality_analysis(df),
+            temporal_patterns=None,
+            recommendations_context={},
+            processing_time_ms=processing_time,
+        )
+
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process dataset and return basic profiling results"""
+        """Process dataset and return basic profiling results."""
         try:
-            if not self.validate_input(data):
-                return self.get_fallback_result(data)
-
-            start_time = datetime.now()
-            
-            # Extract dataset from input
-            dataset = data.get("dataset", [])
-            if not dataset:
-                raise ValueError("No dataset provided in input")
-
-            # Convert to DataFrame for analysis
-            df = pd.DataFrame(dataset)
-            logger.info(f"Processing dataset with {len(df)} rows and {len(df.columns)} columns")
-
-            # Perform core analyses
-            statistical_summary = self._statistical_analysis(df)
-            correlations = self._correlation_analysis(df)
-            patterns = self._pattern_analysis(df)
-            data_quality = self._data_quality_analysis(df)
-
-            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-
-            # Create analysis result
-            analysis = ComprehensiveDataAnalysis(
-                dataset_id=data.get("dataset_id", ""),
-                statistical_summary=statistical_summary,
-                correlations=correlations,
-                patterns=patterns,
-                data_quality=data_quality,
-                temporal_patterns=None,  # Simplified - no temporal analysis for now
-                recommendations_context={},  # Simplified - no AI insights for now
-                processing_time_ms=processing_time
-            )
-
+            analysis = await self.analyze(data)
             return self._format_output(analysis.model_dump(), success=True)
-
         except Exception as e:
             logger.error(f"Data profiler processing failed: {e}")
             return self.get_fallback_result(data)
@@ -230,7 +222,10 @@ class DataProfilerAgent:
 
     def validate_input(self, data: Dict[str, Any]) -> bool:
         """Validate legacy dict-based input."""
-        return bool(data and isinstance(data, dict) and data.get("dataset"))
+        if not (data and isinstance(data, dict)):
+            return False
+        dataset = data.get("dataset")
+        return isinstance(dataset, list) and len(dataset) > 0
 
     def _format_output(self, data: Dict[str, Any], success: bool = True) -> Dict[str, Any]:
         """Format processing output into a consistent response structure."""
