@@ -98,40 +98,13 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
     placeholderData: [], // Display while loading — unlike initialData, doesn't count as cached data
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
-    staleTime: canvasId ? 15 * 1000 : 5 * 60 * 1000, // 15s for canvas (Realtime subscription below handles live updates; poll is a safety net)
+    staleTime: canvasId ? 15 * 1000 : 5 * 60 * 1000, // 15s for canvas (Realtime subscription handles live updates; poll is a safety net)
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: true,
     refetchOnMount: 'always', // Force refetch on every mount regardless of cache
-    // Realtime subscription (useEffect below) handles live updates; 30s poll is a safety-net fallback
+    // Realtime subscription handles live updates; 30s poll is a safety-net fallback
     refetchInterval: canvasId ? 30000 : false,
   });
-
-  // Subscribe to canvas_datasets Realtime events so all collaborators see new uploads instantly.
-  // Falls back gracefully when Supabase is not configured or canvasId is absent.
-  useEffect(() => {
-    if (!canvasId || !isSupabaseConfigured()) return;
-
-    const channel = supabase
-      .channel(`canvas_datasets:${canvasId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'canvas_datasets',
-          filter: `canvas_id=eq.${canvasId}`,
-        },
-        () => {
-          // A collaborator linked a new dataset — invalidate so the query re-fetches
-          queryClient.invalidateQueries({ queryKey: ['datasets', 'canvas', canvasId] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [canvasId, queryClient]);
 
   // Mutation to create a new dataset with lifecycle support
   const createDatasetWithLifecycleMutation = useMutation({
