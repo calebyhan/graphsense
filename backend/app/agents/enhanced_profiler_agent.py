@@ -9,18 +9,17 @@ from typing import Dict, Any, List
 from scipy import stats
 from datetime import datetime
 
-from .base_agent import BaseAgent
 from app.models.base import AgentType
 from app.models.analysis import ComprehensiveDataAnalysis
 
 logger = logging.getLogger(__name__)
 
 
-class DataProfilerAgent(BaseAgent):
-    """Simplified agent for core data profiling functionality"""
+class DataProfilerAgent:
+    """Simplified agent for core data profiling functionality (legacy dict interface)."""
 
     def __init__(self):
-        super().__init__(AgentType.PROFILER)
+        self.agent_type = AgentType.PROFILER
 
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Process dataset and return basic profiling results"""
