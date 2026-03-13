@@ -16,3 +16,11 @@ def test_health(client):
 def test_health_detailed(client):
     r = client.get("/health/detailed")
     assert r.status_code == 200
+
+
+def test_health_detailed_exception(client):
+    """DB or system error during detailed check → 503."""
+    from unittest.mock import patch, AsyncMock
+    with patch("app.api.routes.health.test_connection", new=AsyncMock(side_effect=RuntimeError("conn fail"))):
+        r = client.get("/health/detailed")
+    assert r.status_code == 503

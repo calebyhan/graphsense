@@ -53,6 +53,18 @@ def mock_redis():
     return redis
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Clear in-memory rate limiter state between tests to prevent 429s."""
+    from app.core.limiter import limiter
+    storage = getattr(limiter, "_storage", None)
+    if storage is not None and hasattr(storage, "reset"):
+        storage.reset()
+    yield
+    if storage is not None and hasattr(storage, "reset"):
+        storage.reset()
+
+
 @pytest.fixture
 def app(mock_supabase, mock_redis):
     """FastAPI test app with Supabase, Redis, and Celery mocked out."""

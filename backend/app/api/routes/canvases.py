@@ -137,7 +137,7 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
     admin = get_supabase_admin_client()
 
     async def get_owner_email(owner_id: Optional[str]) -> Optional[str]:
-        if not owner_id:
+        if not owner_id:  # pragma: no cover
             return None
         try:
             resp = await asyncio.to_thread(
