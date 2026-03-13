@@ -47,7 +47,9 @@ class BaseAgent(ABC):
         Returns:
             AgentResult with processing outcome
         """
-        pass
+        raise NotImplementedError(  # pragma: no cover
+            f"{self.__class__.__name__}.process() must be implemented by subclasses"
+        )
 
     def get_fallback_result(self, context: ProcessingContext, error: str = None) -> AgentResult:
         """
