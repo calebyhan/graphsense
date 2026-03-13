@@ -83,8 +83,6 @@ def _populate_cache(ctx: ProcessingContext, agent: ChartRecommenderAgent):
 # ── _recommend_for_categorical_numeric ────────────────────────────────────────
 
 def test_recommend_cat_num_no_cols(agent):
-    from app.agents.data_profiler_agent import DataProfilerAgent
-    profiler = DataProfilerAgent()
     # no categorical cols → empty
     assert agent._recommend_for_categorical_numeric({}, [], ["salary"]) == []
     # no numeric cols → empty
