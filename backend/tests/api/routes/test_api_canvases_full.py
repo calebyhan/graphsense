@@ -463,7 +463,7 @@ def test_get_canvas_permission_canvas_not_found():
 
 
 def test_list_shared_canvases_null_owner_id():
-    """Shared canvas with owner_id=None exercises the get_owner_email null-guard (line 141)."""
+    """Shared canvas with owner_id=None is accepted and the shared list endpoint returns 200 (covers response when owner is missing)."""
     canvas_data = {
         "id": CANVAS_ID, "name": "Shared", "description": None,
         "owner_id": None,

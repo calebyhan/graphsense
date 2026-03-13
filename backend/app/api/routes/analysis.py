@@ -103,12 +103,6 @@ async def analyze_dataset(
                     detail="Dataset contains no data"
                 )
             
-            if len(df.columns) == 0:  # pragma: no cover
-                raise HTTPException(
-                    status_code=400,
-                    detail="Dataset contains no columns"
-                )
-            
             # Enhanced row limit check
             if len(body.data) > 50000:
                 raise HTTPException(
