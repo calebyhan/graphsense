@@ -252,9 +252,12 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         }
       }
     } catch (error) {
-      // Outer catch: handles errors before dbDataset is created (duplicate detection,
-      // in-progress flag races). The inner finally already clears the flag for
-      // errors that occur after dbDataset is created.
+      // Covers failures before the inner try (e.g. createDataset() throwing) where
+      // the inner finally has not yet run. Always clear the flag so the same file
+      // can be re-uploaded without a page refresh.
+      if (typeof window !== 'undefined') {
+        delete (window as any)[inProgressKey];
+      }
       throw error;
     }
     },
