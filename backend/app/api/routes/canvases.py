@@ -136,9 +136,7 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
     from app.database.supabase_client import get_supabase_admin_client
     admin = get_supabase_admin_client()
 
-    async def get_owner_email(owner_id: Optional[str]) -> Optional[str]:
-        if not owner_id:
-            return None
+    async def get_owner_email(owner_id: str) -> Optional[str]:
         try:
             resp = await asyncio.to_thread(
                 lambda: admin.auth.admin.get_user_by_id(owner_id)
@@ -164,8 +162,8 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
     else:
         shared_counts_map = {}
 
-    # Fetch owner emails deduped — one call per unique owner_id
-    unique_owner_ids = {canvas.get("owner_id") for _, canvas in rows_data}
+    # Fetch owner emails deduped — one call per unique non-null owner_id
+    unique_owner_ids = {canvas.get("owner_id") for _, canvas in rows_data if canvas.get("owner_id") is not None}
     email_results = await asyncio.gather(*[get_owner_email(oid) for oid in unique_owner_ids])
     owner_email_map: Dict[str, Optional[str]] = dict(zip(unique_owner_ids, email_results))
 
@@ -174,7 +172,10 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
             "id": canvas.get("id"),
             "name": canvas.get("name"),
             "description": canvas.get("description"),
-            "owner": {"id": canvas.get("owner_id"), "email": owner_email_map.get(canvas.get("owner_id"))},
+            "owner": {
+                "id": canvas.get("owner_id"),
+                "email": owner_email_map.get(canvas.get("owner_id")) if canvas.get("owner_id") is not None else None,
+            },
             "permission": row["permission"],
             "dataset_count": shared_counts_map.get(canvas.get("id"), 0),
             "joined_at": row["joined_at"],
