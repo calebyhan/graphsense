@@ -137,7 +137,7 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
     admin = get_supabase_admin_client()
 
     async def get_owner_email(owner_id: Optional[str]) -> Optional[str]:
-        if not owner_id:  # pragma: no cover — defensive check; callers normally filter out falsy owner_ids
+        if not owner_id:
             return None
         try:
             resp = await asyncio.to_thread(
@@ -165,7 +165,7 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
         shared_counts_map = {}
 
     # Fetch owner emails deduped — one call per unique owner_id
-    unique_owner_ids = {canvas.get("owner_id") for _, canvas in rows_data if canvas.get("owner_id")}
+    unique_owner_ids = {canvas.get("owner_id") for _, canvas in rows_data}
     email_results = await asyncio.gather(*[get_owner_email(oid) for oid in unique_owner_ids])
     owner_email_map: Dict[str, Optional[str]] = dict(zip(unique_owner_ids, email_results))
 

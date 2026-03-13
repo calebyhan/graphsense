@@ -9,8 +9,6 @@ import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from tests.conftest import SAMPLE_DATA
 
 
