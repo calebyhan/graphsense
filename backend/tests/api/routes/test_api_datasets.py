@@ -17,12 +17,6 @@ SAMPLE_DATASET = {
 }
 
 
-def _client(supabase_mock):
-    from main import app
-    with patch("app.api.routes.datasets.get_supabase_client", return_value=supabase_mock):
-        yield TestClient(app, raise_server_exceptions=False)
-
-
 def _make_supabase(data=None):
     t = MagicMock()
     for m in ["select", "insert", "update", "delete", "eq", "order", "range", "limit"]:

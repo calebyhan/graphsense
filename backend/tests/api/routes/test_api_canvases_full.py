@@ -174,12 +174,37 @@ def test_create_canvas():
 # POST /api/canvases/join — join_canvas (no permission stored)
 # ---------------------------------------------------------------------------
 
+def _make_join_supabase(canvas_row, owner_row=None):
+    """Sequences two maybe_single().execute() calls on the canvases table."""
+    sb = MagicMock()
+    call_count = {"n": 0}
+    rows = [canvas_row, owner_row]
+
+    def _table(name):
+        t = MagicMock()
+        for m in ["select", "insert", "update", "delete", "upsert", "eq",
+                  "order", "range", "limit", "single", "maybe_single"]:
+            getattr(t, m).return_value = t
+        if name == "canvases":
+            def _execute():
+                idx = call_count["n"]
+                call_count["n"] += 1
+                row = rows[idx] if idx < len(rows) else None
+                return None if row is None else MagicMock(data=row)
+            t.execute.side_effect = _execute
+        else:
+            t.execute.return_value = MagicMock(data=[])
+        return t
+
+    sb.table.side_effect = _table
+    return sb
+
+
 def test_join_canvas_no_share_permission():
     """Canvas exists but share_permission is None → 422."""
     from main import app
-    from tests.api.routes.test_api_canvases import _make_supabase
 
-    supabase = _make_supabase(
+    supabase = _make_join_supabase(
         canvas_row={"id": CANVAS_ID, "share_permission": None},
         owner_row=None,
     )
@@ -402,10 +427,21 @@ def test_remove_collaborator_not_owner():
 # ---------------------------------------------------------------------------
 
 def test_get_canvas_permission_owner():
-    """User is owner → returns 'owner'."""
-    responses = [_owner_check_response(USER_A)]
+    """Owner path in get_canvas_permission: GET canvas returns 200 with share_token visible."""
+    canvas_detail = {
+        "id": CANVAS_ID, "name": "C", "description": None,
+        "owner_id": USER_A, "share_token": "tok",
+        "share_permission": None, "created_at": "2024-01-01", "updated_at": "2024-01-01",
+    }
+    responses = [
+        _owner_check_response(USER_A),
+        MagicMock(data=canvas_detail),
+        MagicMock(data=[]),
+    ]
     with _ctx(USER_A, responses=responses) as (client, _, _t):
-        pass  # permission helper exercised via get_canvas below
+        r = client.get(f"/api/canvases/{CANVAS_ID}")
+    assert r.status_code == 200
+    assert "share_token" in r.json()
 
 
 def test_get_canvas_permission_canvas_not_found():
