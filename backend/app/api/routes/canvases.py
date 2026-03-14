@@ -163,9 +163,9 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
         shared_counts_map = {}
 
     # Fetch owner emails deduped — one call per unique non-null owner_id
-    unique_owner_ids = {canvas.get("owner_id") for _, canvas in rows_data if canvas.get("owner_id") is not None}
-    email_results = await asyncio.gather(*[get_owner_email(oid) for oid in unique_owner_ids])
-    owner_email_map: Dict[str, Optional[str]] = dict(zip(unique_owner_ids, email_results))
+    owner_ids_list = list({canvas.get("owner_id") for _, canvas in rows_data if canvas.get("owner_id") is not None})
+    email_results = await asyncio.gather(*[get_owner_email(oid) for oid in owner_ids_list])
+    owner_email_map: Dict[str, Optional[str]] = dict(zip(owner_ids_list, email_results))
 
     return [
         {

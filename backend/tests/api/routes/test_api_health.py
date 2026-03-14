@@ -14,7 +14,9 @@ def test_health(client):
 
 
 def test_health_detailed(client):
-    r = client.get("/health/detailed")
+    from unittest.mock import patch, AsyncMock
+    with patch("app.api.routes.health.test_connection", new=AsyncMock(return_value=True)):
+        r = client.get("/health/detailed")
     assert r.status_code == 200
 
 
