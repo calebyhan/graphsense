@@ -42,11 +42,12 @@ def test_list_datasets():
 
 def test_list_datasets_filtered_by_user():
     user_id = str(uuid.uuid4())
-    sb, _ = _make_supabase([SAMPLE_DATASET])
+    sb, t = _make_supabase([SAMPLE_DATASET])
     from main import app
     with patch("app.api.routes.datasets.get_supabase_client", return_value=sb):
         r = TestClient(app).get(f"/api/datasets/?user_id={user_id}")
     assert r.status_code == 200
+    t.eq.assert_called_with("user_id", user_id)
 
 
 def test_list_datasets_db_error():

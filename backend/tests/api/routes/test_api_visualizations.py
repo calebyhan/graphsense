@@ -146,6 +146,7 @@ def test_list_visualizations_with_user_id(mock_supabase):
     finally:
         app.dependency_overrides.pop(get_user_id, None)
     assert r.status_code == 200
+    mock_supabase.table.return_value.eq.assert_called_with("user_id", user_id)
 
 
 # ── Update ────────────────────────────────────────────────────────────────────
