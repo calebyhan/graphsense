@@ -105,14 +105,3 @@ async def delete_dataset(dataset_id: str):
 
 
 
-@router.get("/")
-async def datasets_info():
-    """Get basic information about the datasets API"""
-    return {
-        "message": "Datasets API",
-        "endpoints": {
-            "GET /": "List datasets",
-            "GET /{dataset_id}": "Get dataset details",
-            "DELETE /{dataset_id}": "Delete dataset"
-        }
-    }
