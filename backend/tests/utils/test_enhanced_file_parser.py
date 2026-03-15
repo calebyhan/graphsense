@@ -1,5 +1,6 @@
 """Tests for app/utils/enhanced_file_parser.py"""
 
+import asyncio
 import json
 import pytest
 from io import BytesIO
@@ -277,11 +278,39 @@ async def test_get_file_preview_exception_returns_error(parser):
 
 
 @pytest.mark.asyncio
-async def test_parse_file_csv(parser):
+async def test_parse_file_csv_immediate_execution(parser):
+    """queue_request executes callback immediately (memory available path)."""
     csv_bytes = b"col1,col2\n1,2\n3,4\n"
     upload = make_upload_file(csv_bytes, "data.csv")
-    with patch.object(parser.memory_manager, "queue_request", new_callable=AsyncMock, return_value=True):
+
+    async def execute_immediately(request_id, callback, **kwargs):
+        await callback()
+        return True
+
+    with patch.object(parser.memory_manager, "queue_request", side_effect=execute_immediately):
         result = await parser.parse_file(upload, "req-001")
+    assert "data" in result
+
+
+@pytest.mark.asyncio
+async def test_parse_file_csv_queued_execution(parser):
+    """queue_request queues without executing; polling loop waits for background execution."""
+    csv_bytes = b"col1,col2\n1,2\n3,4\n"
+    upload = make_upload_file(csv_bytes, "data.csv")
+    captured_callback = {}
+
+    async def capture_callback(request_id, callback, **kwargs):
+        captured_callback["fn"] = callback
+        return True  # queued but not executed yet
+
+    async def run_queued():
+        await asyncio.sleep(0.05)
+        await captured_callback["fn"]()
+
+    with patch.object(parser.memory_manager, "queue_request", side_effect=capture_callback):
+        bg = asyncio.create_task(run_queued())
+        result = await parser.parse_file(upload, "req-001b")
+        await bg
     assert "data" in result
 
 

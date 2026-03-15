@@ -93,10 +93,16 @@ class EnhancedFileParser:
                 raise Exception("Failed to queue file parsing request - system overloaded")
 
             # If queue_request executed the callback immediately, return that result.
-            # Otherwise (request was queued for later), execute directly to return now.
+            # Otherwise, poll until _process_queue runs the callback when memory is free.
             if 'result' in result_holder:
                 return result_holder['result']
-            return await parse_callback()
+
+            start = asyncio.get_running_loop().time()
+            while 'result' not in result_holder:
+                if asyncio.get_running_loop().time() - start > 300:
+                    raise TimeoutError("Timed out waiting for queued file parsing to complete")
+                await asyncio.sleep(0.1)
+            return result_holder['result']
             
         except Exception as e:
             logger.error(f"File parsing failed for {file.filename}: {e}")
