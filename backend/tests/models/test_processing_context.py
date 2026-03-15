@@ -271,14 +271,19 @@ class TestCreateFromData:
 class TestGetSystemMemoryInfo:
     def test_returns_expected_keys(self):
         ctx = _make_ctx()
-        info = ctx.get_system_memory_info()
-        assert "total_gb" in info
-        assert "available_gb" in info
-        assert "used_percent" in info
-        assert "process_memory_mb" in info
+        mock_vm = MagicMock(total=16 * 1024**3, available=8 * 1024**3, percent=50.0)
+        mock_proc_inst = MagicMock()
+        mock_proc_inst.memory_info.return_value = MagicMock(rss=500 * 1024**2)
+        with patch("app.models.processing_context.psutil.virtual_memory", return_value=mock_vm), \
+             patch("app.models.processing_context.psutil.Process", return_value=mock_proc_inst):
+            info = ctx.get_system_memory_info()
+        assert info["total_gb"] == 16.0
+        assert info["available_gb"] == 8.0
+        assert info["used_percent"] == 50.0
+        assert info["process_memory_mb"] == 500.0
 
     def test_exception_returns_empty_dict(self):
         ctx = _make_ctx()
-        with patch("psutil.virtual_memory", side_effect=RuntimeError("fail")):
+        with patch("app.models.processing_context.psutil.virtual_memory", side_effect=RuntimeError("fail")):
             result = ctx.get_system_memory_info()
         assert result == {}
