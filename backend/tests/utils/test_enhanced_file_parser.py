@@ -329,7 +329,7 @@ async def test_parse_file_queued_callback_error_propagates(parser):
         try:
             await captured_callback["fn"]()
         except Exception:
-            pass  # _process_queue swallows errors; result_holder['error'] is set
+            pass  # exception is captured in the Future; caller re-raises it
 
     with patch.object(parser.memory_manager, "queue_request", side_effect=capture_callback):
         with patch.object(parser, "_parse_file_content", side_effect=RuntimeError("parse failed")):

@@ -230,7 +230,7 @@ class MemoryManager:
 
                 # Check if request is no longer active (e.g. cancelled)
                 if request.request_id not in self.active_requests:
-                    logger.info(f"Request {request.request_id} is no longer active, skipping")
+                    logger.debug(f"Request {request.request_id} is no longer active, skipping")
                     continue
                 
                 # Check if memory is available

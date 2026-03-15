@@ -28,13 +28,13 @@ def test_get_memory_usage_keys(monitor):
 
 
 def test_is_memory_available_very_large(monitor):
-    # Asking for 0 bytes should always be available
-    assert monitor.is_memory_available(0) is True
+    with patch.object(monitor.process, "memory_info", return_value=MagicMock(rss=0)):
+        assert monitor.is_memory_available(0) is True
 
 
 def test_is_memory_available_too_large(monitor):
-    # Asking for more than the limit should return False
-    assert monitor.is_memory_available(monitor.memory_limit_bytes + 1) is False
+    with patch.object(monitor.process, "memory_info", return_value=MagicMock(rss=monitor.memory_limit_bytes)):
+        assert monitor.is_memory_available(monitor.memory_limit_bytes + 1) is False
 
 
 def test_get_memory_pressure_non_negative(monitor):
