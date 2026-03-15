@@ -222,6 +222,11 @@ class MemoryManager:
                 except asyncio.TimeoutError:
                     continue
                 
+                # Check if request was cancelled
+                if request.request_id not in self.active_requests:
+                    logger.info(f"Request {request.request_id} was cancelled, skipping")
+                    continue
+
                 # Check if request has timed out
                 if datetime.now() - request.created_at > timedelta(seconds=request.timeout_seconds):
                     logger.warning(f"Request {request.request_id} timed out")

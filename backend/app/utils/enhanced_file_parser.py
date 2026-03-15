@@ -68,15 +68,19 @@ class EnhancedFileParser:
             # Determine file type
             file_extension = self._get_file_extension(file.filename)
             
-            # Create parsing callback
+            # Create parsing callback that captures its result
+            result_holder: Dict[str, Any] = {}
+
             async def parse_callback():
-                return await self._parse_file_content(
-                    file_content, 
-                    file.filename or "unknown", 
+                result = await self._parse_file_content(
+                    file_content,
+                    file.filename or "unknown",
                     file_extension
                 )
-            
-            # Queue the parsing request
+                result_holder['result'] = result
+                return result
+
+            # Queue the parsing request (executes immediately if memory is available)
             success = await self.memory_manager.queue_request(
                 request_id=request_id,
                 callback=parse_callback,
@@ -84,13 +88,14 @@ class EnhancedFileParser:
                 priority=priority,
                 timeout_seconds=300
             )
-            
+
             if not success:
                 raise Exception("Failed to queue file parsing request - system overloaded")
-            
-            # The callback will be executed when memory is available
-            # For now, return a placeholder - in a real implementation,
-            # you'd need to implement a way to wait for the result
+
+            # If queue_request executed the callback immediately, return that result.
+            # Otherwise (request was queued for later), execute directly to return now.
+            if 'result' in result_holder:
+                return result_holder['result']
             return await parse_callback()
             
         except Exception as e:

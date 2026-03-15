@@ -158,12 +158,29 @@ def test_get_queue_status(manager):
 
 @pytest.mark.asyncio
 async def test_cancel_existing_request(manager):
-    async def cb(): pass
+    called = []
+
+    async def cb():
+        called.append(True)
 
     with patch.object(manager, "is_memory_available", return_value=False):
         await manager.queue_request("cancel-me", cb)
     assert manager.cancel_request("cancel-me") is True
     assert "cancel-me" not in manager.active_requests
+
+    # Verify the cancelled callback is not executed by _process_queue
+    manager._running = True
+    with patch.object(manager, "is_memory_available", return_value=True):
+        task = asyncio.create_task(manager._process_queue())
+        await asyncio.sleep(0.05)
+        manager._running = False
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    assert not called
 
 
 def test_cancel_nonexistent_request(manager):
