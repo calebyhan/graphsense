@@ -61,6 +61,7 @@ async def validate_jwt(token: str) -> Optional[str]:
             return response.user.id
         return None
     except Exception:
+        logger.warning("JWT validation failed — auth service may be unavailable")
         return None
 
 
@@ -108,7 +109,7 @@ async def get_user_display(user_id: str) -> dict:
                 "color": profile.data["avatar_color"],
             }
     except Exception:
-        pass
+        logger.warning("Failed to load profile for user %s", user_id)
     # Fallback
     return {"display_name": f"User-{user_id[:4]}", "color": "#4F46E5"}
 
@@ -442,11 +443,18 @@ async def _handle_disconnect(
     manager: ConnectionManager,
     lock_mgr: LockManager,
 ) -> None:
-    # 1. Remove from connection pool
-    await manager.disconnect(canvas_id, user_id)
+    # 1. Remove from connection pool — isolated so subsequent steps always run
+    try:
+        await manager.disconnect(canvas_id, user_id)
+    except Exception:
+        logger.exception("Error disconnecting user %s from canvas %s", user_id, canvas_id)
 
     # 2. Release all locks held by this user
-    released_elements = await lock_mgr.release_all_for_user(canvas_id, user_id)
+    released_elements: list = []
+    try:
+        released_elements = await lock_mgr.release_all_for_user(canvas_id, user_id)
+    except Exception:
+        logger.exception("Error releasing locks for user %s in canvas %s", user_id, canvas_id)
 
     # 3. Broadcast lock releases
     for element_id in released_elements:
