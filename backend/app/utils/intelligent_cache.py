@@ -457,9 +457,15 @@ class IntelligentCache:
                         )
             
             # Check cache utilization
+            _cache_attr = {
+                'fingerprint': 'data_fingerprint_cache',
+                'ai_response': 'ai_response_cache',
+                'analysis': 'analysis_cache',
+                'chart_config': 'chart_config_cache',
+            }
             cache_sizes = self.get_cache_sizes()
             for cache_type, size in cache_sizes.items():
-                max_size = getattr(getattr(self, f"{cache_type}_cache"), 'maxsize', 0)
+                max_size = getattr(getattr(self, _cache_attr.get(cache_type, f"{cache_type}_cache")), 'maxsize', 0)
                 if max_size > 0:
                     utilization = size / max_size
                     if utilization > 0.9:  # Over 90% utilization
