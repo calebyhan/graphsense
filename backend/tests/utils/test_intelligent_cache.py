@@ -3,7 +3,7 @@
 import pytest
 import threading
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import app.utils.intelligent_cache as ic_module
 from app.utils.intelligent_cache import (
@@ -420,6 +420,3 @@ def test_thread_safe_access(cache):
 
     assert not errors
 
-
-# needed for mock usage in cache hit test
-from unittest.mock import MagicMock
