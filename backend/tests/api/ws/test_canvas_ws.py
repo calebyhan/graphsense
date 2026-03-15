@@ -837,6 +837,48 @@ def test_ws_element_commit_db_error_still_broadcasts():
     run_ws_test(handler)
 
 
+def test_ws_element_remove_blocked_by_lock():
+    """element_remove is silently dropped when another user holds the lock."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.get_holder.return_value = "u2"  # someone else holds the lock
+
+        with patch("app.api.ws.canvas_ws.delete_element", new=AsyncMock()) as mock_delete:
+            with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+                ws.receive_json()
+                ws.send_json({"type": "element_remove", "element_id": "e1"})
+
+            mock_delete.assert_not_awaited()
+            calls = [str(c) for c in mgr.broadcast.await_args_list]
+            assert not any("element_removed" in c for c in calls)
+
+    run_ws_test(handler)
+
+
+def test_ws_element_update_blocked_by_lock():
+    """element_update is silently dropped when another user holds the lock."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.get_holder.return_value = "u2"  # someone else holds the lock
+
+        with patch("app.api.ws.canvas_ws.patch_element", new=AsyncMock()) as mock_patch:
+            with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+                ws.receive_json()
+                ws.send_json({
+                    "type": "element_update",
+                    "element_id": "e1",
+                    "updates": {"data": {"chartType": "line"}},
+                })
+
+            mock_patch.assert_not_awaited()
+            calls = [str(c) for c in mgr.broadcast.await_args_list]
+            assert not any("element_updated" in c for c in calls)
+
+    run_ws_test(handler)
+
+
 def test_ws_element_remove_db_error_still_broadcasts():
     """delete_element failure during element_remove does not prevent the broadcast."""
     def handler(client, mocks):
