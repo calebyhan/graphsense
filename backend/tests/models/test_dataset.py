@@ -5,6 +5,7 @@ Unit tests for app/models/dataset.py — 100% coverage.
 from datetime import datetime
 import uuid
 import pytest
+from pydantic import ValidationError
 from app.models.dataset import (
     ColumnProfile,
     DataQualityIssue,
@@ -99,7 +100,7 @@ class TestProcessedDataset:
         assert ds.file_type == ft
 
     def test_invalid_file_type_raises(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             ProcessedDataset(
                 filename="data.pdf",
                 file_size=1,
