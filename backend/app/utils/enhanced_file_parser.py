@@ -68,17 +68,23 @@ class EnhancedFileParser:
             # Determine file type
             file_extension = self._get_file_extension(file.filename)
             
-            # Create parsing callback that captures its result
-            result_holder: Dict[str, Any] = {}
+            # Create parsing callback that captures its result or any error
+            result_holder: Dict[str, Any] = {"done": False}
 
             async def parse_callback():
-                result = await self._parse_file_content(
-                    file_content,
-                    file.filename or "unknown",
-                    file_extension
-                )
-                result_holder['result'] = result
-                return result
+                try:
+                    result = await self._parse_file_content(
+                        file_content,
+                        file.filename or "unknown",
+                        file_extension
+                    )
+                    result_holder['result'] = result
+                    return result
+                except Exception as e:
+                    result_holder['error'] = e
+                    raise
+                finally:
+                    result_holder['done'] = True
 
             # Queue the parsing request (executes immediately if memory is available)
             success = await self.memory_manager.queue_request(
@@ -94,16 +100,26 @@ class EnhancedFileParser:
 
             # If queue_request executed the callback immediately, return that result.
             # Otherwise, poll until _process_queue runs the callback when memory is free.
-            if 'result' in result_holder:
+            if result_holder['done']:
+                if 'error' in result_holder:
+                    raise result_holder['error']
                 return result_holder['result']
 
-            start = asyncio.get_running_loop().time()
-            while 'result' not in result_holder:
-                if asyncio.get_running_loop().time() - start > 300:
-                    raise TimeoutError("Timed out waiting for queued file parsing to complete")
-                await asyncio.sleep(0.1)
+            try:
+                loop = asyncio.get_running_loop()
+                start = loop.time()
+                while not result_holder['done']:
+                    if loop.time() - start > 300:
+                        raise TimeoutError("Timed out waiting for queued file parsing to complete")
+                    await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                self.memory_manager.cancel_request(request_id)
+                raise
+
+            if 'error' in result_holder:
+                raise result_holder['error']
             return result_holder['result']
-            
+
         except Exception as e:
             logger.error(f"File parsing failed for {file.filename}: {e}")
             raise

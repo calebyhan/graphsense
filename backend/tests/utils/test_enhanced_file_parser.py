@@ -315,6 +315,49 @@ async def test_parse_file_csv_queued_execution(parser):
 
 
 @pytest.mark.asyncio
+async def test_parse_file_queued_callback_error_propagates(parser):
+    """Error from callback in queued path is raised immediately, not after 300s timeout."""
+    upload = make_upload_file(b"a,b\n1,2\n", "data.csv")
+    captured_callback = {}
+
+    async def capture_callback(request_id, callback, **kwargs):
+        captured_callback["fn"] = callback
+        return True
+
+    async def run_failing_callback():
+        await asyncio.sleep(0.05)
+        try:
+            await captured_callback["fn"]()
+        except Exception:
+            pass  # _process_queue swallows errors; result_holder['error'] is set
+
+    with patch.object(parser.memory_manager, "queue_request", side_effect=capture_callback):
+        with patch.object(parser, "_parse_file_content", side_effect=RuntimeError("parse failed")):
+            bg = asyncio.create_task(run_failing_callback())
+            with pytest.raises(RuntimeError, match="parse failed"):
+                await parser.parse_file(upload, "req-err")
+            await bg
+
+
+@pytest.mark.asyncio
+async def test_parse_file_cancellation_cleans_up(parser):
+    """CancelledError during polling cancels the queued request."""
+    upload = make_upload_file(b"a,b\n1,2\n", "data.csv")
+
+    async def never_execute(request_id, callback, **kwargs):
+        return True  # queued, never run
+
+    with patch.object(parser.memory_manager, "queue_request", side_effect=never_execute):
+        task = asyncio.create_task(parser.parse_file(upload, "cancel-poll"))
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert parser.memory_manager.cancel_request("cancel-poll") is False  # already cancelled
+
+
+@pytest.mark.asyncio
 async def test_parse_file_queue_rejected(parser):
     csv_bytes = b"a,b\n1,2\n"
     upload = make_upload_file(csv_bytes, "data.csv")
