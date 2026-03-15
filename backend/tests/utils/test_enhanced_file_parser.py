@@ -340,6 +340,24 @@ async def test_parse_file_queued_callback_error_propagates(parser):
 
 
 @pytest.mark.asyncio
+async def test_parse_file_immediate_execution_error_not_masked_as_overload(parser):
+    """Parsing error during immediate execution raises the real error, not 'overloaded'."""
+    upload = make_upload_file(b"a,b\n1,2\n", "data.csv")
+
+    async def execute_with_error(request_id, callback, **kwargs):
+        try:
+            await callback()
+        except Exception:
+            pass
+        return False  # queue_request returns False on execution failure
+
+    with patch.object(parser.memory_manager, "queue_request", side_effect=execute_with_error):
+        with patch.object(parser, "_parse_file_content", side_effect=RuntimeError("parse failed")):
+            with pytest.raises(RuntimeError, match="parse failed"):
+                await parser.parse_file(upload, "req-masked")
+
+
+@pytest.mark.asyncio
 async def test_parse_file_cancellation_cleans_up(parser):
     """CancelledError during polling cancels the queued request."""
     upload = make_upload_file(b"a,b\n1,2\n", "data.csv")
