@@ -227,6 +227,11 @@ class MemoryManager:
                     logger.warning(f"Request {request.request_id} timed out")
                     self.active_requests.pop(request.request_id, None)
                     continue
+
+                # Check if request is no longer active (e.g. cancelled)
+                if request.request_id not in self.active_requests:
+                    logger.debug(f"Request {request.request_id} is no longer active, skipping")
+                    continue
                 
                 # Check if memory is available
                 if not self.is_memory_available(request.estimated_memory_mb):

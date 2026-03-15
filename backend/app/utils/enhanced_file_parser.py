@@ -68,15 +68,25 @@ class EnhancedFileParser:
             # Determine file type
             file_extension = self._get_file_extension(file.filename)
             
-            # Create parsing callback
+            # Future resolves when the callback completes (success or error)
+            result_future: asyncio.Future = asyncio.get_running_loop().create_future()
+
             async def parse_callback():
-                return await self._parse_file_content(
-                    file_content, 
-                    file.filename or "unknown", 
-                    file_extension
-                )
-            
-            # Queue the parsing request
+                try:
+                    result = await self._parse_file_content(
+                        file_content,
+                        file.filename or "unknown",
+                        file_extension
+                    )
+                    if not result_future.done():
+                        result_future.set_result(result)
+                    return result
+                except Exception as e:
+                    if not result_future.done():
+                        result_future.set_exception(e)
+                    raise
+
+            # Queue the parsing request (executes immediately if memory is available)
             success = await self.memory_manager.queue_request(
                 request_id=request_id,
                 callback=parse_callback,
@@ -84,15 +94,21 @@ class EnhancedFileParser:
                 priority=priority,
                 timeout_seconds=300
             )
-            
+
+            # If the callback already ran (immediate execution), the future is already
+            # resolved. Check before the success guard so parsing errors aren't masked.
+            if result_future.done():
+                return result_future.result()  # re-raises if set_exception was called
+
             if not success:
                 raise Exception("Failed to queue file parsing request - system overloaded")
-            
-            # The callback will be executed when memory is available
-            # For now, return a placeholder - in a real implementation,
-            # you'd need to implement a way to wait for the result
-            return await parse_callback()
-            
+
+            try:
+                return await asyncio.wait_for(asyncio.shield(result_future), timeout=300)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self.memory_manager.cancel_request(request_id)
+                raise
+
         except Exception as e:
             logger.error(f"File parsing failed for {file.filename}: {e}")
             raise
