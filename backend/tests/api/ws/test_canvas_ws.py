@@ -66,10 +66,6 @@ def broadcast_msgs(mgr):
     return [c.args[1] for c in mgr.broadcast.await_args_list]
 
 
-def broadcast_types(mgr):
-    """Extract just the 'type' field from all broadcast calls."""
-    return [c.args[1]["type"] for c in mgr.broadcast.await_args_list]
-
 
 # ---------------------------------------------------------------------------
 # validate_jwt
@@ -1011,7 +1007,11 @@ def test_ws_disconnect_release_error_still_broadcasts_presence():
         with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
             ws.receive_json()
 
-        assert any(m["type"] == "presence_update" for m in broadcast_msgs(mgr))
+        # presence_update is broadcast twice: once on join (exclude_user), once on disconnect
+        presence_broadcasts = [m for m in broadcast_msgs(mgr) if m["type"] == "presence_update"]
+        assert len(presence_broadcasts) >= 2, (
+            "Expected presence_update on join and again on disconnect even when lock release fails"
+        )
 
     run_ws_test(handler)
 

@@ -109,7 +109,7 @@ async def get_user_display(user_id: str) -> dict:
                 "color": profile.data["avatar_color"],
             }
     except Exception:
-        logger.warning("Failed to load profile for user %s", user_id)
+        logger.warning("Failed to load profile for user %s", user_id, exc_info=True)
     # Fallback
     return {"display_name": f"User-{user_id[:4]}", "color": "#4F46E5"}
 
@@ -450,7 +450,7 @@ async def _handle_disconnect(
         logger.exception("Error disconnecting user %s from canvas %s", user_id, canvas_id)
 
     # 2. Release all locks held by this user
-    released_elements: list = []
+    released_elements: list[str] = []
     try:
         released_elements = await lock_mgr.release_all_for_user(canvas_id, user_id)
     except Exception:
