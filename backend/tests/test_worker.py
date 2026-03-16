@@ -4,7 +4,7 @@ Covers the run_analysis task: success path and retry-on-failure path.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 
 def test_celery_app_configured():
@@ -28,7 +28,8 @@ def test_run_analysis_success():
     mock_result.success = True
     mock_result.dataset_id = "dataset-abc"
 
-    with patch("app.worker.asyncio.run", return_value=mock_result):
+    with patch("app.services.pipeline_orchestrator.PipelineOrchestrator"), \
+         patch("app.worker.asyncio.run", return_value=mock_result):
         # For bind=True tasks, .run() injects the task itself as `self`
         result = run_analysis.run([{"col": 1}], "dataset-abc")
 
@@ -43,7 +44,8 @@ def test_run_analysis_exception_triggers_retry():
     retry_exc = Exception("celery retry sentinel")
 
     # For bind=True tasks, `self` is the task object itself; patch .retry on it
-    with patch("app.worker.asyncio.run", side_effect=original_exc), \
+    with patch("app.services.pipeline_orchestrator.PipelineOrchestrator"), \
+         patch("app.worker.asyncio.run", side_effect=original_exc), \
          patch.object(run_analysis, "retry", side_effect=retry_exc) as mock_retry:
         with pytest.raises(Exception, match="celery retry sentinel"):
             run_analysis.run([{"col": 1}], "dataset-abc")
