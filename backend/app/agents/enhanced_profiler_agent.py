@@ -21,13 +21,19 @@ class DataProfilerAgent:
     def __init__(self):
         self.agent_type = AgentType.PROFILER
 
-    async def analyze(self, data: Dict[str, Any]) -> ComprehensiveDataAnalysis:
+    async def analyze(self, data: Any) -> ComprehensiveDataAnalysis:
         """Run profiling and return a ComprehensiveDataAnalysis model (legacy pipeline interface)."""
-        if not self.validate_input(data):
+        # Normalize: pipeline may pass a raw List[Dict] or a legacy dict with a "dataset" key
+        if isinstance(data, list):
+            normalized: Dict[str, Any] = {"dataset": data}
+        else:
+            normalized = data
+
+        if not self.validate_input(normalized):
             raise ValueError("Invalid input data for profiling")
 
         start_time = datetime.now()
-        dataset = data.get("dataset", [])
+        dataset = normalized.get("dataset", [])
         if not dataset:
             raise ValueError("No dataset provided in input")
 
@@ -37,7 +43,7 @@ class DataProfilerAgent:
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
 
         return ComprehensiveDataAnalysis(
-            dataset_id=data.get("dataset_id", ""),
+            dataset_id=normalized.get("dataset_id", ""),
             statistical_summary=self._statistical_analysis(df),
             correlations=self._correlation_analysis(df),
             patterns=self._pattern_analysis(df),

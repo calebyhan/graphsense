@@ -48,11 +48,14 @@ async def lifespan(app: FastAPI):
     await initialize_memory_manager()
     logger.info("Memory manager started")
 
-    yield
-
-    # Cleanup
-    await shutdown_memory_manager()
-    logger.info("Shutting down backend")
+    try:
+        yield
+    finally:
+        try:
+            await shutdown_memory_manager()
+        except Exception as e:
+            logger.exception("Error during memory manager shutdown: %s", e)
+        logger.info("Shutting down backend")
     
 
 

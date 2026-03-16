@@ -55,21 +55,22 @@ class EnhancedFileParser:
         Returns:
             Dictionary with parsed data and metadata
         """
+        result_future: Optional[asyncio.Future] = None
         try:
             # Read file content
             file_content = await file.read()
             file_size_mb = len(file_content) / (1024 * 1024)
-            
+
             logger.info(f"Parsing file {file.filename} ({file_size_mb:.2f} MB)")
-            
+
             # Estimate memory requirements
             estimated_memory_mb = max(50, int(file_size_mb * 2))  # Rough estimate
-            
+
             # Determine file type
             file_extension = self._get_file_extension(file.filename)
-            
+
             # Future resolves when the callback completes (success or error)
-            result_future: asyncio.Future = asyncio.get_running_loop().create_future()
+            result_future = asyncio.get_running_loop().create_future()
 
             async def parse_callback():
                 try:
@@ -101,15 +102,19 @@ class EnhancedFileParser:
                 return result_future.result()  # re-raises if set_exception was called
 
             if not success:
+                result_future.cancel()
                 raise Exception("Failed to queue file parsing request - system overloaded")
 
             try:
                 return await asyncio.wait_for(asyncio.shield(result_future), timeout=300)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 self.memory_manager.cancel_request(request_id)
+                result_future.cancel()
                 raise
 
         except Exception as e:
+            if result_future is not None and not result_future.done():
+                result_future.cancel()
             logger.error(f"File parsing failed for {file.filename}: {e}")
             raise
     
