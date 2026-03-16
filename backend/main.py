@@ -44,10 +44,18 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize: {e}")
         raise
 
-    yield
+    from app.utils.memory_manager import initialize_memory_manager, shutdown_memory_manager
+    await initialize_memory_manager()
+    logger.info("Memory manager started")
 
-    # Cleanup
-    logger.info("Shutting down backend")
+    try:
+        yield
+    finally:
+        try:
+            await shutdown_memory_manager()
+        except Exception as e:
+            logger.exception("Error during memory manager shutdown: %s", e)
+        logger.info("Shutting down backend")
     
 
 

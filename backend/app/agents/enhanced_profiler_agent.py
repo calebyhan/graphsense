@@ -9,58 +9,55 @@ from typing import Dict, Any, List
 from scipy import stats
 from datetime import datetime
 
-from .base_agent import BaseAgent
 from app.models.base import AgentType
 from app.models.analysis import ComprehensiveDataAnalysis
 
 logger = logging.getLogger(__name__)
 
 
-class DataProfilerAgent(BaseAgent):
-    """Simplified agent for core data profiling functionality"""
+class DataProfilerAgent:
+    """Simplified agent for core data profiling functionality (legacy dict interface)."""
 
     def __init__(self):
-        super().__init__(AgentType.PROFILER)
+        self.agent_type = AgentType.PROFILER
+
+    async def analyze(self, data: Any) -> ComprehensiveDataAnalysis:
+        """Run profiling and return a ComprehensiveDataAnalysis model (legacy pipeline interface)."""
+        # Normalize: pipeline may pass a raw List[Dict] or a legacy dict with a "dataset" key
+        if isinstance(data, list):
+            normalized: Dict[str, Any] = {"dataset": data}
+        else:
+            normalized = data
+
+        if not self.validate_input(normalized):
+            raise ValueError("Invalid input data for profiling")
+
+        start_time = datetime.now()
+        dataset = normalized.get("dataset", [])
+        if not dataset:
+            raise ValueError("No dataset provided in input")
+
+        df = pd.DataFrame(dataset)
+        logger.info(f"Processing dataset with {len(df)} rows and {len(df.columns)} columns")
+
+        processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
+
+        return ComprehensiveDataAnalysis(
+            dataset_id=normalized.get("dataset_id", ""),
+            statistical_summary=self._statistical_analysis(df),
+            correlations=self._correlation_analysis(df),
+            patterns=self._pattern_analysis(df),
+            data_quality=self._data_quality_analysis(df),
+            temporal_patterns=None,
+            recommendations_context={},
+            processing_time_ms=processing_time,
+        )
 
     async def process(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process dataset and return basic profiling results"""
+        """Process dataset and return basic profiling results."""
         try:
-            if not self.validate_input(data):
-                return self.get_fallback_result(data)
-
-            start_time = datetime.now()
-            
-            # Extract dataset from input
-            dataset = data.get("dataset", [])
-            if not dataset:
-                raise ValueError("No dataset provided in input")
-
-            # Convert to DataFrame for analysis
-            df = pd.DataFrame(dataset)
-            logger.info(f"Processing dataset with {len(df)} rows and {len(df.columns)} columns")
-
-            # Perform core analyses
-            statistical_summary = self._statistical_analysis(df)
-            correlations = self._correlation_analysis(df)
-            patterns = self._pattern_analysis(df)
-            data_quality = self._data_quality_analysis(df)
-
-            processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-
-            # Create analysis result
-            analysis = ComprehensiveDataAnalysis(
-                dataset_id=data.get("dataset_id", ""),
-                statistical_summary=statistical_summary,
-                correlations=correlations,
-                patterns=patterns,
-                data_quality=data_quality,
-                temporal_patterns=None,  # Simplified - no temporal analysis for now
-                recommendations_context={},  # Simplified - no AI insights for now
-                processing_time_ms=processing_time
-            )
-
+            analysis = await self.analyze(data)
             return self._format_output(analysis.model_dump(), success=True)
-
         except Exception as e:
             logger.error(f"Data profiler processing failed: {e}")
             return self.get_fallback_result(data)
@@ -229,6 +226,17 @@ class DataProfilerAgent(BaseAgent):
         else:
             return "very_weak"
 
+    def validate_input(self, data: Dict[str, Any]) -> bool:
+        """Validate legacy dict-based input."""
+        if not (data and isinstance(data, dict)):
+            return False
+        dataset = data.get("dataset")
+        return isinstance(dataset, list) and len(dataset) > 0
+
+    def _format_output(self, data: Dict[str, Any], success: bool = True) -> Dict[str, Any]:
+        """Format processing output into a consistent response structure."""
+        return {"data": data, "success": success}
+
     def get_fallback_result(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback result when processing fails"""
         return self._format_output({
@@ -238,3 +246,7 @@ class DataProfilerAgent(BaseAgent):
             "patterns": {},
             "data_quality": {"completeness": 0}
         }, success=False)
+
+
+# Backward-compatible alias
+EnhancedDataProfilerAgent = DataProfilerAgent

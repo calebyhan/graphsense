@@ -81,6 +81,7 @@ async def analyze_dataset(
             return AnalysisResponse(
                 success=True,
                 dataset_id=existing_dataset_id,
+                recommendations=[],
                 message="Request already in progress",
                 processing_time_ms=0,
             )
@@ -100,12 +101,6 @@ async def analyze_dataset(
                 raise HTTPException(
                     status_code=400,
                     detail="Dataset contains no data"
-                )
-            
-            if len(df.columns) == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Dataset contains no columns"
                 )
             
             # Enhanced row limit check

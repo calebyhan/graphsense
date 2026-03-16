@@ -386,3 +386,59 @@ async def test_disconnect_calls_stop_subscriber(mgr, redis):
     assert "c1" not in mgr._rooms
     assert "c1" not in mgr._subscribers
     assert task.done()
+
+
+async def test_connect_logs_warning_when_dead_subscriber_had_exception(mgr, redis):
+    """
+    If a previous subscriber task died with an exception (not cancelled),
+    connect() logs a warning and starts a fresh subscriber.
+    """
+    # Create a task that raises immediately — it will be done with an exception
+    async def _raise():
+        raise RuntimeError("subscriber crashed")
+
+    dead_task = asyncio.ensure_future(_raise())
+    # Let the task run to completion so it's done+has an exception
+    await asyncio.sleep(0)  # yield to the event loop
+
+    # Inject the dead task for an existing "room"
+    mgr._subscribers["c2"] = dead_task
+    mgr._rooms["c2"] = {}
+
+    ws = make_ws()
+    with patch("app.services.connection_manager.logger") as mock_log:
+        await mgr.connect(ws, "c2", "u1")
+        await stop_subscriber(mgr, "c2")
+
+    # A new subscriber should have been created (the dead one is replaced)
+    assert "c2" in mgr._subscribers
+    assert mgr._subscribers["c2"] is not dead_task
+    # Warning should have been logged about the crash
+    mock_log.warning.assert_called()
+
+
+async def test_connect_restarts_cancelled_subscriber_without_warning(mgr, redis):
+    """
+    If a previous subscriber task was cancelled (not an exception),
+    connect() restarts it without logging a warning.
+    """
+    async def _block():
+        await asyncio.sleep(3600)
+
+    task = asyncio.ensure_future(_block())
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    mgr._subscribers["c3"] = task
+    mgr._rooms["c3"] = {}
+
+    ws = make_ws()
+    with patch("app.services.connection_manager.logger") as mock_log:
+        await mgr.connect(ws, "c3", "u1")
+        await stop_subscriber(mgr, "c3")
+
+    assert mgr._subscribers["c3"] is not task
+    mock_log.warning.assert_not_called()

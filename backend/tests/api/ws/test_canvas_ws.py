@@ -9,11 +9,10 @@ Approach:
   ConnectionManager, LockManager, and Redis all replaced by mocks.
 """
 
-import asyncio
-import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 from starlette.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 from fastapi import FastAPI
 
 import app.api.ws.canvas_ws as ws_module
@@ -60,6 +59,12 @@ def make_admin_client(user_id=None):
     resp.user = user if user_id else None
     admin.auth.get_user.return_value = resp
     return admin
+
+
+def broadcast_msgs(mgr):
+    """Extract the message dicts from all broadcast calls."""
+    return [c.args[1] for c in mgr.broadcast.await_args_list]
+
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +325,12 @@ def make_mock_lock_mgr(locks=None):
 
 
 def ws_patches(user_id="u1", permission="owner", elements=None, locks=None, presence=None):
-    """Returns a context manager that patches all external dependencies."""
+    """Returns a dict of patches + mock objects for all external dependencies.
+
+    Patches both the getter functions (_get_redis, _get_manager, _get_lock_manager)
+    AND the module-level attributes (_redis, _manager, _lock_manager) so the
+    endpoint always gets the mocks regardless of singleton initialisation state.
+    """
     mock_redis = AsyncMock()
     mock_redis.hset = AsyncMock()
     mock_manager = make_mock_manager(presence=presence or [{"user_id": "u1"}], locks=locks)
@@ -343,30 +353,21 @@ def ws_patches(user_id="u1", permission="owner", elements=None, locks=None, pres
     }
 
 
-class PatchContext:
-    """Helper to enter/exit multiple patches at once and expose mock objects."""
-    def __init__(self, patches_dict):
-        self._patches = {k: v for k, v in patches_dict.items() if not k.startswith("_") or k in ("_manager", "_lock_manager", "_redis")}
-        self._mocks = {k: v for k, v in patches_dict.items() if k.endswith("_obj")}
-        self._entered = []
-
-    def __enter__(self):
-        for k, p in self._patches.items():
-            self._entered.append(p.__enter__())
-        return self
-
-    def __exit__(self, *args):
-        for p in reversed(list(self._patches.values())):
-            p.__exit__(*args)
-
-
-def run_ws_test(handler, user_id="u1", permission="owner", elements=None, locks=None, presence=None):
+def run_ws_test(
+    handler,
+    user_id="u1",
+    permission="owner",
+    elements=None,
+    locks=None,
+    presence=None,
+    raise_server_exceptions=True,
+):
     """
     Convenience: sets up all patches, creates a test client, runs `handler(client, mocks)`.
     mocks = dict with _manager_obj, _lock_mgr_obj, _redis_obj.
     """
     p = ws_patches(user_id=user_id, permission=permission, elements=elements, locks=locks, presence=presence)
-    patches_to_enter = {k: v for k, v in p.items() if hasattr(v, '__enter__')}
+    patches_to_enter = {k: v for k, v in p.items() if hasattr(v, "__enter__")}
     mocks = {k: v for k, v in p.items() if k.endswith("_obj")}
 
     entered = []
@@ -376,7 +377,7 @@ def run_ws_test(handler, user_id="u1", permission="owner", elements=None, locks=
             entered.append(patch_cm)
 
         app = make_ws_test_app()
-        client = TestClient(app, raise_server_exceptions=True)
+        client = TestClient(app, raise_server_exceptions=raise_server_exceptions)
         handler(client, mocks)
     finally:
         for patch_cm in reversed(entered):
@@ -390,48 +391,28 @@ def run_ws_test(handler, user_id="u1", permission="owner", elements=None, locks=
 def test_ws_rejects_missing_token():
     app = make_ws_test_app()
     client = TestClient(app, raise_server_exceptions=False)
-    with pytest.raises(Exception):
-        # No token param → FastAPI 422 unprocessable
+    with pytest.raises(WebSocketDisconnect):
+        # No token param → FastAPI 422, WS closed before accept
         with client.websocket_connect("/ws/canvas/c1"):
             pass
 
 
 def test_ws_rejects_invalid_jwt():
-    p = ws_patches(user_id=None)
-    patches_to_enter = {k: v for k, v in p.items() if hasattr(v, '__enter__')}
-    entered = []
-    try:
-        for patch_cm in patches_to_enter.values():
-            patch_cm.__enter__()
-            entered.append(patch_cm)
-
-        app = make_ws_test_app()
-        client = TestClient(app, raise_server_exceptions=False)
-        with pytest.raises(Exception):
+    def handler(client, mocks):
+        with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect("/ws/canvas/c1?token=bad"):
                 pass
-    finally:
-        for patch_cm in reversed(entered):
-            patch_cm.__exit__(None, None, None)
+
+    run_ws_test(handler, user_id=None, raise_server_exceptions=False)
 
 
 def test_ws_rejects_no_permission():
-    p = ws_patches(permission=None)
-    patches_to_enter = {k: v for k, v in p.items() if hasattr(v, '__enter__')}
-    entered = []
-    try:
-        for patch_cm in patches_to_enter.values():
-            patch_cm.__enter__()
-            entered.append(patch_cm)
-
-        app = make_ws_test_app()
-        client = TestClient(app, raise_server_exceptions=False)
-        with pytest.raises(Exception):
+    def handler(client, mocks):
+        with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect("/ws/canvas/c1?token=tok"):
                 pass
-    finally:
-        for patch_cm in reversed(entered):
-            patch_cm.__exit__(None, None, None)
+
+    run_ws_test(handler, permission=None, raise_server_exceptions=False)
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +435,25 @@ def test_ws_sends_canvas_state_on_join():
     run_ws_test(handler, elements=elements, locks=locks, presence=presence)
 
 
+def test_ws_broadcasts_presence_update_on_join():
+    """presence_update is broadcast to other users (exclude_user=joining user) on join."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+            ws.receive_json()  # canvas_state
+
+        # The presence_update broadcast on join must exclude the joining user
+        presence_broadcasts = [
+            c for c in mgr.broadcast.await_args_list
+            if c.args[1].get("type") == "presence_update"
+        ]
+        assert len(presence_broadcasts) >= 1
+        join_broadcast = presence_broadcasts[0]
+        assert join_broadcast.kwargs.get("exclude_user") == "u1"
+
+    run_ws_test(handler)
+
+
 # ---------------------------------------------------------------------------
 # WS endpoint — message dispatch
 # ---------------------------------------------------------------------------
@@ -464,10 +464,12 @@ def test_ws_cursor_move_broadcast():
         with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
             ws.receive_json()  # canvas_state
             ws.send_json({"type": "cursor_move", "x": 100, "y": 200})
-        # After disconnect, broadcast should have been called for cursor_update
-        # (called as part of message handling)
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        assert any("cursor_update" in c for c in calls)
+
+        msgs = broadcast_msgs(mgr)
+        cursor_msg = next(m for m in msgs if m["type"] == "cursor_update")
+        assert cursor_msg["x"] == 100
+        assert cursor_msg["y"] == 200
+        assert cursor_msg["user_id"] == "u1"
 
     run_ws_test(handler)
 
@@ -482,8 +484,7 @@ def test_ws_element_lock_request_granted():
             ws.receive_json()  # canvas_state
             ws.send_json({"type": "element_lock_request", "element_id": "e1"})
 
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        assert any("lock_granted" in c for c in calls)
+        assert any(m["type"] == "lock_granted" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -500,8 +501,7 @@ def test_ws_element_lock_request_denied():
             ws.send_json({"type": "element_lock_request", "element_id": "e1"})
 
         mgr.send_to_user.assert_awaited()
-        args = mgr.send_to_user.await_args
-        msg = args.args[2]
+        msg = mgr.send_to_user.await_args.args[2]
         assert msg["type"] == "lock_denied"
         assert msg["locked_by"] == "u2"
 
@@ -531,8 +531,23 @@ def test_ws_element_unlock():
             ws.receive_json()
             ws.send_json({"type": "element_unlock", "element_id": "e1"})
 
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        assert any("lock_released" in c for c in calls)
+        assert any(m["type"] == "lock_released" for m in broadcast_msgs(mgr))
+
+    run_ws_test(handler)
+
+
+def test_ws_element_unlock_no_broadcast_when_not_held():
+    """lock_released is not broadcast when release returns False (lock not held)."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.release.return_value = False
+
+        with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+            ws.receive_json()
+            ws.send_json({"type": "element_unlock", "element_id": "e1"})
+
+        assert not any(m["type"] == "lock_released" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -545,8 +560,7 @@ def test_ws_element_move_broadcast():
             ws.receive_json()
             ws.send_json({"type": "element_move", "element_id": "e1", "position": {"x": 5, "y": 10}})
 
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        assert any("element_moved" in c for c in calls)
+        assert any(m["type"] == "element_moved" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -569,9 +583,9 @@ def test_ws_element_commit():
                 })
 
             mock_upsert.assert_awaited_once()
-            calls = [str(c) for c in mgr.broadcast.await_args_list]
-            assert any("element_committed" in c for c in calls)
-            assert any("lock_released" in c for c in calls)
+            msgs = broadcast_msgs(mgr)
+            assert any(m["type"] == "element_committed" for m in msgs)
+            assert any(m["type"] == "lock_released" for m in msgs)
 
     run_ws_test(handler)
 
@@ -594,8 +608,7 @@ def test_ws_element_commit_broadcasts_lock_released_only_when_held():
                     "size": {"width": 400, "height": 300},
                 })
 
-            calls = [str(c) for c in mgr.broadcast.await_args_list]
-            assert not any("lock_released" in c for c in calls)
+            assert not any(m["type"] == "lock_released" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -615,8 +628,7 @@ def test_ws_element_add():
                 ws.send_json({"type": "element_add", "element": element})
 
             mock_insert.assert_awaited_once()
-            calls = [str(c) for c in mgr.broadcast.await_args_list]
-            assert any("element_added" in c for c in calls)
+            assert any(m["type"] == "element_added" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -632,8 +644,7 @@ def test_ws_element_add_broadcasts_even_if_db_fails():
                 ws.receive_json()
                 ws.send_json({"type": "element_add", "element": element})
 
-            calls = [str(c) for c in mgr.broadcast.await_args_list]
-            assert any("element_added" in c for c in calls)
+            assert any(m["type"] == "element_added" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -641,6 +652,7 @@ def test_ws_element_add_broadcasts_even_if_db_fails():
 def test_ws_element_remove():
     def handler(client, mocks):
         mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
 
         with patch("app.api.ws.canvas_ws.delete_element", new=AsyncMock()) as mock_delete:
             with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
@@ -648,8 +660,26 @@ def test_ws_element_remove():
                 ws.send_json({"type": "element_remove", "element_id": "e1"})
 
             mock_delete.assert_awaited_once_with("e1")
-            calls = [str(c) for c in mgr.broadcast.await_args_list]
-            assert any("element_removed" in c for c in calls)
+            lm.release.assert_awaited()  # lock released before deletion
+            assert any(m["type"] == "element_removed" for m in broadcast_msgs(mgr))
+
+    run_ws_test(handler)
+
+
+def test_ws_element_remove_allowed_when_self_holds_lock():
+    """element_remove proceeds when the requesting user themselves hold the lock."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.get_holder.return_value = "u1"  # same as user_id — should be allowed
+
+        with patch("app.api.ws.canvas_ws.delete_element", new=AsyncMock()) as mock_delete:
+            with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+                ws.receive_json()
+                ws.send_json({"type": "element_remove", "element_id": "e1"})
+
+            mock_delete.assert_awaited_once_with("e1")
+            assert any(m["type"] == "element_removed" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -668,8 +698,45 @@ def test_ws_element_update():
                 })
 
             mock_patch.assert_awaited_once_with("e1", {"data": {"chartType": "line"}})
-            calls = [str(c) for c in mgr.broadcast.await_args_list]
-            assert any("element_updated" in c for c in calls)
+            assert any(m["type"] == "element_updated" for m in broadcast_msgs(mgr))
+
+    run_ws_test(handler)
+
+
+def test_ws_element_update_allowed_when_self_holds_lock():
+    """element_update proceeds when the requesting user themselves hold the lock."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.get_holder.return_value = "u1"  # same as user_id — should be allowed
+
+        with patch("app.api.ws.canvas_ws.patch_element", new=AsyncMock()) as mock_patch:
+            with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+                ws.receive_json()
+                ws.send_json({
+                    "type": "element_update",
+                    "element_id": "e1",
+                    "updates": {"data": {"chartType": "line"}},
+                })
+
+            mock_patch.assert_awaited_once()
+            assert any(m["type"] == "element_updated" for m in broadcast_msgs(mgr))
+
+    run_ws_test(handler)
+
+
+def test_ws_unknown_message_type_silently_ignored():
+    """Unrecognised message types are silently dropped; connection stays alive."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+
+        with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+            ws.receive_json()  # canvas_state
+            ws.send_json({"type": "totally_unknown_message"})
+            # Connection is still live — send a valid message after the unknown one
+            ws.send_json({"type": "cursor_move", "x": 1, "y": 2})
+
+        assert any(m["type"] == "cursor_update" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -702,6 +769,12 @@ def test_ws_view_only_ignores_mutation_messages():
         lm.release.assert_not_awaited()
         lm.renew.assert_not_awaited()
 
+        mutation_types = {
+            "lock_granted", "lock_released", "element_moved",
+            "element_added", "element_removed", "element_updated", "element_committed",
+        }
+        assert not any(m["type"] in mutation_types for m in broadcast_msgs(mgr))
+
     run_ws_test(handler, permission="view")
 
 
@@ -722,13 +795,11 @@ def test_ws_disconnect_releases_locks_and_broadcasts_presence():
         lm.release_all_for_user.assert_awaited_once_with("c1", "u1")
         mgr.disconnect.assert_awaited_once_with("c1", "u1")
 
-        # lock_released should have been broadcast for each released element
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        lock_released_calls = [c for c in calls if "lock_released" in c]
-        assert len(lock_released_calls) >= 2
+        msgs = broadcast_msgs(mgr)
+        lock_released = [m for m in msgs if m["type"] == "lock_released"]
+        assert len(lock_released) >= 2
 
-        # presence_update should have been broadcast
-        assert any("presence_update" in c for c in calls)
+        assert any(m["type"] == "presence_update" for m in msgs)
 
     run_ws_test(handler)
 
@@ -801,8 +872,6 @@ async def test_get_lock_manager_lazy_init():
 def test_ws_message_handler_exception_is_caught():
     """If _handle_message raises, the connection stays alive and processes next message."""
     def handler(client, mocks):
-        mgr = mocks["_manager_obj"]
-
         with patch("app.api.ws.canvas_ws._handle_message", new=AsyncMock(side_effect=Exception("boom"))):
             with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
                 ws.receive_json()  # canvas_state
@@ -831,8 +900,47 @@ def test_ws_element_commit_db_error_still_broadcasts():
                     "size": {"width": 400, "height": 300},
                 })
 
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        assert any("element_committed" in c for c in calls)
+        assert any(m["type"] == "element_committed" for m in broadcast_msgs(mgr))
+
+    run_ws_test(handler)
+
+
+def test_ws_element_remove_blocked_by_lock():
+    """element_remove is silently dropped when another user holds the lock."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.get_holder.return_value = "u2"  # someone else holds the lock
+
+        with patch("app.api.ws.canvas_ws.delete_element", new=AsyncMock()) as mock_delete:
+            with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+                ws.receive_json()
+                ws.send_json({"type": "element_remove", "element_id": "e1"})
+
+            mock_delete.assert_not_awaited()
+            assert not any(m["type"] == "element_removed" for m in broadcast_msgs(mgr))
+
+    run_ws_test(handler)
+
+
+def test_ws_element_update_blocked_by_lock():
+    """element_update is silently dropped when another user holds the lock."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.get_holder.return_value = "u2"  # someone else holds the lock
+
+        with patch("app.api.ws.canvas_ws.patch_element", new=AsyncMock()) as mock_patch:
+            with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+                ws.receive_json()
+                ws.send_json({
+                    "type": "element_update",
+                    "element_id": "e1",
+                    "updates": {"data": {"chartType": "line"}},
+                })
+
+            mock_patch.assert_not_awaited()
+            assert not any(m["type"] == "element_updated" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -847,8 +955,7 @@ def test_ws_element_remove_db_error_still_broadcasts():
                 ws.receive_json()
                 ws.send_json({"type": "element_remove", "element_id": "e1"})
 
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        assert any("element_removed" in c for c in calls)
+        assert any(m["type"] == "element_removed" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
@@ -867,23 +974,56 @@ def test_ws_element_update_db_error_still_broadcasts():
                     "updates": {"data": {"chartType": "line"}},
                 })
 
-        calls = [str(c) for c in mgr.broadcast.await_args_list]
-        assert any("element_updated" in c for c in calls)
+        assert any(m["type"] == "element_updated" for m in broadcast_msgs(mgr))
 
     run_ws_test(handler)
 
 
-def test_ws_outer_exception_closes_cleanly():
-    """Non-WebSocketDisconnect exception during setup hits the outer except block."""
+def test_ws_disconnect_error_does_not_skip_lock_cleanup():
+    """If manager.disconnect raises, lock release and presence broadcast still run."""
     def handler(client, mocks):
-        # load_canvas_elements is called after accept() — having it raise triggers
-        # the outer `except Exception` handler; server closes the WS with code 1011
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        mgr.disconnect.side_effect = Exception("redis gone")
+        lm.release_all_for_user.return_value = ["e1"]
+
+        with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+            ws.receive_json()
+
+        # Lock cleanup must still have run despite disconnect failing
+        lm.release_all_for_user.assert_awaited_once_with("c1", "u1")
+        assert any(m["type"] == "lock_released" for m in broadcast_msgs(mgr))
+
+    run_ws_test(handler)
+
+
+def test_ws_disconnect_release_error_still_broadcasts_presence():
+    """If release_all_for_user raises, presence_update broadcast still runs."""
+    def handler(client, mocks):
+        mgr = mocks["_manager_obj"]
+        lm = mocks["_lock_mgr_obj"]
+        lm.release_all_for_user.side_effect = Exception("redis gone")
+
+        with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
+            ws.receive_json()
+
+        # presence_update is broadcast twice: once on join (exclude_user), once on disconnect
+        presence_broadcasts = [m for m in broadcast_msgs(mgr) if m["type"] == "presence_update"]
+        assert len(presence_broadcasts) >= 2, (
+            "Expected presence_update on join and again on disconnect even when lock release fails"
+        )
+
+    run_ws_test(handler)
+
+
+def test_ws_outer_exception_closes_with_1011():
+    """Non-WebSocketDisconnect exception during setup closes the WS with code 1011."""
+    def handler(client, mocks):
         with patch("app.api.ws.canvas_ws.load_canvas_elements",
                    new=AsyncMock(side_effect=RuntimeError("unexpected db failure"))):
-            try:
+            with pytest.raises(WebSocketDisconnect) as exc_info:
                 with client.websocket_connect("/ws/canvas/c1?token=tok") as ws:
-                    ws.receive_json()  # server closed — will raise WebSocketDisconnect
-            except Exception:
-                pass  # expected
+                    ws.receive_json()  # server closes before sending canvas_state
+            assert exc_info.value.code == 1011
 
-    run_ws_test(handler)
+    run_ws_test(handler, raise_server_exceptions=False)
