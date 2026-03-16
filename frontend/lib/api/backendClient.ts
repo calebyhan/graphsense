@@ -401,7 +401,7 @@ export const canvasAPI = {
   get: (id: string, token?: string) => canvasRequest<Canvas>(`/api/canvases/${id}`, {}, token),
   create: (name: string, description?: string, token?: string) =>
     canvasRequest<Canvas>('/api/canvases', { method: 'POST', body: JSON.stringify({ name, description }) }, token),
-  update: (id: string, data: { name?: string; description?: string; thumbnail?: CanvasThumbnail }, token?: string) =>
+  update: (id: string, data: { name?: string; description?: string; thumbnail?: CanvasThumbnail | null }, token?: string) =>
     canvasRequest<Canvas>(`/api/canvases/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token),
   delete: (id: string, token?: string) => canvasRequest<void>(`/api/canvases/${id}`, { method: 'DELETE' }, token),
   generateShareLink: (id: string, permission: 'view' | 'edit', token?: string) =>

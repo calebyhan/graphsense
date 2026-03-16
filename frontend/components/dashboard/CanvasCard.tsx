@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { MoreHorizontal, Share2, Trash2, Database, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -91,7 +91,7 @@ function RenameDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || trimmed === currentName) { onClose(); return; }

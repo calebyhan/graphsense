@@ -23,11 +23,12 @@ interface TopNavigationProps {
 function SaveIndicator({ saveState, lastSaved }: { saveState: SaveState; lastSaved: Date | null }) {
   const [, setTick] = useState(0);
 
-  // Re-render every minute so relative time stays fresh
+  // Re-render every minute so relative time stays fresh — only while showing saved state
   useEffect(() => {
+    if (saveState !== 'saved' || !lastSaved) return;
     const id = setInterval(() => setTick(t => t + 1), 60_000);
     return () => clearInterval(id);
-  }, []);
+  }, [saveState, lastSaved]);
 
   if (saveState === 'saving') {
     return (
