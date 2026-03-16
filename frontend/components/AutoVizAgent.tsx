@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import InfiniteCanvas from '@/components/canvas/InfiniteCanvas';
 import FloatingToolbar from '@/components/canvas/FloatingToolbar';
 import { DataPanel } from '@/components/panels/DataPanel';
@@ -17,6 +17,8 @@ import CanvasElement from '@/components/canvas/CanvasElement';
 import ChartCard from '@/components/canvas/elements/ChartCard';
 import DatasetCard from '@/components/canvas/elements/DatasetCard';
 import MapCard from '@/components/canvas/elements/MapCard';
+import { canvasAPI } from '@/lib/api/backendClient';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface Dataset {
   id: string;
@@ -73,17 +75,77 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   
   // Dataset management with React Query — scoped to canvas when canvasId is present
   const { datasets } = useDatasetManager({ canvasId });
-  
+
   // Canvas state — use selectors to avoid re-renders from unrelated store updates (e.g. cursor moves)
   const viewport = useCanvasStore(s => s.viewport);
   const canvasElements = useCanvasStore(s => s.canvasElements);
   const addElement = useCanvasStore(s => s.addElement);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
-  
+
   // Theme transition hook
   const { isDarkMode, isTransitioning, toggleTheme } = useThemeTransition();
-  
+
+  const { session } = useAuth();
+  const thumbnailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadRef = useRef(true);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Stable key derived only from layout-relevant fields — ignores selection, data, zIndex changes
+  const elementLayoutKey = useMemo(
+    () => canvasElements
+      .map(el => `${el.id}|${el.type}|${el.position.x}|${el.position.y}|${el.size.width}|${el.size.height}`)
+      .join(','),
+    [canvasElements]
+  );
+  // Keep a ref so the timeout closure always reads the latest elements without being a dependency
+  const canvasElementsRef = useRef(canvasElements);
+  useEffect(() => { canvasElementsRef.current = canvasElements; }, [canvasElements]);
+
+  // Auto-save thumbnail when layout changes (debounced 3s, owners only)
+  useEffect(() => {
+    if (!canvasId || readOnly) return;
+    // Skip the initial server-side load of elements
+    if (initialLoadRef.current) {
+      if (canvasElements.length > 0) initialLoadRef.current = false;
+      return;
+    }
+    if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
+    if (canvasElements.length) setSaveState('saving');
+    thumbnailTimerRef.current = setTimeout(async () => {
+      const els = canvasElementsRef.current;
+      if (!els.length) return;
+      const xs = els.map(el => el.position.x);
+      const ys = els.map(el => el.position.y);
+      const x2s = els.map(el => el.position.x + el.size.width);
+      const y2s = els.map(el => el.position.y + el.size.height);
+      const bounds = {
+        minX: Math.min(...xs),
+        minY: Math.min(...ys),
+        maxX: Math.max(...x2s),
+        maxY: Math.max(...y2s),
+      };
+      const elements = els.map(el => ({
+        type: el.type,
+        x: el.position.x,
+        y: el.position.y,
+        w: el.size.width,
+        h: el.size.height,
+      }));
+      try {
+        await canvasAPI.update(canvasId, { thumbnail: { elements, bounds } }, session?.access_token);
+        setLastSaved(new Date());
+        setSaveState('saved');
+      } catch {
+        setSaveState('idle');
+      }
+    }, 3000);
+    return () => {
+      if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
+    };
+  }, [elementLayoutKey, canvasId, readOnly, session?.access_token]);
 
   // Sync recommendations from store and process them with our new system
   React.useEffect(() => {
@@ -311,6 +373,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         isTransitioning={isTransitioning}
         canvasId={canvasId}
         isOwner={isOwner}
+        saveState={saveState}
+        lastSaved={lastSaved}
       />
 
       <div className="flex-1 flex overflow-hidden">
