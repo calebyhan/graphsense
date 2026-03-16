@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { MoreHorizontal, Share2, Trash2, Database, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +148,18 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
   const [shareOpen, setShareOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -182,7 +194,7 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{canvas.description}</p>
             )}
           </div>
-          <div className="relative ml-2">
+          <div className="relative ml-2" ref={menuRef}>
             <button
               onClick={() => setMenuOpen(v => !v)}
               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"

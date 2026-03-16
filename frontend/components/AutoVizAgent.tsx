@@ -104,19 +104,27 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const canvasElementsRef = useRef(canvasElements);
   useEffect(() => { canvasElementsRef.current = canvasElements; }, [canvasElements]);
 
+  // Flip the initial-load guard after the first render so the first user-driven change saves
+  useEffect(() => { initialLoadRef.current = false; }, []);
+
   // Auto-save thumbnail when layout changes (debounced 3s, owners only)
   useEffect(() => {
     if (!canvasId || readOnly) return;
-    // Skip the initial server-side load of elements
-    if (initialLoadRef.current) {
-      if (canvasElements.length > 0) initialLoadRef.current = false;
-      return;
-    }
+    if (initialLoadRef.current) return;
     if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
-    if (canvasElements.length) setSaveState('saving');
+    setSaveState('saving');
     thumbnailTimerRef.current = setTimeout(async () => {
       const els = canvasElementsRef.current;
-      if (!els.length) return;
+      if (!els.length) {
+        try {
+          await canvasAPI.update(canvasId, { thumbnail: null }, session?.access_token);
+          setLastSaved(new Date());
+          setSaveState('saved');
+        } catch {
+          setSaveState('idle');
+        }
+        return;
+      }
       const xs = els.map(el => el.position.x);
       const ys = els.map(el => el.position.y);
       const x2s = els.map(el => el.position.x + el.size.width);
