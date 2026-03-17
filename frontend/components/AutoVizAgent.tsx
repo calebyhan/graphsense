@@ -93,6 +93,15 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
+  // Reset autosave state when canvasId changes (e.g. navigation without full remount)
+  useEffect(() => {
+    if (thumbnailTimerRef.current) { clearTimeout(thumbnailTimerRef.current); thumbnailTimerRef.current = null; }
+    initialLoadRef.current = true;
+    baselineLayoutKeyRef.current = null;
+    setSaveState('idle');
+    setLastSaved(null);
+  }, [canvasId]);
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Stable key derived only from layout-relevant fields — ignores selection, data, zIndex changes

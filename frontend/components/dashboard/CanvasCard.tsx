@@ -15,6 +15,14 @@ import type { Profile } from '@/hooks/useProfile';
 // Thumbnail preview
 // ---------------------------------------------------------------------------
 
+function isFinite(v: unknown): v is number { return typeof v === 'number' && Number.isFinite(v); }
+
+function hasValidThumbnail(t: CanvasThumbnail | null | undefined): t is CanvasThumbnail {
+  if (!t?.elements?.length || !t.bounds) return false;
+  const { minX, minY, maxX, maxY } = t.bounds;
+  return [minX, minY, maxX, maxY].every(isFinite);
+}
+
 const ELEMENT_COLORS: Record<string, string> = {
   chart: '#6366f1',
   dataset: '#10b981',
@@ -174,6 +182,9 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
       }
     };
     document.addEventListener('mousedown', handler);
+    // Move focus into the menu so keyboard nav works immediately
+    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('button[role="menuitem"]');
+    firstItem?.focus();
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
   const [deleting, setDeleting] = useState(false);
@@ -196,7 +207,7 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
   return (
     <>
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col">
-        {canvas.thumbnail?.elements?.length && canvas.thumbnail.bounds ? (
+        {hasValidThumbnail(canvas.thumbnail) ? (
           <ThumbnailPreview thumbnail={canvas.thumbnail} />
         ) : (
           <EmptyPreview />
@@ -236,6 +247,16 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
                     const idx = items.indexOf(document.activeElement as HTMLButtonElement);
                     const next = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
                     items[next]?.focus();
+                  } else if (e.key === 'Tab') {
+                    // Close menu and return focus to trigger on Tab out
+                    const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]'));
+                    const active = document.activeElement as HTMLButtonElement;
+                    const atEdge = e.shiftKey ? active === items[0] : active === items[items.length - 1];
+                    if (atEdge) {
+                      e.preventDefault();
+                      setMenuOpen(false);
+                      (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
+                    }
                   }
                 }}
               >
@@ -325,7 +346,7 @@ export function SharedCanvasCard({ canvas, ownerProfile }: SharedCanvasCardProps
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col">
-      {canvas.thumbnail?.elements?.length && canvas.thumbnail.bounds ? (
+      {hasValidThumbnail(canvas.thumbnail) ? (
         <ThumbnailPreview thumbnail={canvas.thumbnail} />
       ) : (
         <EmptyPreview />
