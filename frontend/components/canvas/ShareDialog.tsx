@@ -22,6 +22,7 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [updatingPerms, setUpdatingPerms] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!isOpen || !accessToken) return;
@@ -84,8 +85,15 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
   };
 
   const handleUpdatePermission = async (userId: string, permission: 'view' | 'edit') => {
-    await canvasAPI.updateCollaboratorPermission(canvasId, userId, permission, accessToken);
-    setCollaborators(prev => prev.map(c => c.user_id === userId ? { ...c, permission } : c));
+    setUpdatingPerms(prev => new Set(prev).add(userId));
+    try {
+      await canvasAPI.updateCollaboratorPermission(canvasId, userId, permission, accessToken);
+      setCollaborators(prev => prev.map(c => c.user_id === userId ? { ...c, permission } : c));
+    } catch (err) {
+      console.error('Failed to update collaborator permission', err);
+    } finally {
+      setUpdatingPerms(prev => { const next = new Set(prev); next.delete(userId); return next; });
+    }
   };
 
   if (!isOpen) return null;
@@ -181,7 +189,10 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleUpdatePermission(c.user_id, c.permission === 'view' ? 'edit' : 'view')}
-                        className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
+                        disabled={updatingPerms.has(c.user_id)}
+                        aria-pressed={c.permission === 'edit'}
+                        aria-label={c.permission === 'edit' ? 'Can edit — click to switch to view only' : 'View only — click to switch to can edit'}
+                        className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                           c.permission === 'edit'
                             ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 hover:bg-indigo-200 dark:hover:bg-indigo-900/60'
                             : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
