@@ -80,6 +80,10 @@ class JoinRequest(BaseModel):
     token: str
 
 
+class UpdateCollaboratorRequest(BaseModel):
+    permission: Literal["view", "edit"]
+
+
 # ---------------------------------------------------------------------------
 # GET /api/canvases — list owned canvases
 # ---------------------------------------------------------------------------
@@ -407,6 +411,35 @@ async def list_collaborators(canvas_id: str, user_id: str = Depends(require_user
         {**row, "email": resp.user.email if not isinstance(resp, Exception) and getattr(resp, "user", None) else None}
         for row, resp in zip(collabs.data, responses)
     ]
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/canvases/{canvas_id}/collaborators/{collab_user_id}
+# ---------------------------------------------------------------------------
+
+@router.patch("/{canvas_id}/collaborators/{collab_user_id}", response_model=Dict[str, Any])
+async def update_collaborator_permission(
+    canvas_id: str,
+    collab_user_id: str,
+    body: UpdateCollaboratorRequest,
+    user_id: str = Depends(require_user),
+):
+    supabase = get_supabase_client()
+    permission = await get_canvas_permission(canvas_id, user_id, supabase)
+    if permission != "owner":
+        raise HTTPException(status_code=403, detail="Owner access required")
+
+    result = await asyncio.to_thread(
+        lambda: supabase.table("canvas_collaborators")
+        .update({"permission": body.permission})
+        .eq("canvas_id", canvas_id)
+        .eq("user_id", collab_user_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Collaborator not found")
+
+    return {"user_id": collab_user_id, "permission": body.permission}
 
 
 # ---------------------------------------------------------------------------

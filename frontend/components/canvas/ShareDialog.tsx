@@ -6,7 +6,6 @@ import { X, Copy, Check, Link2, Users, Trash2 } from 'lucide-react';
 import { canvasAPI, Canvas, Collaborator } from '@/lib/api/backendClient';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 
 interface ShareDialogProps {
   canvasId: string;
@@ -82,6 +81,11 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
   const handleRemoveCollaborator = async (userId: string) => {
     await canvasAPI.removeCollaborator(canvasId, userId, accessToken);
     setCollaborators(prev => prev.filter(c => c.user_id !== userId));
+  };
+
+  const handleUpdatePermission = async (userId: string, permission: 'view' | 'edit') => {
+    await canvasAPI.updateCollaboratorPermission(canvasId, userId, permission, accessToken);
+    setCollaborators(prev => prev.map(c => c.user_id === userId ? { ...c, permission } : c));
   };
 
   if (!isOpen) return null;
@@ -174,8 +178,18 @@ export function ShareDialog({ canvasId, isOpen, onClose }: ShareDialogProps) {
                         {c.email || c.user_id.slice(0, 8) + '...'}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="text-xs capitalize">{c.permission}</Badge>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleUpdatePermission(c.user_id, c.permission === 'view' ? 'edit' : 'view')}
+                        className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
+                          c.permission === 'edit'
+                            ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 hover:bg-indigo-200 dark:hover:bg-indigo-900/60'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                        title={`Switch to ${c.permission === 'view' ? 'edit' : 'view'}`}
+                      >
+                        {c.permission === 'edit' ? 'Can edit' : 'View only'}
+                      </button>
                       <button
                         onClick={() => handleRemoveCollaborator(c.user_id)}
                         className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 rounded transition-colors"
