@@ -88,6 +88,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const { session } = useAuth();
   const thumbnailTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadRef = useRef(true);
+  // Captures the server-loaded layout so we don't auto-save on async element population
+  const baselineLayoutKeyRef = useRef<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -107,11 +109,21 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   // Auto-save thumbnail when layout changes (debounced 3s, when canvas is editable)
   useEffect(() => {
     if (!canvasId || readOnly) return;
-    // Skip the very first run after mount to avoid a spurious initial PATCH
+    // First run after mount: set baseline to '' for empty canvases so the first user
+    // edit can save; for non-empty canvases leave baseline null so the async server
+    // load (next effect run) is captured as baseline instead.
     if (initialLoadRef.current) {
       initialLoadRef.current = false;
+      if (elementLayoutKey === '') baselineLayoutKeyRef.current = '';
       return;
     }
+    // Capture the first post-mount layout (server-loaded elements) as baseline
+    if (baselineLayoutKeyRef.current === null) {
+      baselineLayoutKeyRef.current = elementLayoutKey;
+      return;
+    }
+    // Don't save if nothing has changed from the server-loaded state
+    if (elementLayoutKey === baselineLayoutKeyRef.current) return;
     if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
     setSaveState('saving');
     let cancelled = false;

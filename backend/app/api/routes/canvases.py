@@ -303,7 +303,8 @@ async def update_canvas(canvas_id: str, body: UpdateCanvasRequest, user_id: str 
         raise HTTPException(status_code=403, detail="Edit access required")
 
     updates = body.model_dump(exclude_unset=True)
-    # Drop None for NOT NULL columns (name, description); allow thumbnail=None to clear it
+    # Drop None for name (NOT NULL) and description (nullable but not clearable via this endpoint);
+    # allow thumbnail=None to pass through so clients can explicitly clear the thumbnail
     for field in ("name", "description"):
         if updates.get(field) is None:
             updates.pop(field, None)
