@@ -90,6 +90,14 @@ function RenameDialog({
   const [name, setName] = useState(currentName);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    dialogRef.current?.addEventListener('keydown', handler);
+    return () => { dialogRef.current?.removeEventListener('keydown', handler); prev?.focus(); };
+  }, [onClose]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -108,10 +116,16 @@ function RenameDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="canvas-rename-title"
+      className="fixed inset-0 z-50 flex items-center justify-center"
+    >
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Rename canvas</h2>
+        <h2 id="canvas-rename-title" className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Rename canvas</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <label htmlFor="canvas-rename-input" className="sr-only">Canvas name</label>
           <input
@@ -182,7 +196,7 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
   return (
     <>
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col">
-        {canvas.thumbnail && canvas.thumbnail.elements?.length ? (
+        {canvas.thumbnail?.elements?.length && canvas.thumbnail.bounds ? (
           <ThumbnailPreview thumbnail={canvas.thumbnail} />
         ) : (
           <EmptyPreview />
@@ -311,7 +325,7 @@ export function SharedCanvasCard({ canvas, ownerProfile }: SharedCanvasCardProps
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col">
-      {canvas.thumbnail && canvas.thumbnail.elements?.length ? (
+      {canvas.thumbnail?.elements?.length && canvas.thumbnail.bounds ? (
         <ThumbnailPreview thumbnail={canvas.thumbnail} />
       ) : (
         <EmptyPreview />
