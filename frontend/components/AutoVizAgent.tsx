@@ -148,7 +148,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         maxX: Math.max(...x2s),
         maxY: Math.max(...y2s),
       };
-      const elements = els.map(el => ({
+      const MAX_THUMBNAIL_ELEMENTS = 200;
+      const thumbnailEls = els.length > MAX_THUMBNAIL_ELEMENTS ? els.slice(0, MAX_THUMBNAIL_ELEMENTS) : els;
+      const elements = thumbnailEls.map(el => ({
         type: el.type,
         x: el.position.x,
         y: el.position.y,

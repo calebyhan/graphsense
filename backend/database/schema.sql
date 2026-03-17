@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS canvases (
 );
 
 -- Migration: add thumbnail column to existing databases
--- ALTER TABLE canvases ADD COLUMN IF NOT EXISTS thumbnail JSONB;
+ALTER TABLE canvases ADD COLUMN IF NOT EXISTS thumbnail JSONB;
 
 CREATE TABLE IF NOT EXISTS canvas_datasets (
     canvas_id UUID NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
