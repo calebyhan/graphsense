@@ -423,6 +423,44 @@ def test_remove_collaborator_not_owner():
 
 
 # ---------------------------------------------------------------------------
+# PATCH /api/canvases/{canvas_id}/collaborators/{collab_user_id}
+# ---------------------------------------------------------------------------
+
+def test_update_collaborator_permission_success():
+    updated_row = {"user_id": COLLAB_ID, "permission": "edit"}
+    with patch("app.api.routes.canvases.get_canvas_permission", new=AsyncMock(return_value="owner")):
+        with _ctx(USER_A, responses=[MagicMock(data=[updated_row])]) as (client, _, _t):
+            r = client.patch(
+                f"/api/canvases/{CANVAS_ID}/collaborators/{COLLAB_ID}",
+                json={"permission": "edit"},
+            )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["user_id"] == COLLAB_ID
+    assert body["permission"] == "edit"
+
+
+def test_update_collaborator_permission_not_owner():
+    with patch("app.api.routes.canvases.get_canvas_permission", new=AsyncMock(return_value="edit")):
+        with _ctx(USER_B) as (client, _, _t):
+            r = client.patch(
+                f"/api/canvases/{CANVAS_ID}/collaborators/{COLLAB_ID}",
+                json={"permission": "view"},
+            )
+    assert r.status_code == 403
+
+
+def test_update_collaborator_permission_not_found():
+    with patch("app.api.routes.canvases.get_canvas_permission", new=AsyncMock(return_value="owner")):
+        with _ctx(USER_A, responses=[MagicMock(data=[])]) as (client, _, _t):
+            r = client.patch(
+                f"/api/canvases/{CANVAS_ID}/collaborators/{COLLAB_ID}",
+                json={"permission": "edit"},
+            )
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # get_canvas_permission — direct coverage of helper (lines 36-57)
 # ---------------------------------------------------------------------------
 

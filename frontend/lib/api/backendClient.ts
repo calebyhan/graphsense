@@ -419,4 +419,9 @@ export const canvasAPI = {
     canvasRequest<Collaborator[]>(`/api/canvases/${id}/collaborators`, {}, token),
   removeCollaborator: (canvasId: string, userId: string, token?: string) =>
     canvasRequest<void>(`/api/canvases/${canvasId}/collaborators/${userId}`, { method: 'DELETE' }, token),
+  updateCollaboratorPermission: (canvasId: string, userId: string, permission: 'view' | 'edit', token?: string) =>
+    canvasRequest<{ user_id: string; permission: 'view' | 'edit' }>(`/api/canvases/${canvasId}/collaborators/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ permission }),
+    }, token),
 };
