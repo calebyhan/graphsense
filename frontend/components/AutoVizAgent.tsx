@@ -104,24 +104,25 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const canvasElementsRef = useRef(canvasElements);
   useEffect(() => { canvasElementsRef.current = canvasElements; }, [canvasElements]);
 
-  // Flip the initial-load guard after the first render so the first user-driven change saves
-  useEffect(() => { initialLoadRef.current = false; }, []);
-
-  // Auto-save thumbnail when layout changes (debounced 3s, owners only)
+  // Auto-save thumbnail when layout changes (debounced 3s, when canvas is editable)
   useEffect(() => {
     if (!canvasId || readOnly) return;
-    if (initialLoadRef.current) return;
+    // Skip the very first run after mount to avoid a spurious initial PATCH
+    if (initialLoadRef.current) {
+      initialLoadRef.current = false;
+      return;
+    }
     if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
     setSaveState('saving');
+    let cancelled = false;
     thumbnailTimerRef.current = setTimeout(async () => {
       const els = canvasElementsRef.current;
       if (!els.length) {
         try {
           await canvasAPI.update(canvasId, { thumbnail: null }, session?.access_token);
-          setLastSaved(new Date());
-          setSaveState('saved');
+          if (!cancelled) { setLastSaved(new Date()); setSaveState('saved'); }
         } catch {
-          setSaveState('idle');
+          if (!cancelled) setSaveState('idle');
         }
         return;
       }
@@ -144,13 +145,13 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       }));
       try {
         await canvasAPI.update(canvasId, { thumbnail: { elements, bounds } }, session?.access_token);
-        setLastSaved(new Date());
-        setSaveState('saved');
+        if (!cancelled) { setLastSaved(new Date()); setSaveState('saved'); }
       } catch {
-        setSaveState('idle');
+        if (!cancelled) setSaveState('idle');
       }
     }, 3000);
     return () => {
+      cancelled = true;
       if (thumbnailTimerRef.current) clearTimeout(thumbnailTimerRef.current);
     };
   }, [elementLayoutKey, canvasId, readOnly, session?.access_token]);

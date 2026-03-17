@@ -303,6 +303,10 @@ async def update_canvas(canvas_id: str, body: UpdateCanvasRequest, user_id: str 
         raise HTTPException(status_code=403, detail="Edit access required")
 
     updates = body.model_dump(exclude_unset=True)
+    # Drop None for NOT NULL columns (name, description); allow thumbnail=None to clear it
+    for field in ("name", "description"):
+        if updates.get(field) is None:
+            updates.pop(field, None)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
