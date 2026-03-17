@@ -113,7 +113,9 @@ function RenameDialog({
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Rename canvas</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
+          <label htmlFor="canvas-rename-input" className="sr-only">Canvas name</label>
           <input
+            id="canvas-rename-input"
             autoFocus
             value={name}
             onChange={e => setName(e.target.value)}
@@ -198,6 +200,9 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
             <button
               onClick={() => setMenuOpen(v => !v)}
               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              aria-label="Canvas actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
               <MoreHorizontal className="w-4 h-4 text-gray-400" />
             </button>
