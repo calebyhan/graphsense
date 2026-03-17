@@ -41,7 +41,7 @@ function SaveIndicator({ saveState, lastSaved }: { saveState: SaveState; lastSav
 
   if (saveState === 'saved' && lastSaved) {
     const diffMs = Date.now() - lastSaved.getTime();
-    const diffMin = Math.floor(diffMs / 60_000);
+    const diffMin = Math.max(0, Math.floor(diffMs / 60_000));
     const label = diffMin < 1 ? 'just now' : `${diffMin}m ago`;
     return (
       <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">

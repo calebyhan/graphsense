@@ -132,22 +132,24 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       if (!els.length) {
         try {
           await canvasAPI.update(canvasId, { thumbnail: null }, session?.access_token);
-          if (!cancelled) { setLastSaved(new Date()); setSaveState('saved'); }
+          if (!cancelled) { baselineLayoutKeyRef.current = elementLayoutKey; setLastSaved(new Date()); setSaveState('saved'); }
         } catch {
           if (!cancelled) setSaveState('idle');
         }
         return;
       }
-      const xs = els.map(el => el.position.x);
-      const ys = els.map(el => el.position.y);
-      const x2s = els.map(el => el.position.x + el.size.width);
-      const y2s = els.map(el => el.position.y + el.size.height);
-      const bounds = {
-        minX: Math.min(...xs),
-        minY: Math.min(...ys),
-        maxX: Math.max(...x2s),
-        maxY: Math.max(...y2s),
-      };
+      let minX = els[0].position.x, minY = els[0].position.y;
+      let maxX = els[0].position.x + els[0].size.width, maxY = els[0].position.y + els[0].size.height;
+      for (let i = 1; i < els.length; i++) {
+        const el = els[i];
+        if (el.position.x < minX) minX = el.position.x;
+        if (el.position.y < minY) minY = el.position.y;
+        const x2 = el.position.x + el.size.width;
+        const y2 = el.position.y + el.size.height;
+        if (x2 > maxX) maxX = x2;
+        if (y2 > maxY) maxY = y2;
+      }
+      const bounds = { minX, minY, maxX, maxY };
       const MAX_THUMBNAIL_ELEMENTS = 200;
       const thumbnailEls = els.length > MAX_THUMBNAIL_ELEMENTS ? els.slice(0, MAX_THUMBNAIL_ELEMENTS) : els;
       const elements = thumbnailEls.map(el => ({
@@ -159,7 +161,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       }));
       try {
         await canvasAPI.update(canvasId, { thumbnail: { elements, bounds } }, session?.access_token);
-        if (!cancelled) { setLastSaved(new Date()); setSaveState('saved'); }
+        if (!cancelled) { baselineLayoutKeyRef.current = elementLayoutKey; setLastSaved(new Date()); setSaveState('saved'); }
       } catch {
         if (!cancelled) setSaveState('idle');
       }

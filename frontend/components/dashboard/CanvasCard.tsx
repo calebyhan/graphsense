@@ -207,20 +207,40 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
               <MoreHorizontal className="w-4 h-4 text-gray-400" />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-10 min-w-[140px]">
+              <div
+                role="menu"
+                aria-label="Canvas actions"
+                className="absolute right-0 top-8 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg z-10 min-w-[140px]"
+                onKeyDown={e => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setMenuOpen(false);
+                    (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
+                  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]'));
+                    const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+                    const next = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
+                    items[next]?.focus();
+                  }
+                }}
+              >
                 <button
+                  role="menuitem"
                   onClick={() => { setMenuOpen(false); setRenameOpen(true); }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <Pencil className="w-4 h-4" /> Rename
                 </button>
                 <button
+                  role="menuitem"
                   onClick={() => { setMenuOpen(false); setShareOpen(true); }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <Share2 className="w-4 h-4" /> Share
                 </button>
                 <button
+                  role="menuitem"
                   onClick={handleDelete}
                   disabled={deleting}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
