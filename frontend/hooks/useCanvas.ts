@@ -41,7 +41,12 @@ export function useMyCanvases() {
     setCanvases(prev => prev.filter(c => c.id !== id));
   }, [accessToken]);
 
-  return { canvases, loading, error, refresh: () => accessToken && fetch(accessToken), createCanvas, deleteCanvas };
+  const renameCanvas = useCallback(async (id: string, name: string) => {
+    const updated = await canvasAPI.update(id, { name }, accessToken);
+    setCanvases(prev => prev.map(c => c.id === id ? { ...c, ...updated } : c));
+  }, [accessToken]);
+
+  return { canvases, loading, error, refresh: () => accessToken && fetch(accessToken), createCanvas, deleteCanvas, renameCanvas };
 }
 
 export function useSharedCanvases() {

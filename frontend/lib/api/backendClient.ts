@@ -304,6 +304,11 @@ export const backendAPI = new BackendAPIClient();
 // Canvas API
 // ---------------------------------------------------------------------------
 
+export interface CanvasThumbnail {
+  elements: Array<{ type: string; x: number; y: number; w: number; h: number }>;
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+}
+
 export interface Canvas {
   id: string;
   name: string;
@@ -314,6 +319,7 @@ export interface Canvas {
   share_permission: 'view' | 'edit' | null;
   has_share_link: boolean;
   dataset_count: number;
+  thumbnail?: CanvasThumbnail | null;
   created_at: string;
   updated_at: string;
   datasets?: Array<{
@@ -332,6 +338,7 @@ export interface SharedCanvas {
   owner: { id: string; email: string | null };
   permission: string;
   dataset_count: number;
+  thumbnail?: CanvasThumbnail | null;
   joined_at: string;
   updated_at: string;
 }
@@ -394,8 +401,10 @@ export const canvasAPI = {
   get: (id: string, token?: string) => canvasRequest<Canvas>(`/api/canvases/${id}`, {}, token),
   create: (name: string, description?: string, token?: string) =>
     canvasRequest<Canvas>('/api/canvases', { method: 'POST', body: JSON.stringify({ name, description }) }, token),
-  update: (id: string, data: { name?: string; description?: string }, token?: string) =>
-    canvasRequest<Canvas>(`/api/canvases/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token),
+  // PATCH returns the raw canvases row — derived fields (dataset_count, has_share_link) are not included.
+  // Callers should merge the result with local state rather than replacing the full Canvas object.
+  update: (id: string, data: { name?: string; description?: string; thumbnail?: CanvasThumbnail | null }, token?: string) =>
+    canvasRequest<Partial<Canvas>>(`/api/canvases/${id}`, { method: 'PATCH', body: JSON.stringify(data) }, token),
   delete: (id: string, token?: string) => canvasRequest<void>(`/api/canvases/${id}`, { method: 'DELETE' }, token),
   generateShareLink: (id: string, permission: 'view' | 'edit', token?: string) =>
     canvasRequest<ShareLinkResponse>(`/api/canvases/${id}/share`, {

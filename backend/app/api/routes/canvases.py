@@ -69,6 +69,7 @@ class CreateCanvasRequest(BaseModel):
 class UpdateCanvasRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    thumbnail: Optional[Dict[str, Any]] = None
 
 
 class ShareRequest(BaseModel):
@@ -88,7 +89,7 @@ async def list_canvases(user_id: str = Depends(require_user)):
     supabase = get_supabase_client()
     canvases = await asyncio.to_thread(
         lambda: supabase.table("canvases")
-        .select("id, name, description, share_permission, created_at, updated_at")
+        .select("id, name, description, share_permission, thumbnail, created_at, updated_at")
         .eq("owner_id", user_id)
         .order("updated_at", desc=True)
         .execute()
@@ -127,7 +128,7 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
     supabase = get_supabase_client()
     collabs = await asyncio.to_thread(
         lambda: supabase.table("canvas_collaborators")
-        .select("canvas_id, permission, joined_at, canvases(id, name, description, owner_id, updated_at)")
+        .select("canvas_id, permission, joined_at, canvases(id, name, description, owner_id, thumbnail, updated_at)")
         .eq("user_id", user_id)
         .execute()
     )
@@ -180,6 +181,7 @@ async def list_shared_canvases(user_id: str = Depends(require_user)):
             "dataset_count": shared_counts_map.get(canvas.get("id"), 0),
             "joined_at": row["joined_at"],
             "updated_at": canvas.get("updated_at"),
+            "thumbnail": canvas.get("thumbnail"),
         }
         for row, canvas in rows_data
     ]
@@ -259,7 +261,7 @@ async def get_canvas(canvas_id: str, user_id: str = Depends(require_user)):
 
     canvas = await asyncio.to_thread(
         lambda: supabase.table("canvases")
-        .select("id, name, description, owner_id, share_token, share_permission, created_at, updated_at")
+        .select("id, name, description, owner_id, share_token, share_permission, thumbnail, created_at, updated_at")
         .eq("id", canvas_id)
         .single()
         .execute()
@@ -300,7 +302,12 @@ async def update_canvas(canvas_id: str, body: UpdateCanvasRequest, user_id: str 
     if permission not in ("owner", "edit"):
         raise HTTPException(status_code=403, detail="Edit access required")
 
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    updates = body.model_dump(exclude_unset=True)
+    # Drop None for name (NOT NULL) and description (nullable but not clearable via this endpoint);
+    # allow thumbnail=None to pass through so clients can explicitly clear the thumbnail
+    for field in ("name", "description"):
+        if updates.get(field) is None:
+            updates.pop(field, None)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 

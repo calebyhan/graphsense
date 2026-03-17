@@ -242,6 +242,7 @@ CREATE TABLE IF NOT EXISTS canvases (
     description TEXT,
     share_token VARCHAR(64) UNIQUE,
     share_permission VARCHAR(4) CHECK (share_permission IN ('view', 'edit')),
+    thumbnail JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT share_fields_consistent CHECK (
@@ -249,6 +250,9 @@ CREATE TABLE IF NOT EXISTS canvases (
         (share_token IS NOT NULL AND share_permission IS NOT NULL)
     )
 );
+
+-- Migration: add thumbnail column to existing databases
+ALTER TABLE canvases ADD COLUMN IF NOT EXISTS thumbnail JSONB;
 
 CREATE TABLE IF NOT EXISTS canvas_datasets (
     canvas_id UUID NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,

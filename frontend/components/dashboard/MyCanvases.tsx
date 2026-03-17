@@ -1,10 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, FolderOpen } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Plus, FolderOpen, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { OwnedCanvasCard } from '@/components/dashboard/CanvasCard';
 import { useMyCanvases } from '@/hooks/useCanvas';
+import { Canvas } from '@/lib/api/backendClient';
+
+type SortKey = 'updated' | 'name_asc' | 'name_desc';
+
+function sortCanvases(canvases: Canvas[], sort: SortKey): Canvas[] {
+  return [...canvases].sort((a, b) => {
+    if (sort === 'name_asc') return a.name.localeCompare(b.name);
+    if (sort === 'name_desc') return b.name.localeCompare(a.name);
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+  });
+}
 
 function CreateCanvasDialog({ onCreated }: { onCreated: (name: string, desc?: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -64,11 +75,20 @@ function CreateCanvasDialog({ onCreated }: { onCreated: (name: string, desc?: st
 }
 
 export function MyCanvases() {
-  const { canvases, loading, error, createCanvas, deleteCanvas } = useMyCanvases();
+  const { canvases, loading, error, createCanvas, deleteCanvas, renameCanvas } = useMyCanvases();
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<SortKey>('updated');
 
-  const handleCreate = async (name: string, desc?: string) => {
-    await createCanvas(name, desc);
-  };
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q
+      ? canvases.filter(c =>
+          c.name.toLowerCase().includes(q) ||
+          (c.description?.toLowerCase().includes(q) ?? false)
+        )
+      : canvases;
+    return sortCanvases(list, sort);
+  }, [canvases, query, sort]);
 
   if (loading) {
     return (
@@ -84,21 +104,56 @@ export function MyCanvases() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white">My Canvases</h2>
-        <CreateCanvasDialog onCreated={handleCreate} />
+        <CreateCanvasDialog onCreated={(name, desc) => createCanvas(name, desc)} />
       </div>
+
+      {canvases.length > 0 && (
+        <div className="flex gap-2 mb-6">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <input
+              type="search"
+              placeholder="Search canvases…"
+              aria-label="Search canvases"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+          <select
+            value={sort}
+            onChange={e => setSort(e.target.value as SortKey)}
+            aria-label="Sort canvases"
+            className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="updated">Last updated</option>
+            <option value="name_asc">Name A → Z</option>
+            <option value="name_desc">Name Z → A</option>
+          </select>
+        </div>
+      )}
 
       {canvases.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <FolderOpen className="w-12 h-12 text-gray-300 dark:text-gray-600 mb-4" />
           <p className="text-gray-500 dark:text-gray-400 mb-4">No canvases yet</p>
-          <CreateCanvasDialog onCreated={handleCreate} />
+          <CreateCanvasDialog onCreated={(name, desc) => createCanvas(name, desc)} />
         </div>
+      ) : filtered.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400 py-12 text-center">
+          No canvases match &ldquo;{query}&rdquo;
+        </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {canvases.map(canvas => (
-            <OwnedCanvasCard key={canvas.id} canvas={canvas} onDelete={deleteCanvas} />
+          {filtered.map(canvas => (
+            <OwnedCanvasCard
+              key={canvas.id}
+              canvas={canvas}
+              onDelete={deleteCanvas}
+              onRename={renameCanvas}
+            />
           ))}
         </div>
       )}

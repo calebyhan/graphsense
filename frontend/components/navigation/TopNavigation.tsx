@@ -1,23 +1,60 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, Share2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, Share2, Check } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import BackendStatusChecker from '@/components/canvas/BackendStatusChecker';
 import CollaboratorAvatarStack from '@/components/canvas/CollaboratorAvatarStack';
 import { ShareDialog } from '@/components/canvas/ShareDialog';
+type SaveState = 'idle' | 'saving' | 'saved';
+
 interface TopNavigationProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   isTransitioning?: boolean;
   canvasId?: string;
   isOwner?: boolean;
+  saveState?: SaveState;
+  lastSaved?: Date | null;
 }
 
-export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false, canvasId, isOwner }: TopNavigationProps) {
+function SaveIndicator({ saveState, lastSaved }: { saveState: SaveState; lastSaved: Date | null }) {
+  const [, setTick] = useState(0);
+
+  // Re-render every minute so relative time stays fresh — only while showing saved state
+  useEffect(() => {
+    if (saveState !== 'saved' || !lastSaved) return;
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, [saveState, lastSaved]);
+
+  if (saveState === 'saving') {
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+        <span className="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+        Saving…
+      </span>
+    );
+  }
+
+  if (saveState === 'saved' && lastSaved) {
+    const diffMs = Date.now() - lastSaved.getTime();
+    const diffMin = Math.max(0, Math.floor(diffMs / 60_000));
+    const label = diffMin < 1 ? 'just now' : `${diffMin}m ago`;
+    return (
+      <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+        <Check className="w-3 h-3 text-green-500" />
+        Saved {label}
+      </span>
+    );
+  }
+
+  return null;
+}
+
+export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false, canvasId, isOwner, saveState = 'idle', lastSaved = null }: TopNavigationProps) {
   const [projectName, setProjectName] = useState('GraphSense');
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(projectName);
@@ -76,9 +113,7 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
         </div>
         
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-xs">
-            Auto-saved
-          </Badge>
+          <SaveIndicator saveState={saveState} lastSaved={lastSaved} />
           <BackendStatusChecker />
         </div>
       </div>
