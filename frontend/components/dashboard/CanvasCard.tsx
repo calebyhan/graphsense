@@ -182,7 +182,7 @@ export function OwnedCanvasCard({ canvas, onDelete, onRename }: OwnedCanvasCardP
   return (
     <>
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col">
-        {canvas.thumbnail?.elements?.length ? (
+        {canvas.thumbnail && canvas.thumbnail.elements?.length ? (
           <ThumbnailPreview thumbnail={canvas.thumbnail} />
         ) : (
           <EmptyPreview />
@@ -291,7 +291,7 @@ export function SharedCanvasCard({ canvas, ownerProfile }: SharedCanvasCardProps
 
   return (
     <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 hover:shadow-md transition-shadow flex flex-col">
-      {canvas.thumbnail?.elements?.length ? (
+      {canvas.thumbnail && canvas.thumbnail.elements?.length ? (
         <ThumbnailPreview thumbnail={canvas.thumbnail} />
       ) : (
         <EmptyPreview />
