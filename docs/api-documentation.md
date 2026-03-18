@@ -316,7 +316,7 @@ The API uses standard HTTP status codes and returns structured error responses:
 
 ### Common Status Codes
 
-- `200 OK`: Request successful
+- `200 OK`: Request successful (including `POST /api/analysis/analyze`, which returns `200` with a `dataset_id` while analysis continues asynchronously in the background)
 - `201 Created`: Resource created successfully
 - `400 Bad Request`: Invalid request data
 - `404 Not Found`: Resource not found
@@ -368,7 +368,7 @@ sequenceDiagram
 
     Client->>API: POST /analyze (data)
     API->>Database: Store dataset
-    API->>Client: 202 (dataset_id)
+    API->>Client: 200 (dataset_id)
 
     API->>Profiler: Analyze data structure
     Profiler->>Database: Store profile results
