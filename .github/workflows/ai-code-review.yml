@@ -43,7 +43,7 @@ jobs:
         run: |
           echo "## Security Scan Report" > security-report.txt
           set +e
-          bandit -r app -f txt -lll >> security-report.txt 2>&1
+          bandit -r app -f txt --severity-level high >> security-report.txt 2>&1
           BANDIT_EXIT=$?
           set -e
           cat security-report.txt
