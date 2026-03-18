@@ -225,4 +225,5 @@ async def test_analyze_accepts_raw_list(profiler):
         {"age": 35, "salary": 90000},
     ]
     result = await profiler.analyze(raw_list)
-    assert result is not None
+    assert result.statistical_summary["row_count"] == 3
+    assert result.statistical_summary["column_count"] == 2

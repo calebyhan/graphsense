@@ -41,8 +41,8 @@ async def test_lifespan_db_failure_raises():
                 pass  # pragma: no cover
 
 
-async def test_lifespan_shutdown_exception_is_logged():
-    """Lifespan logs (but does not re-raise) exceptions from shutdown_memory_manager."""
+async def test_lifespan_shutdown_exception_does_not_propagate():
+    """Lifespan swallows exceptions from shutdown_memory_manager (they are logged, not re-raised)."""
     from main import lifespan, app as fastapi_app
 
     with (
@@ -63,14 +63,12 @@ async def test_lifespan_shutdown_exception_is_logged():
 
 async def test_root_returns_status():
     """GET / returns status=running."""
-    from httpx import AsyncClient, ASGITransport
-    from main import app as fastapi_app
+    from main import root
 
-    async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test") as client:
-        response = await client.get("/")
+    response = await root()
 
-    assert response.status_code == 200
-    assert response.json()["status"] == "running"
+    assert response["status"] == "running"
+    assert response["version"] == "1.0.0"
 
 
 # ---------------------------------------------------------------------------
