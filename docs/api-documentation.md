@@ -35,7 +35,7 @@ Analysis jobs are dispatched asynchronously to Celery workers backed by Redis, a
 
 ## Authentication
 
-The API uses Supabase Auth for authenticated endpoints. Datasets and visualizations support both anonymous and authenticated access, enforced via Supabase Row-Level Security (RLS).
+The API uses Supabase Auth for endpoints that require a user identity (e.g., canvas management). The backend connects to Supabase with a service-role key, so Supabase Row-Level Security (RLS) is **not** applied to backend database calls — access control is enforced at the route level in FastAPI handlers. Dataset and visualization endpoints currently allow anonymous access.
 
 ## Endpoints
 
@@ -256,6 +256,14 @@ Disable sharing for a canvas.
 #### `GET /api/canvases/{canvas_id}/collaborators`
 
 List collaborators with access to the canvas.
+
+#### `PATCH /api/canvases/{canvas_id}/collaborators/{collab_user_id}`
+
+Update a collaborator's permission (e.g., viewer ↔ editor). Owner access required.
+
+#### `DELETE /api/canvases/{canvas_id}/collaborators/{collab_user_id}`
+
+Remove a collaborator's access to the canvas. Owner access required.
 
 ### Data Models
 

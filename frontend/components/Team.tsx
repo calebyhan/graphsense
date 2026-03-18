@@ -1,13 +1,13 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ExternalLink, Github, FileText, Award } from "lucide-react";
+import { ExternalLink, Github as GithubIcon, FileText, Award } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function Team() {
   const links = [
     {
-      icon: Github,
+      icon: GithubIcon,
       title: "GitHub Repository",
       description: "View the complete source code",
       href: "https://github.com/calebyhan/graphsense"
@@ -16,7 +16,7 @@ export function Team() {
       icon: ExternalLink,
       title: "Live Demo",
       description: "Try GraphSense in action",
-      href: "https://localhost:3000"
+      href: "http://localhost:3000"
     },
     {
       icon: FileText,

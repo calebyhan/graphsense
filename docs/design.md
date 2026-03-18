@@ -382,7 +382,7 @@ async def agent_error_handler(request: Request, exc: AgentError):
 The application will be fully containerized for cross-platform compatibility and easy setup:
 
 ```yaml
-# docker-compose.yml
+# docker-compose.yml (simplified example — see repository root for full config)
 version: "3.8"
 services:
   frontend:
