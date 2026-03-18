@@ -1,22 +1,22 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { ExternalLink, Github, FileText, Award } from "lucide-react";
+import { ExternalLink, Github as GithubIcon, FileText, Award } from "lucide-react";
 import { motion } from "framer-motion";
 
 export function Team() {
   const links = [
     {
-      icon: Github,
+      icon: GithubIcon,
       title: "GitHub Repository",
       description: "View the complete source code",
-      href: "https://github.com/calebyhan/vthacks25"
+      href: "https://github.com/calebyhan/graphsense"
     },
     {
       icon: ExternalLink,
       title: "Live Demo",
       description: "Try GraphSense in action",
-      href: "htts://localhost:3000"
+      href: "/"
     },
     {
       icon: FileText,
@@ -49,17 +49,7 @@ export function Team() {
       whileInView={{ opacity: 1 }}
       viewport={{ once: true }}
       transition={{ duration: 0.6 }}
-    >
-      <motion.h2 
-        className="text-3xl font-mono text-center text-white mb-12"
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        Built for VTHacks25
-      </motion.h2>
-      
+    > 
       <div className="grid md:grid-cols-2 gap-12">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -94,7 +84,7 @@ export function Team() {
             transition={{ duration: 0.4, delay: 0.7 }}
           >
             <p className="text-muted-foreground text-sm leading-relaxed">
-              GraphSense was built in 36 hours by a team passionate about making data visualization 
+              GraphSense was built by a team passionate about making data visualization 
               accessible through AI. We focused on creating intelligent agents that understand both 
               data patterns and visualization best practices.
             </p>

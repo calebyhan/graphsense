@@ -49,9 +49,11 @@ export default function GraphSenseLanding() {
           </main>
           <footer className="border-t border-border py-8">
             <div className="mx-auto max-w-6xl px-6 text-center">
-              <p className="font-mono text-sm text-muted-foreground">
-                GraphSense — Built with love for VTHacks25
-              </p>
+              <div className="flex items-center justify-center gap-2">
+                <p className="font-mono text-sm text-muted-foreground">
+                  GraphSense
+                </p>
+              </div>
             </div>
           </footer>
         </div>

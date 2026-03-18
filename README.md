@@ -1,16 +1,15 @@
 # GraphSense
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)]() [![AI](https://img.shields.io/badge/AI-Gemini%202.0%20Flash-blue)]() [![Docker](https://img.shields.io/badge/Docker-Ready-blue)]() [![Integration](https://img.shields.io/badge/Tests-Passing-brightgreen)]()
 
+GraphSense is an AI-powered data visualization platform. Upload a CSV, JSON, Excel, or TSV file and a 3-agent pipeline (powered by Google Gemini) automatically profiles your data, recommends the best chart types, and renders them on a collaborative infinite canvas.
 
 ## Technical Stack
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS, Recharts, Zustand, Motion (Framer)
 - **Canvas Engine**: Custom infinite canvas with coordinate transformations, viewport management, minimap integration
 - **Performance**: React.memo, useMemo, data sampling, RAF-throttled updates, optimized rendering
-- **Backend**: Python 3.11, FastAPI, Google Gemini API, Pandas, Scikit-learn
+- **Backend**: Python 3.13, FastAPI, Google Gemini API, Pandas, Scikit-learn
 - **Database**: Supabase (PostgreSQL) with Row Level Security
-- **Infrastructure**: Docker, Docker Compose
-- **AI**: Google Gemini 2.0 Flash for intelligent analysis
-An AI-powered data visualization platform that automatically analyzes datasets and recommends optimal chart types using a sophisticated 3-agent pipeline powered by Google Gemini 2.0 Flash. Features an advanced infinite canvas with precise positioning, minimap navigation, and viewport-aware chart placement. **Production ready with enhanced UX!**
+- **Infrastructure**: Docker, Docker Compose, Redis, Celery (async workers)
+- **AI**: Google Gemini 2.5 Flash Lite (`gemini-2.5-flash-lite`) for intelligent analysis
 
 ## Features
 
@@ -43,6 +42,14 @@ An AI-powered data visualization platform that automatically analyzes datasets a
 - **Anti-Stacking Intelligence**: Random offsets prevent charts from overlapping when created
 - **Performance Indicators**: Visual feedback for large dataset processing with data sampling
 - **Debug Tools**: Development mode includes positioning diagnostics and coordinate verification
+
+### Canvas Directory & Collaboration
+- **Canvas Directory**: Browse, search, and sort saved canvases from a dedicated directory view
+- **Rename Canvases**: Inline rename support directly from the directory
+- **Thumbnail Previews**: Auto-generated thumbnails for each canvas with live auto-save
+- **Save Indicator**: Visual indicator showing unsaved changes and last-saved time
+- **Sharing System**: Generate shareable links with configurable collaborator permissions
+- **Collaborator Controls**: Canvas owners can toggle read/write permissions for shared links
 
 ### System Monitoring & Diagnostics
 - **Real-time Status Indicator**: Always-visible connection status on the canvas
@@ -93,7 +100,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for installation and configuration instru
 ## Project Structure
 
 ```
-vthacks25/
+graphsense/
 ├── frontend/                # Next.js Frontend
 │   ├── app/                 # App Router pages and API routes
 │   ├── components/          # React components
@@ -118,6 +125,5 @@ vthacks25/
 ├── docs/                    # Project documentation
 ├── test/                    # Integration tests
 │   └── test-integration.js  # Main integration test
-├── docker-compose.yml       # Docker configuration
-└── .env.example             # Environment template
-``
+└── docker-compose.yml       # Docker configuration (4 services: frontend, backend, worker, redis)
+```

@@ -18,6 +18,8 @@ The system uses three specialized AI agents powered by Google Gemini:
 2. **Chart Recommender Agent**: Evaluates all 10 chart types with confidence scoring and data mapping
 3. **Validation Agent**: Quality assessment, appropriateness validation, and recommendation refinement
 
+Analysis jobs are dispatched asynchronously to Celery workers backed by Redis, allowing the API to return immediately with a `dataset_id` while processing continues in the background.
+
 ### Supported Chart Types
 
 - Bar Charts
@@ -33,7 +35,7 @@ The system uses three specialized AI agents powered by Google Gemini:
 
 ## Authentication
 
-Currently, the API supports anonymous access for development and hackathon use. Future versions will implement Supabase authentication.
+The API uses Supabase Auth for endpoints that require a user identity (e.g., canvas management). The backend connects to Supabase with a service-role key, so Supabase Row-Level Security (RLS) is **not** applied to backend database calls — access control is enforced at the route level in FastAPI handlers. Dataset and visualization endpoints currently allow anonymous access.
 
 ## Endpoints
 
@@ -213,6 +215,56 @@ Enable or disable sharing for a visualization.
 
 Get a shared visualization by its public token.
 
+### Canvas
+
+#### `GET /api/canvases`
+
+List all canvases belonging to the authenticated user.
+
+#### `POST /api/canvases`
+
+Create a new canvas.
+
+#### `GET /api/canvases/{canvas_id}`
+
+Get a specific canvas by ID.
+
+#### `GET /api/canvases/shared`
+
+List canvases shared with the authenticated user.
+
+#### `POST /api/canvases/join`
+
+Join a shared canvas using a share token.
+
+#### `PATCH /api/canvases/{canvas_id}`
+
+Update canvas metadata (`name`, `description`, `thumbnail`).
+
+#### `DELETE /api/canvases/{canvas_id}`
+
+Delete a canvas.
+
+#### `POST /api/canvases/{canvas_id}/share`
+
+Enable sharing for a canvas and return a share token/URL.
+
+#### `DELETE /api/canvases/{canvas_id}/share`
+
+Disable sharing for a canvas.
+
+#### `GET /api/canvases/{canvas_id}/collaborators`
+
+List collaborators with access to the canvas.
+
+#### `PATCH /api/canvases/{canvas_id}/collaborators/{collab_user_id}`
+
+Update a collaborator's permission (e.g., viewer ↔ editor). Owner access required.
+
+#### `DELETE /api/canvases/{canvas_id}/collaborators/{collab_user_id}`
+
+Remove a collaborator's access to the canvas. Owner access required.
+
 ### Data Models
 
 #### AnalysisRequest
@@ -264,7 +316,7 @@ The API uses standard HTTP status codes and returns structured error responses:
 
 ### Common Status Codes
 
-- `200 OK`: Request successful
+- `200 OK`: Request successful (including `POST /api/analysis/analyze`, which returns `200` with a `dataset_id` while analysis continues asynchronously in the background)
 - `201 Created`: Resource created successfully
 - `400 Bad Request`: Invalid request data
 - `404 Not Found`: Resource not found
@@ -273,7 +325,7 @@ The API uses standard HTTP status codes and returns structured error responses:
 
 ## Rate Limiting
 
-Currently no rate limiting is implemented for development. Production deployment should implement appropriate rate limiting based on usage patterns.
+The analyze endpoint (`POST /api/analysis/analyze`) is rate-limited to **10 requests per minute per IP** using `slowapi`. Exceeding this limit returns a `429 Too Many Requests` response.
 
 ## Examples
 
@@ -316,7 +368,7 @@ sequenceDiagram
 
     Client->>API: POST /analyze (data)
     API->>Database: Store dataset
-    API->>Client: 202 (dataset_id)
+    API->>Client: 200 (dataset_id)
 
     API->>Profiler: Analyze data structure
     Profiler->>Database: Store profile results
@@ -342,7 +394,7 @@ docker-compose up backend
 # Or run locally
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+doppler run -- uvicorn main:app --reload --port 8000
 ```
 
 ### Environment Variables
@@ -351,7 +403,7 @@ uvicorn main:app --reload --port 8000
 # Required
 GEMINI_API_KEY=your_gemini_api_key
 SUPABASE_URL=your_supabase_project_url
-SUPABASE_SERVICE_KEY=your_supabase_service_key
+SUPABASE_SECRET_KEY=your_supabase_secret_key  # e.g. sb_secret_...
 
 # Optional
 LOG_LEVEL=info
@@ -395,7 +447,6 @@ curl "http://localhost:8000/health"
 
 ## Future Enhancements
 
-- User authentication and authorization
 - Real-time progress updates via WebSockets
 - Advanced caching strategies
 - API versioning
@@ -405,6 +456,6 @@ curl "http://localhost:8000/health"
 
 ---
 
-**Last Updated**: January 2025
+**Last Updated**: March 2026
 **Version**: 1.0.0
 **Contact**: GraphSense Team

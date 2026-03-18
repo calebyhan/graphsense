@@ -15,10 +15,13 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 celery_app = Celery(
-    "vthacks25",
+    "graphsense",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
 )
+
+# Alias so `celery -A app.worker` auto-discovers the app instance
+app = celery_app
 
 celery_app.conf.update(
     task_serializer="json",
