@@ -110,6 +110,8 @@ erDiagram
     }
 ```
 
+> **Note:** The ER diagram reflects the live schema in `backend/database/schema.sql`. If columns change, regenerate or update `frontend/lib/supabase/types.ts` to keep frontend type definitions in sync (e.g., `datasets.upload_timestamp` was renamed to `processing_timestamp`).
+
 ## Table Details & Data Examples
 
 ### 1. `datasets` Table

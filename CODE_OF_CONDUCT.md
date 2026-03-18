@@ -56,17 +56,6 @@ Examples of representing our community include using an official e-mail address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
 
-## Enforcement
-
-Instances of abusive, harassment, or otherwise unacceptable behavior may be
-reported to the project team responsible for enforcement at
-conduct@graphsense.dev.
-
-All complaints will be reviewed and investigated promptly and fairly.
-
-All project team members are obligated to respect the privacy and security of
-the reporter of any incident.
-
 ## Enforcement Guidelines
 
 Project maintainers will follow these Community Impact Guidelines in determining
