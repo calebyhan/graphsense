@@ -157,7 +157,8 @@ class DataFingerprintGenerator:
                 statistical_features.append(f"{col}_unique_{unique_count}")
         
         statistical_hash = hashlib.md5(
-            json.dumps(sorted(statistical_features)).encode()
+            json.dumps(sorted(statistical_features)).encode(),
+            usedforsecurity=False,
         ).hexdigest()[:8]
         
         # Generate pattern hash (based on data distribution patterns)
@@ -171,7 +172,8 @@ class DataFingerprintGenerator:
             ])
         
         pattern_hash = hashlib.md5(
-            json.dumps(sorted(pattern_features)).encode()
+            json.dumps(sorted(pattern_features)).encode(),
+            usedforsecurity=False,
         ).hexdigest()[:8]
         
         return DataFingerprint(
@@ -224,7 +226,8 @@ class IntelligentCache:
         with self._lock:
             # Create a quick hash of the data for lookup
             data_hash = hashlib.md5(
-                json.dumps(data[:100], sort_keys=True).encode()  # Use first 100 rows for speed
+                json.dumps(data[:100], sort_keys=True).encode(),  # Use first 100 rows for speed
+                usedforsecurity=False,
             ).hexdigest()[:12]
             
             # Check if fingerprint is cached
