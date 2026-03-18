@@ -18,6 +18,8 @@ The system uses three specialized AI agents powered by Google Gemini:
 2. **Chart Recommender Agent**: Evaluates all 10 chart types with confidence scoring and data mapping
 3. **Validation Agent**: Quality assessment, appropriateness validation, and recommendation refinement
 
+Analysis jobs are dispatched asynchronously to Celery workers backed by Redis, allowing the API to return immediately with a `dataset_id` while processing continues in the background.
+
 ### Supported Chart Types
 
 - Bar Charts
@@ -33,7 +35,7 @@ The system uses three specialized AI agents powered by Google Gemini:
 
 ## Authentication
 
-Currently, the API supports anonymous access for development and hackathon use. Future versions will implement Supabase authentication.
+The API uses Supabase Auth for authenticated endpoints. Datasets and visualizations support both anonymous and authenticated access, enforced via Supabase Row-Level Security (RLS).
 
 ## Endpoints
 
@@ -213,6 +215,28 @@ Enable or disable sharing for a visualization.
 
 Get a shared visualization by its public token.
 
+### Canvas
+
+#### `GET /api/canvases`
+
+List all canvases belonging to the authenticated user.
+
+#### `POST /api/canvases`
+
+Create a new canvas.
+
+#### `GET /api/canvases/{canvas_id}`
+
+Get a specific canvas by ID.
+
+#### `PUT /api/canvases/{canvas_id}`
+
+Update a canvas (title, elements, viewport state, etc.).
+
+#### `DELETE /api/canvases/{canvas_id}`
+
+Delete a canvas.
+
 ### Data Models
 
 #### AnalysisRequest
@@ -273,7 +297,7 @@ The API uses standard HTTP status codes and returns structured error responses:
 
 ## Rate Limiting
 
-Currently no rate limiting is implemented for development. Production deployment should implement appropriate rate limiting based on usage patterns.
+The analyze endpoint (`POST /api/analysis/analyze`) is rate-limited to **10 requests per minute per IP** using `slowapi`. Exceeding this limit returns a `429 Too Many Requests` response.
 
 ## Examples
 
@@ -342,7 +366,7 @@ docker-compose up backend
 # Or run locally
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+doppler run -- uvicorn main:app --reload --port 8000
 ```
 
 ### Environment Variables
@@ -351,7 +375,7 @@ uvicorn main:app --reload --port 8000
 # Required
 GEMINI_API_KEY=your_gemini_api_key
 SUPABASE_URL=your_supabase_project_url
-SUPABASE_SERVICE_KEY=your_supabase_service_key
+SUPABASE_SECRET_KEY=your_supabase_service_key
 
 # Optional
 LOG_LEVEL=info
@@ -395,7 +419,6 @@ curl "http://localhost:8000/health"
 
 ## Future Enhancements
 
-- User authentication and authorization
 - Real-time progress updates via WebSockets
 - Advanced caching strategies
 - API versioning
@@ -405,6 +428,6 @@ curl "http://localhost:8000/health"
 
 ---
 
-**Last Updated**: January 2025
+**Last Updated**: March 2026
 **Version**: 1.0.0
 **Contact**: GraphSense Team

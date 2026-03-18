@@ -60,7 +60,7 @@ representative at an online or offline event.
 
 Instances of abusive, harassment, or otherwise unacceptable behavior may be
 reported to the project team responsible for enforcement at
-[INSERT CONTACT EMAIL].
+conduct@graphsense.dev.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

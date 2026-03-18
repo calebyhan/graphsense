@@ -10,7 +10,7 @@ GraphSense uses GitHub Actions for automated checks and native GitHub Copilot fo
 
 ### 1. PR Checks (`.github/workflows/pr-checks.yml`)
 
-Triggers: pull requests and pushes to `main`/`develop`.
+Triggers: pull requests and pushes to `main`.
 
 Jobs:
 1. `Backend Tests`: runs `pytest` with coverage, uploads coverage artifacts.
@@ -156,6 +156,6 @@ Keep required human approvals enabled. Copilot comments are advisory.
 ## Badges
 
 ```markdown
-[![CI](https://github.com/calebyhan/vthacks25/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/calebyhan/vthacks25/actions/workflows/pr-checks.yml)
-[![AI and Static Analysis](https://github.com/calebyhan/vthacks25/actions/workflows/ai-code-review.yml/badge.svg)](https://github.com/calebyhan/vthacks25/actions/workflows/ai-code-review.yml)
+[![CI](https://github.com/calebyhan/graphsense/actions/workflows/pr-checks.yml/badge.svg)](https://github.com/calebyhan/graphsense/actions/workflows/pr-checks.yml)
+[![AI and Static Analysis](https://github.com/calebyhan/graphsense/actions/workflows/ai-code-review.yml/badge.svg)](https://github.com/calebyhan/graphsense/actions/workflows/ai-code-review.yml)
 ```

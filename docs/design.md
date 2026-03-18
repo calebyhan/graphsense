@@ -4,7 +4,7 @@
 
 The GraphSense is a full-stack web application that leverages an intelligent agentic pipeline to automatically analyze datasets and recommend optimal visualizations. The system combines Next.js 15/React frontend with a Python backend featuring multiple specialized AI agents powered by Google Gemini that collaborate to provide high-quality chart recommendations with transparent reasoning.
 
-The core innovation lies in the multi-agent architecture where specialized Gemini-powered agents handle different aspects of data analysis, chart selection, and validation, creating a robust feedback loop that ensures recommendation quality and provides clear justifications for visualization choices. The entire system is containerized with Docker for seamless cross-platform development and deployment, designed for hackathon-style rapid development with local execution and Supabase for data persistence.
+The core innovation lies in the multi-agent architecture where specialized Gemini-powered agents handle different aspects of data analysis, chart selection, and validation, creating a robust feedback loop that ensures recommendation quality and provides clear justifications for visualization choices. The entire system is containerized with Docker for seamless cross-platform deployment.
 
 ## Architecture
 
@@ -22,32 +22,33 @@ graph TB
     subgraph "Backend (Python/FastAPI)"
         API[API Gateway]
         PROCESSOR[Data Processing Service]
-        PIPELINE[Agentic Pipeline Orchestrator]
+        PIPELINE[Pipeline Orchestrator]
+        WORKER[Celery Worker]
     end
 
     subgraph "Agentic Pipeline"
         PROFILER[Enhanced Data Profiler Agent]
         RECOMMENDER[Chart Recommender Agent]
         VALIDATOR[Validation Agent]
-        BATCH[Batched API Manager]
     end
 
     subgraph "Data Layer"
         SUPABASE[(Supabase)]
-        CACHE[Redis Cache]
+        REDIS[(Redis)]
     end
 
     UI --> PARSER
     PARSER --> API
     VIZ --> API
     API --> PROCESSOR
-    API --> PIPELINE
+    API --> REDIS
+    REDIS --> WORKER
+    WORKER --> PIPELINE
     PIPELINE --> PROFILER
     PIPELINE --> RECOMMENDER
     PIPELINE --> VALIDATOR
-    PIPELINE --> BATCH
     API --> SUPABASE
-    API --> CACHE
+    WORKER --> SUPABASE
 ```
 
 ### Technology Stack
@@ -55,26 +56,24 @@ graph TB
 **Frontend:**
 
 - Next.js 15 with App Router for server-side rendering and routing
-- React 18 with TypeScript for type-safe component development
+- React 19 with TypeScript for type-safe component development
 - Tailwind CSS for responsive styling
-- D3.js and Chart.js for interactive visualizations
+- Recharts for interactive visualizations
 - Zustand for lightweight state management
-- React Query for server state management and caching
 
 **Backend:**
 
-- Python 3.11+ with FastAPI for high-performance API development
+- Python 3.13+ with FastAPI for high-performance API development
 - Pydantic for data validation and serialization
 - Pandas and NumPy for data processing and analysis
-- LangChain for LLM agent orchestration and management
 - Google Gemini API for agent reasoning and LLM capabilities
 
 **Infrastructure:**
 
-- Supabase for database, authentication, file storage, and caching
+- Supabase for database, authentication, and data persistence
+- Redis for job queue (Celery broker) and result backend
+- Celery for async background workers
 - Docker for containerization and cross-platform compatibility
-- Local development environment (laptop-based for hackathon)
-- Simplified architecture optimized for rapid development
 
 ## Components and Interfaces
 
@@ -130,10 +129,10 @@ interface ChartRenderer {
 
 ### Backend Services
 
-#### Agentic Pipeline Orchestrator
+#### Pipeline Orchestrator
 
 ```python
-class AgenticPipelineOrchestrator:
+class PipelineOrchestrator:
     def __init__(self):
         self.agents = {
             'profiler': EnhancedDataProfilerAgent(),
@@ -395,7 +394,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -411,10 +410,33 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
+    depends_on:
+      - redis
+
+  worker:
+    build:
+      context: ./backend
+    command: celery -A app.worker worker --loglevel=info --concurrency=2
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    depends_on:
+      - backend
+      - redis
+
+  redis:
+    image: redis:7-alpine
 ```
 
 ### Gemini API Integration
@@ -424,7 +446,7 @@ services:
 class GeminiAgentConfig:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
-        self.model = "gemini-2.0-flash-exp"  # Latest Gemini model
+        self.model = "gemini-2.5-flash-lite"  # Configured Gemini model
         self.temperature = 0.1  # Low temperature for consistent reasoning
         self.max_tokens = 4096
 
@@ -444,4 +466,10 @@ class BaseAgent:
         return response.text
 ```
 
-This design provides a robust foundation for building the GraphSense with a focus on the agentic pipeline architecture, scalable data processing, user-friendly visualization capabilities, and hackathon-ready Docker containerization using Google Gemini for intelligent reasoning.
+## Canvas Collaboration
+
+Each user can create multiple named canvases. A canvas is a persistent infinite workspace containing zero or more elements of the following types: `chart`, `dataset`, `table`, `map`, or `text`. All element positions are stored in **world coordinates** (not screen pixels); the frontend applies the transform `screen = (world * zoom) + pan` at render time.
+
+Canvases can be shared via a unique token. The owner may invite collaborators and assign them either `view` or `edit` permission. Collaborators with `edit` permission can add, move, and delete elements; `view` collaborators can only read the canvas. The owner can toggle collaborator permissions at any time through the ShareDialog. Canvas metadata (name, thumbnail, last-modified) is visible in the canvas directory, which supports search and sort.
+
+This design provides a robust foundation for the GraphSense platform, with a focus on the agentic pipeline architecture, scalable async processing via Celery/Redis, canvas collaboration, and production-grade Docker containerization using Google Gemini for intelligent reasoning.

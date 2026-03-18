@@ -130,7 +130,7 @@
   - Add export progress indicators and error handling for complex charts
   - _Requirements: 4.4_
 
-- [ ] 17. Build visualization saving and sharing system
+- [x] 17. Build visualization saving and sharing system
 
   - Create save functionality that stores chart configuration in Supabase
   - Implement shareable link generation with unique tokens
@@ -138,10 +138,19 @@
   - Add visualization history and management interface
   - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 18. Integrate all components and test end-to-end workflow
+- [x] 18. Integrate all components and test end-to-end workflow
   - Connect frontend file selection interface to optimized 3-agent backend pipeline
   - Integrate agent progress tracking with real-time updates for batched calls
   - Wire up recommendation display with comprehensive visualization rendering
   - Test complete workflow from client-side file parsing to all 10 chart types generation and sharing
   - Add final error handling and user experience polish
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 3.1, 4.1, 7.1, 7.2, 7.3_
+
+## Post-MVP Production Upgrades
+
+- [x] 19. Canvas directory with rename, thumbnail preview, search/sort, and save indicator
+- [x] 20. Canvas collaboration system with shareable tokens and collaborator permissions
+- [x] 21. CI/CD pipeline with GitHub Actions (pytest, lint, integration tests, Docker build)
+- [x] 22. 100% backend test coverage with hardened quality gates
+- [x] 23. Supabase Auth with user profiles (display_name, avatar_color)
+- [x] 24. Rate limiting (slowapi) on analysis endpoints
