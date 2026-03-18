@@ -41,10 +41,12 @@ jobs:
       - name: Run security scan
         working-directory: backend
         run: |
-          echo "## Security Scan Report" > security-report.md
-          bandit -r app -f markdown -lll >> security-report.md
+          echo "## Security Scan Report" > security-report.txt
+          set +e
+          bandit -r app -f txt -lll >> security-report.txt
           BANDIT_EXIT=$?
-          cat security-report.md
+          set -e
+          cat security-report.txt
           if [ "$BANDIT_EXIT" -eq 0 ]; then
             echo "✅ No HIGH severity issues found"
           elif [ "$BANDIT_EXIT" -eq 1 ]; then
@@ -61,4 +63,4 @@ jobs:
           name: code-analysis-reports
           path: |
             backend/complexity-report.md
-            backend/security-report.md
+            backend/security-report.txt

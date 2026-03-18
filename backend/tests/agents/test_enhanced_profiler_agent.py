@@ -218,7 +218,7 @@ def test_get_fallback_result(profiler):
 
 @pytest.mark.asyncio
 async def test_analyze_accepts_raw_list(profiler):
-    """analyze() normalises a raw list to {"dataset": list} before processing (line 28)."""
+    """analyze() normalises a raw list input into the expected {"dataset": list} structure before processing."""
     raw_list = [
         {"age": 30, "salary": 70000},
         {"age": 25, "salary": 55000},

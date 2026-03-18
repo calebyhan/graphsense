@@ -385,8 +385,8 @@ async def test_parse_file_queue_rejected(parser):
 
 
 @pytest.mark.asyncio
-async def test_parse_file_queue_request_raises_cancels_future(parser):
-    """When queue_request raises, the exception propagates and the outer handler runs (line 117)."""
+async def test_parse_file_queue_request_raises_propagates_error(parser):
+    """When queue_request raises, the exception propagates immediately from parse_file."""
     upload = make_upload_file(b"a,b\n1,2\n", "data.csv")
     with patch.object(
         parser.memory_manager,
