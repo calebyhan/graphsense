@@ -403,7 +403,7 @@ doppler run -- uvicorn main:app --reload --port 8000
 # Required
 GEMINI_API_KEY=your_gemini_api_key
 SUPABASE_URL=your_supabase_project_url
-SUPABASE_SECRET_KEY=your_supabase_service_key
+SUPABASE_SECRET_KEY=your_supabase_secret_key  # e.g. sb_secret_...
 
 # Optional
 LOG_LEVEL=info

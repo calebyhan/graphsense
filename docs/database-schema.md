@@ -311,7 +311,7 @@ erDiagram
 ---
 
 ### 6. `canvas_collaborators` Table
-**Purpose**: Tracks per-user permissions (view or edit) on a canvas. Rows are inserted automatically by the `join_canvas_via_token()` RPC when a user visits a share link.
+**Purpose**: Tracks per-user permissions (view or edit) on a canvas. Rows are created or updated by the backend when a user joins via `POST /api/canvases/join` (the RPC exists in schema but is not called directly — the service-role key bypasses `auth.uid()` so the backend resolves the token and upserts the row itself).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -411,7 +411,7 @@ Here's how data flows through our system:
 
 5. **Canvas Sharing**:
    - Owner generates a share link → `share_token` and `share_permission` set on the `canvases` row
-   - Collaborator visits the link → `join_canvas_via_token()` RPC inserts a row into `canvas_collaborators`
+   - Collaborator visits the link → client calls `POST /api/canvases/join` with the share token → backend upserts a row into `canvas_collaborators`
    - Collaborator can view (or edit, depending on permission) datasets and elements on the shared canvas
 
 6. **Visualization Sharing** (per-chart):
@@ -531,7 +531,9 @@ WHERE canvas_id = '<canvas_id>'
 ORDER BY z_index ASC, created_at ASC;
 ```
 
-**Join a canvas via share token** (RPC — handles collaborator insert atomically):
-```sql
-SELECT * FROM join_canvas_via_token('<share_token>');
+**Join a canvas via share token** (application flow via backend API):
+```bash
+curl -X POST /api/canvases/join \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<share_token>"}'
 ```

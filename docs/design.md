@@ -59,7 +59,9 @@ graph TB
 - React 19 with TypeScript for type-safe component development
 - Tailwind CSS for responsive styling
 - Recharts for interactive visualizations
-- Zustand for lightweight state management
+- D3.js for low-level data visualization primitives
+- TanStack React Query for server state management and data fetching
+- Zustand for lightweight client state management
 
 **Backend:**
 
