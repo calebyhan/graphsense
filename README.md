@@ -6,10 +6,10 @@ GraphSense is an AI-powered data visualization platform. Upload a CSV, JSON, Exc
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS, Recharts, Zustand, Motion (Framer)
 - **Canvas Engine**: Custom infinite canvas with coordinate transformations, viewport management, minimap integration
 - **Performance**: React.memo, useMemo, data sampling, RAF-throttled updates, optimized rendering
-- **Backend**: Python 3.11, FastAPI, Google Gemini API, Pandas, Scikit-learn
+- **Backend**: Python 3.13, FastAPI, Google Gemini API, Pandas, Scikit-learn
 - **Database**: Supabase (PostgreSQL) with Row Level Security
 - **Infrastructure**: Docker, Docker Compose, Redis, Celery (async workers)
-- **AI**: Google Gemini 2.0 Flash for intelligent analysis
+- **AI**: Google Gemini 2.5 Flash Lite (`gemini-2.5-flash-lite`) for intelligent analysis
 
 ## Features
 
@@ -126,4 +126,4 @@ graphsense/
 ├── test/                    # Integration tests
 │   └── test-integration.js  # Main integration test
 └── docker-compose.yml       # Docker configuration (4 services: frontend, backend, worker, redis)
-``
+```

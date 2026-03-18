@@ -20,6 +20,9 @@ celery_app = Celery(
     backend=settings.celery_result_backend,
 )
 
+# Alias so `celery -A app.worker` auto-discovers the app instance
+app = celery_app
+
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",

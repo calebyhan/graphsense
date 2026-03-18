@@ -229,13 +229,33 @@ Create a new canvas.
 
 Get a specific canvas by ID.
 
-#### `PUT /api/canvases/{canvas_id}`
+#### `GET /api/canvases/shared`
+
+List canvases shared with the authenticated user.
+
+#### `POST /api/canvases/join`
+
+Join a shared canvas using a share token.
+
+#### `PATCH /api/canvases/{canvas_id}`
 
 Update a canvas (title, elements, viewport state, etc.).
 
 #### `DELETE /api/canvases/{canvas_id}`
 
 Delete a canvas.
+
+#### `POST /api/canvases/{canvas_id}/share`
+
+Enable sharing for a canvas and return a share token/URL.
+
+#### `DELETE /api/canvases/{canvas_id}/share`
+
+Disable sharing for a canvas.
+
+#### `GET /api/canvases/{canvas_id}/collaborators`
+
+List collaborators with access to the canvas.
 
 ### Data Models
 
