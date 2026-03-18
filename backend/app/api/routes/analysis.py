@@ -72,7 +72,8 @@ async def analyze_dataset(
                 "data_length": len(body.data),
                 "first_row": body.data[0] if body.data else {},
                 "columns": sorted(body.data[0].keys()) if body.data else [],
-            }, sort_keys=True).encode()
+            }, sort_keys=True).encode(),
+            usedforsecurity=False,
         ).hexdigest()
 
         existing_dataset_id = _redis.get(f"dedup:{request_signature}")
@@ -129,7 +130,8 @@ async def analyze_dataset(
             "last_row": body.data[-1] if body.data else {},
         }
         content_hash = hashlib.md5(
-            json.dumps(content_data, sort_keys=True).encode()
+            json.dumps(content_data, sort_keys=True).encode(),
+            usedforsecurity=False,
         ).hexdigest()
         
         logger.info(f"Content hash for {body.filename}: {content_hash}")

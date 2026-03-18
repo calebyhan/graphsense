@@ -199,7 +199,7 @@ class GeminiAIService:
 
     def _generate_cache_key(self, agent_type: str, prompt: str) -> str:
         """Generate cache key from prompt hash"""
-        prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
+        prompt_hash = hashlib.md5(prompt.encode(), usedforsecurity=False).hexdigest()
         return f"{agent_type}_{prompt_hash}"
 
     def _build_profiler_prompt(

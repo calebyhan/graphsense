@@ -40,11 +40,22 @@ jobs:
 
       - name: Run security scan
         working-directory: backend
-        continue-on-error: true
         run: |
-          echo "## Security Scan Report" > security-report.md
-          bandit -r app -f markdown >> security-report.md || true
-          cat security-report.md
+          echo "## Security Scan Report" > security-report.txt
+          set +e
+          bandit -r app -f txt --severity-level high >> security-report.txt 2>&1
+          BANDIT_EXIT=$?
+          set -e
+          cat security-report.txt
+          if [ "$BANDIT_EXIT" -eq 0 ]; then
+            echo "✅ No HIGH severity issues found"
+          elif [ "$BANDIT_EXIT" -eq 1 ]; then
+            echo "❌ Bandit found HIGH severity security issues — see report above"
+            exit 1
+          else
+            echo "❌ Bandit failed to run (exit code $BANDIT_EXIT)"
+            exit "$BANDIT_EXIT"
+          fi
 
       - name: Upload analysis reports
         uses: actions/upload-artifact@v4
@@ -52,4 +63,4 @@ jobs:
           name: code-analysis-reports
           path: |
             backend/complexity-report.md
-            backend/security-report.md
+            backend/security-report.txt

@@ -382,3 +382,17 @@ async def test_parse_file_queue_rejected(parser):
     with patch.object(parser.memory_manager, "queue_request", new_callable=AsyncMock, return_value=False):
         with pytest.raises(Exception, match="overloaded"):
             await parser.parse_file(upload, "req-002")
+
+
+@pytest.mark.asyncio
+async def test_parse_file_queue_request_raises_propagates_error(parser):
+    """When queue_request raises, the exception propagates immediately from parse_file."""
+    upload = make_upload_file(b"a,b\n1,2\n", "data.csv")
+    with patch.object(
+        parser.memory_manager,
+        "queue_request",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("queue crash"),
+    ):
+        with pytest.raises(RuntimeError, match="queue crash"):
+            await parser.parse_file(upload, "req-queue-crash")
