@@ -40,11 +40,14 @@ jobs:
 
       - name: Run security scan
         working-directory: backend
-        continue-on-error: true
         run: |
           echo "## Security Scan Report" > security-report.md
-          bandit -r app -f markdown >> security-report.md || true
+          bandit -r app -f markdown -lll >> security-report.md || BANDIT_FAILED=1
           cat security-report.md
+          if [ -n "$BANDIT_FAILED" ]; then
+            echo "❌ Bandit found HIGH severity security issues — see report above"
+            exit 1
+          fi
 
       - name: Upload analysis reports
         uses: actions/upload-artifact@v4

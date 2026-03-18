@@ -212,3 +212,17 @@ def test_get_fallback_result(profiler):
     result = profiler.get_fallback_result({})
     assert result["success"] is False
     assert result["data"]["statistical_summary"]["row_count"] == 0
+
+
+# ── analyze — list input normalization ────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_analyze_accepts_raw_list(profiler):
+    """analyze() normalises a raw list to {"dataset": list} before processing (line 28)."""
+    raw_list = [
+        {"age": 30, "salary": 70000},
+        {"age": 25, "salary": 55000},
+        {"age": 35, "salary": 90000},
+    ]
+    result = await profiler.analyze(raw_list)
+    assert result is not None

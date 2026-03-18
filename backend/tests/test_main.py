@@ -41,6 +41,61 @@ async def test_lifespan_db_failure_raises():
                 pass  # pragma: no cover
 
 
+async def test_lifespan_shutdown_exception_is_logged():
+    """Lifespan logs (but does not re-raise) exceptions from shutdown_memory_manager."""
+    from main import lifespan, app as fastapi_app
+
+    with (
+        patch("main.get_supabase_client"),
+        patch("app.utils.memory_manager.initialize_memory_manager", new=AsyncMock()),
+        patch(
+            "app.utils.memory_manager.shutdown_memory_manager",
+            new=AsyncMock(side_effect=RuntimeError("shutdown boom")),
+        ),
+    ):
+        async with lifespan(fastapi_app):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Root endpoint
+# ---------------------------------------------------------------------------
+
+async def test_root_returns_status():
+    """GET / returns status=running."""
+    from httpx import AsyncClient, ASGITransport
+    from main import app as fastapi_app
+
+    async with AsyncClient(transport=ASGITransport(app=fastapi_app), base_url="http://test") as client:
+        response = await client.get("/")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
+
+
+# ---------------------------------------------------------------------------
+# HTTP exception handler
+# ---------------------------------------------------------------------------
+
+async def test_http_exception_handler_returns_correct_status():
+    """HTTP exceptions yield a JSON response with the right status code and detail."""
+    from main import http_exception_handler
+    from fastapi import HTTPException
+    from fastapi.responses import JSONResponse
+    import json
+
+    request = MagicMock()
+    exc = HTTPException(status_code=404, detail="Not found")
+
+    response = await http_exception_handler(request, exc)
+
+    assert isinstance(response, JSONResponse)
+    assert response.status_code == 404
+    body = json.loads(response.body)
+    assert body["error"] == "Not found"
+    assert body["status_code"] == 404
+
+
 # ---------------------------------------------------------------------------
 # Global exception handler
 # ---------------------------------------------------------------------------
