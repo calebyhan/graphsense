@@ -10,7 +10,7 @@ GraphSense uses GitHub Actions for automated checks and native GitHub Copilot fo
 
 ### 1. PR Checks (`.github/workflows/pr-checks.yml`)
 
-Triggers: pull requests and pushes to `main`.
+Triggers: pull requests and pushes to `main` and `develop`.
 
 Jobs:
 1. `Backend Tests`: runs `pytest` with coverage, uploads coverage artifacts.

@@ -239,7 +239,7 @@ Join a shared canvas using a share token.
 
 #### `PATCH /api/canvases/{canvas_id}`
 
-Update a canvas (title, elements, viewport state, etc.).
+Update canvas metadata (`name`, `description`, `thumbnail`).
 
 #### `DELETE /api/canvases/{canvas_id}`
 

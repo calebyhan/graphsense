@@ -16,7 +16,7 @@ export function Team() {
       icon: ExternalLink,
       title: "Live Demo",
       description: "Try GraphSense in action",
-      href: "http://localhost:3000"
+      href: "/"
     },
     {
       icon: FileText,
