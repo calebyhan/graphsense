@@ -360,6 +360,44 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
 
       if (isInputFocused) return;
 
+      const fitAllElements = () => {
+        if (canvasElements.length === 0) {
+          const nv = { x: 0, y: 0, zoom: 1 };
+          viewportRef.current = nv;
+          setLocalViewport(nv);
+          updateViewport(nv);
+          return;
+        }
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const element of canvasElements) {
+          minX = Math.min(minX, element.position.x);
+          minY = Math.min(minY, element.position.y);
+          maxX = Math.max(maxX, element.position.x + element.size.width);
+          maxY = Math.max(maxY, element.position.y + element.size.height);
+        }
+
+        const padding = 50;
+        const boundingWidth = maxX - minX + padding * 2;
+        const boundingHeight = maxY - minY + padding * 2;
+        const centerX_elements = (minX + maxX) / 2;
+        const centerY_elements = (minY + maxY) / 2;
+
+        const containerEl = canvasRef.current;
+        const viewportWidth = containerEl ? containerEl.clientWidth : 800;
+        const viewportHeight = containerEl ? containerEl.clientHeight : 600;
+
+        const fitZoom = Math.min(viewportWidth / boundingWidth, viewportHeight / boundingHeight, 3);
+        const targetZoom = Math.max(minZoom, fitZoom);
+        const targetX = -centerX_elements * targetZoom;
+        const targetY = -centerY_elements * targetZoom;
+
+        const nv = { x: targetX, y: targetY, zoom: targetZoom };
+        viewportRef.current = nv;
+        setLocalViewport(nv);
+        updateViewport(nv);
+      };
+
       if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
@@ -387,57 +425,11 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
           updateViewport(nv);
         } else if (e.key === '0') {
           e.preventDefault();
-
-          if (canvasElements.length === 0) {
-            const nv = { x: 0, y: 0, zoom: 1 };
-            viewportRef.current = nv;
-            setLocalViewport(nv);
-            updateViewport(nv);
-            return;
-          }
-
-          // Fit all elements - optimized
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          for (const element of canvasElements) {
-            const left = element.position.x;
-            const top = element.position.y;
-            const right = element.position.x + element.size.width;
-            const bottom = element.position.y + element.size.height;
-
-            minX = Math.min(minX, left);
-            minY = Math.min(minY, top);
-            maxX = Math.max(maxX, right);
-            maxY = Math.max(maxY, bottom);
-          }
-
-          const padding = 50;
-          const boundingWidth = maxX - minX + padding * 2;
-          const boundingHeight = maxY - minY + padding * 2;
-
-          const centerX_elements = (minX + maxX) / 2;
-          const centerY_elements = (minY + maxY) / 2;
-
-          // Use actual container dimensions for accurate fit calculation
-          const containerEl = canvasRef.current;
-          const viewportWidth = containerEl ? containerEl.clientWidth : 800;
-          const viewportHeight = containerEl ? containerEl.clientHeight : 600;
-
-          const zoomX = viewportWidth / boundingWidth;
-          const zoomY = viewportHeight / boundingHeight;
-          const fitZoom = Math.min(Math.min(zoomX, zoomY), 3);
-
-          const targetZoom = Math.max(minZoom, fitZoom);
-
-          // In the center-origin coordinate system vx=0 places world origin at screen center.
-          // To center elements at (cx, cy): vx = -cx * zoom
-          const targetX = -centerX_elements * targetZoom;
-          const targetY = -centerY_elements * targetZoom;
-
-          const nv = { x: targetX, y: targetY, zoom: targetZoom };
-          viewportRef.current = nv;
-          setLocalViewport(nv);
-          updateViewport(nv);
+          fitAllElements();
         }
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        fitAllElements();
       }
     };
 

@@ -1,17 +1,20 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  MousePointer, 
-  Hand, 
-  Type, 
-  Trash2, 
+import {
+  MousePointer,
+  Hand,
+  Type,
+  Trash2,
   GripVertical,
   Database,
   BarChart3,
   ZoomIn,
   ZoomOut,
-  Maximize
+  Maximize,
+  Crosshair,
+  Table,
+  Map
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -29,7 +32,9 @@ const tools = [
   { id: 'drag' as ToolType, name: 'Hand', icon: Hand, shortcut: 'H' },
   { id: 'chart' as ToolType, name: 'Chart', icon: BarChart3, shortcut: 'C' },
   { id: 'dataset' as ToolType, name: 'Dataset', icon: Database, shortcut: 'D' },
-  { id: 'text' as ToolType, name: 'Text', icon: Type, shortcut: 'T' },
+  { id: 'table' as ToolType, name: 'Table', icon: Table, shortcut: 'T' },
+  { id: 'text' as ToolType, name: 'Text', icon: Type, shortcut: 'Shift+T' },
+  { id: 'map' as ToolType, name: 'Map', icon: Map, shortcut: 'M' },
 ];
 
 export default function FloatingToolbar({
@@ -37,7 +42,7 @@ export default function FloatingToolbar({
   onDeleteSelected,
   hasSelection = false
 }: FloatingToolbarProps) {
-  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements } = useCanvasStore();
+  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements, resetViewport } = useCanvasStore();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -46,7 +51,7 @@ export default function FloatingToolbar({
   React.useEffect(() => {
     const updatePosition = () => {
       setPosition({
-        x: window.innerWidth / 2 - 300, // 600px width / 2
+        x: window.innerWidth / 2 - 415, // 830px width / 2
         y: window.innerHeight - 100
       });
     };
@@ -69,7 +74,7 @@ export default function FloatingToolbar({
 
   const handleMouseMove = React.useCallback((e: MouseEvent) => {
     if (isDragging) {
-      const newX = Math.max(0, Math.min(window.innerWidth - 600, e.clientX - dragStart.x));
+      const newX = Math.max(0, Math.min(window.innerWidth - 830, e.clientX - dragStart.x));
       const newY = Math.max(0, Math.min(window.innerHeight - 80, e.clientY - dragStart.y));
       setPosition({ x: newX, y: newY });
     }
@@ -154,7 +159,7 @@ export default function FloatingToolbar({
       style={{
         left: position.x,
         top: position.y,
-        width: '600px'
+        width: '830px'
       }}
       onMouseDown={handleMouseDown}
     >
@@ -220,9 +225,19 @@ export default function FloatingToolbar({
               size="sm"
               onClick={handleFitToScreen}
               className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
-              title="Fit to Screen (Ctrl+0)"
+              title="Fit to Screen (Ctrl+0 / F)"
             >
               <Maximize className="w-5 h-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetViewport}
+              className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+              title="Go to Origin (Space)"
+            >
+              <Crosshair className="w-5 h-5" />
             </Button>
           </div>
 

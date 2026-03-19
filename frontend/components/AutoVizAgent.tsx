@@ -17,6 +17,8 @@ import CanvasElement from '@/components/canvas/CanvasElement';
 import ChartCard from '@/components/canvas/elements/ChartCard';
 import DatasetCard from '@/components/canvas/elements/DatasetCard';
 import MapCard from '@/components/canvas/elements/MapCard';
+import TextCard from '@/components/canvas/elements/TextCard';
+import TableCard from '@/components/canvas/elements/TableCard';
 import { canvasAPI } from '@/lib/api/backendClient';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -82,6 +84,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const canvasBounds = useCanvasStore(s => s.canvasBounds);
   const canvasContainerSize = useCanvasStore(s => s.canvasContainerSize);
   const selectedTool = useCanvasStore(s => s.selectedTool);
+  const setSelectedTool = useCanvasStore(s => s.setSelectedTool);
   const addElement = useCanvasStore(s => s.addElement);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
 
@@ -442,16 +445,42 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
             onCanvasClick={(e) => {
               // Deselect on canvas background click (not during pan/drag)
               if (selectedTool !== 'drag') setSelectedVizId(null);
-              // Handle canvas clicks for adding elements
-              if (e.detail === 2) { // Double click
-                const rect = e.currentTarget.getBoundingClientRect();
-                const screenX = e.clientX - rect.left;
-                const screenY = e.clientY - rect.top;
-                const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
-                const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
 
-                if (selectedDataset) {
-                  createVisualization(selectedDataset, { x: canvasX - 200, y: canvasY - 150 });
+              const rect = e.currentTarget.getBoundingClientRect();
+              const screenX = e.clientX - rect.left;
+              const screenY = e.clientY - rect.top;
+              const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
+              const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
+
+              // Single-click placement for active placement tools
+              if (e.detail === 1) {
+                if (selectedTool === 'text') {
+                  addElement({
+                    type: 'text',
+                    position: { x: canvasX - 200, y: canvasY - 150 },
+                    size: { width: 400, height: 300 },
+                    data: { title: 'Text Block', content: '' }
+                  });
+                  setSelectedTool('pointer');
+                } else if (selectedTool === 'table' && selectedDataset) {
+                  addElement({
+                    type: 'table',
+                    position: { x: canvasX - 300, y: canvasY - 200 },
+                    size: { width: 600, height: 400 },
+                    data: { data: selectedDataset.data || [], title: selectedDataset.name }
+                  });
+                  setSelectedTool('pointer');
+                } else if (selectedTool === 'dataset' && selectedDataset) {
+                  addElement({
+                    type: 'dataset',
+                    position: { x: canvasX - 200, y: canvasY - 150 },
+                    size: { width: 400, height: 300 },
+                    data: { data: selectedDataset.data || [], title: selectedDataset.name }
+                  });
+                  setSelectedTool('pointer');
+                } else if (selectedTool === 'chart' && selectedDataset) {
+                  createVisualization(selectedDataset, { x: canvasX - 250, y: canvasY - 200 });
+                  setSelectedTool('pointer');
                 }
               }
             }}
@@ -489,6 +518,19 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                       data={element.data?.data || []}
                       title={element.data?.title || 'Map'}
                       config={element.data?.config}
+                    />
+                  )}
+                  {element.type === 'text' && (
+                    <TextCard
+                      initialContent={element.data?.content || ''}
+                      title={element.data?.title || 'Text Block'}
+                      editable={!readOnly}
+                    />
+                  )}
+                  {element.type === 'table' && (
+                    <TableCard
+                      data={element.data?.data || []}
+                      title={element.data?.title || 'Data Table'}
                     />
                   )}
                 </CanvasElement>
