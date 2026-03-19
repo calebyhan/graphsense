@@ -150,16 +150,17 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
     }, 10000);
 
     setIsDragging(true);
+    // Store mouse in world-space offset by element origin so delta is zoom-independent
     setDragStart({
-      x: e.clientX - element.position.x * viewport.zoom,
-      y: e.clientY - element.position.y * viewport.zoom,
+      x: e.clientX / viewport.zoom - element.position.x,
+      y: e.clientY / viewport.zoom - element.position.y,
     });
   }, [element.id, element.position, selectElements, viewport.zoom, lockedByOther, isActuallySelected, onSelect]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isDragging) {
-      const newX = (e.clientX - dragStart.x) / viewport.zoom;
-      const newY = (e.clientY - dragStart.y) / viewport.zoom;
+      const newX = e.clientX / viewport.zoom - dragStart.x;
+      const newY = e.clientY / viewport.zoom - dragStart.y;
       const newPosition = { x: newX, y: newY };
 
       // Update local state immediately for smooth visual feedback

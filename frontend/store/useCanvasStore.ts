@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { computeCanvasBounds } from '@/lib/utils/canvasBounds';
 
 export interface Viewport {
   x: number;
@@ -31,6 +32,8 @@ export type ElementLocks = Record<string, string>; // element_id → user_id
 
 interface CanvasStore {
   viewport: Viewport;
+  canvasContainerSize: { width: number; height: number };
+  canvasBounds: { width: number; height: number };
   selectedTool: ToolType;
   canvasElements: CanvasElement[];
   selectedElements: string[];
@@ -44,6 +47,7 @@ interface CanvasStore {
   // Viewport actions
   updateViewport: (viewport: Viewport) => void;
   resetViewport: () => void;
+  updateCanvasContainerSize: (size: { width: number; height: number }) => void;
 
   // Tool actions
   setSelectedTool: (tool: ToolType) => void;
@@ -77,6 +81,8 @@ interface CanvasStore {
 
 export const useCanvasStore = create<CanvasStore>((set, get) => ({
   viewport: { x: 0, y: 0, zoom: 1 },
+  canvasContainerSize: { width: 800, height: 600 },
+  canvasBounds: computeCanvasBounds([]),
   selectedTool: 'pointer',
   canvasElements: [],
   selectedElements: [],
@@ -93,6 +99,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   resetViewport: () => set({ viewport: { x: 0, y: 0, zoom: 1 } }),
 
+  updateCanvasContainerSize: (size) => set({ canvasContainerSize: size }),
+
   setSelectedTool: (tool) => set({ selectedTool: tool }),
 
   addElement: (element) => {
@@ -102,26 +110,31 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       id,
       zIndex: element.zIndex || get().canvasElements.length,
     };
-    set((state) => ({
-      canvasElements: [...state.canvasElements, newElement],
-    }));
+    set((state) => {
+      const canvasElements = [...state.canvasElements, newElement];
+      return { canvasElements, canvasBounds: computeCanvasBounds(canvasElements) };
+    });
     return id;
   },
 
   updateElement: (id, updates) => {
-    set((state) => ({
-      canvasElements: state.canvasElements.map((element) =>
+    set((state) => {
+      const canvasElements = state.canvasElements.map((element) =>
         element.id === id ? { ...element, ...updates } : element
-      ),
-      selectedElements: []
-    }));
+      );
+      return { canvasElements, selectedElements: [], canvasBounds: computeCanvasBounds(canvasElements) };
+    });
   },
 
   removeElement: (id) => {
-    set((state) => ({
-      canvasElements: state.canvasElements.filter((element) => element.id !== id),
-      selectedElements: state.selectedElements.filter((selectedId) => selectedId !== id),
-    }));
+    set((state) => {
+      const canvasElements = state.canvasElements.filter((element) => element.id !== id);
+      return {
+        canvasElements,
+        selectedElements: state.selectedElements.filter((selectedId) => selectedId !== id),
+        canvasBounds: computeCanvasBounds(canvasElements),
+      };
+    });
   },
 
   selectElements: (ids) => {
@@ -208,7 +221,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       data: el.data,
       zIndex: el.z_index ?? el.zIndex ?? 0,
     }));
-    set({ canvasElements: mapped, selectedElements: [] });
+    set({ canvasElements: mapped, selectedElements: [], canvasBounds: computeCanvasBounds(mapped) });
   },
 
   addElementFromRemote: (element) => {
@@ -223,7 +236,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         data: element.data,
         zIndex: (element as any).z_index ?? element.zIndex ?? state.canvasElements.length,
       };
-      return { canvasElements: [...state.canvasElements, mapped] };
+      const canvasElements = [...state.canvasElements, mapped];
+      return { canvasElements, canvasBounds: computeCanvasBounds(canvasElements) };
     });
   },
 
@@ -250,14 +264,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   getViewportCenterPosition: () => {
-    const { viewport } = get();
+    const { viewport, canvasContainerSize } = get();
     const offsetRange = 50;
     const randomOffsetX = (Math.random() - 0.5) * offsetRange;
     const randomOffsetY = (Math.random() - 0.5) * offsetRange;
 
     return {
       x: -viewport.x / viewport.zoom + randomOffsetX,
-      y: viewport.y / viewport.zoom + randomOffsetY
+      y: -viewport.y / viewport.zoom + randomOffsetY,
     };
   },
 }));

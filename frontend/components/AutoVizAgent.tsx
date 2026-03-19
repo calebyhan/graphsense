@@ -79,6 +79,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   // Canvas state — use selectors to avoid re-renders from unrelated store updates (e.g. cursor moves)
   const viewport = useCanvasStore(s => s.viewport);
   const canvasElements = useCanvasStore(s => s.canvasElements);
+  const canvasBounds = useCanvasStore(s => s.canvasBounds);
+  const canvasContainerSize = useCanvasStore(s => s.canvasContainerSize);
+  const selectedTool = useCanvasStore(s => s.selectedTool);
   const addElement = useCanvasStore(s => s.addElement);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
 
@@ -103,6 +106,16 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   }, [canvasId]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Dynamic canvas size — sourced from store (kept in sync by element-modifying actions).
+  const canvasDimensions = canvasBounds;
+
+  // Minimum zoom: fit the entire canvas within the actual container area tracked by InfiniteCanvas's ResizeObserver.
+  const minZoom = useMemo(() => {
+    const { width: cW, height: cH } = canvasContainerSize;
+    // Math.min → "contain": show the entire canvas at min zoom (letterbox if needed)
+    return Math.max(0.05, Math.min(cW / canvasDimensions.width, cH / canvasDimensions.height));
+  }, [canvasDimensions, canvasContainerSize]);
 
   // Stable key derived only from layout-relevant fields — ignores selection, data, zIndex changes
   const elementLayoutKey = useMemo(
@@ -325,11 +338,12 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     const rect = canvasRef.current?.getBoundingClientRect();
 
     if (rect && selectedDataset) {
-      // Convert screen coordinates to canvas coordinates
+      // Convert screen coordinates to world coordinates
+      // Transform: screen = containerCenter + worldPos * zoom + pan
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
-      const canvasX = (screenX - viewport.x) / viewport.zoom;
-      const canvasY = (screenY - viewport.y) / viewport.zoom;
+      const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
+      const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
 
       createVisualization(selectedDataset, { x: canvasX, y: canvasY });
     }
@@ -425,14 +439,18 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         <div className="flex-1 relative overflow-hidden">
           <InfiniteCanvas
             onCursorMove={emitCursor}
+            minZoom={minZoom}
+            canvasSize={canvasDimensions}
             onCanvasClick={(e) => {
+              // Deselect on canvas background click (not during pan/drag)
+              if (selectedTool !== 'drag') setSelectedVizId(null);
               // Handle canvas clicks for adding elements
               if (e.detail === 2) { // Double click
                 const rect = e.currentTarget.getBoundingClientRect();
                 const screenX = e.clientX - rect.left;
                 const screenY = e.clientY - rect.top;
-                const canvasX = (screenX - viewport.x) / viewport.zoom;
-                const canvasY = (screenY - viewport.y) / viewport.zoom;
+                const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
+                const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
 
                 if (selectedDataset) {
                   createVisualization(selectedDataset, { x: canvasX - 200, y: canvasY - 150 });
@@ -442,7 +460,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
           >
             <div
               ref={canvasRef}
-              className="w-[10000px] h-[10000px]"
+              style={{ width: canvasDimensions.width, height: canvasDimensions.height }}
               onDrop={handleDrop}
               onDragOver={(e) => e.preventDefault()}
             >

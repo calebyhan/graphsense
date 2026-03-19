@@ -55,8 +55,8 @@ export function VisualizationPanel({
     retryAnalysis
   } = useAnalysisStore();
   
-  const { viewport, updateViewport, canvasElements } = useCanvasStore();
-  
+  const { viewport, updateViewport, canvasElements, canvasContainerSize, canvasBounds, selectedElements } = useCanvasStore();
+
   // Convert canvas elements to visualization positions for minimap
   const canvasVisualizationPositions = canvasElements.map(element => ({
     id: element.id,
@@ -391,8 +391,8 @@ export function VisualizationPanel({
       <div className="border-t border-gray-200 dark:border-gray-700">
         <MiniMap
           visualizations={canvasVisualizationPositions}
-          canvasSize={{ width: 10000, height: 10000 }}
-          viewportSize={{ width: typeof window !== 'undefined' ? window.innerWidth : 1200, height: typeof window !== 'undefined' ? window.innerHeight : 800 }}
+          canvasSize={canvasBounds}
+          viewportSize={canvasContainerSize}
           viewportPosition={{ x: viewport.x, y: viewport.y, zoom: viewport.zoom }}
           onViewportChange={(position) => {
             updateViewport({
@@ -401,6 +401,7 @@ export function VisualizationPanel({
               zoom: viewport.zoom
             });
           }}
+          selectedId={selectedElements[0]}
         />
       </div>
     </div>

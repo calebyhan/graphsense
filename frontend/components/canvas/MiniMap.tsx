@@ -18,6 +18,7 @@ interface MiniMapProps {
   viewportSize: { width: number; height: number };
   viewportPosition: { x: number; y: number; zoom?: number };
   onViewportChange: (position: { x: number; y: number }) => void;
+  selectedId?: string;
 }
 
 export function MiniMap({
@@ -25,33 +26,43 @@ export function MiniMap({
   canvasSize,
   viewportSize,
   viewportPosition,
-  onViewportChange
+  onViewportChange,
+  selectedId,
 }: MiniMapProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const miniMapSize = { width: 200, height: 150 };
   
-  // Calculate scale factors
+  // Canvas transform: translate(cW/2, cH/2) translate(vx, vy) scale(zoom)
+  // World origin (0,0) is the content-div top-left = screen center at default viewport.
+  // Minimap uses CENTER-ORIGIN: world (wx,wy) → minimap (centerX + wx*scaleX, centerY + wy*scaleY).
+  // This keeps elements placed near world origin appearing near the minimap center.
   const scaleX = miniMapSize.width / canvasSize.width;
   const scaleY = miniMapSize.height / canvasSize.height;
-  
-  // Calculate viewport rectangle in minimap coordinates (Cartesian system)
-  const miniMapCenterX = miniMapSize.width / 2;
-  const miniMapCenterY = miniMapSize.height / 2;
+  const centerX = miniMapSize.width / 2;
+  const centerY = miniMapSize.height / 2;
+  // Inner drawable area: container has 1px border on each side (box-sizing: border-box)
+  const innerW = miniMapSize.width - 2;
+  const innerH = miniMapSize.height - 2;
 
-  // Extract zoom from viewportPosition, default to 1
   const zoom = viewportPosition.zoom || 1;
 
-  // The canvas uses Cartesian coordinates with center at viewport origin
-  // Canvas transform: translate(centerX, centerY) translate(viewport.x, viewport.y) scale(zoom)
-  // For minimap, we need to show where the viewport center is relative to canvas center
+  // Screen center maps to world (-vx/zoom, -vy/zoom).
+  // That world point in minimap: (centerX - vx*scaleX/zoom, centerY - vy*scaleY/zoom).
+  const vcX = centerX - viewportPosition.x * scaleX / zoom;
+  const vcY = centerY - viewportPosition.y * scaleY / zoom;
+  const rawW = viewportSize.width * scaleX / zoom;
+  const rawH = viewportSize.height * scaleY / zoom;
+  // Clamp left/right and top/bottom independently so all 4 borders remain visible
+  const clampedLeft = Math.max(0, vcX - rawW / 2);
+  const clampedTop = Math.max(0, vcY - rawH / 2);
+  const clampedRight = Math.min(innerW, vcX + rawW / 2);
+  const clampedBottom = Math.min(innerH, vcY + rawH / 2);
   const viewportRect = {
-    x: Math.max(0, Math.min(miniMapSize.width - (viewportSize.width * scaleX / zoom),
-        miniMapCenterX + (viewportPosition.x * scaleX) - (viewportSize.width * scaleX / zoom) / 2)),
-    y: Math.max(0, Math.min(miniMapSize.height - (viewportSize.height * scaleY / zoom),
-        miniMapCenterY - (viewportPosition.y * scaleY) - (viewportSize.height * scaleY / zoom) / 2)), // Invert Y for canvas coordinate system
-    width: Math.min(miniMapSize.width, viewportSize.width * scaleX / zoom),
-    height: Math.min(miniMapSize.height, viewportSize.height * scaleY / zoom)
+    x: clampedLeft,
+    y: clampedTop,
+    width: Math.max(0, clampedRight - clampedLeft),
+    height: Math.max(0, clampedBottom - clampedTop),
   };
 
   const updateViewportFromMouse = (e: React.MouseEvent) => {
@@ -59,12 +70,9 @@ export function MiniMap({
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    // Convert click position to canvas coordinates
-    // In minimap: center is at (miniMapCenterX, miniMapCenterY)
-    // Canvas transform: translate(centerX, centerY) translate(viewport.x, viewport.y) scale(zoom)
-    // The minimap Y needs to be inverted to match the canvas coordinate system
-    const canvasX = (clickX - miniMapCenterX) / scaleX; // Direct mapping
-    const canvasY = -(clickY - miniMapCenterY) / scaleY; // Invert Y to match canvas coordinate system
+    // world = (click - center) / scale; for world at screen center: vx = -world * zoom
+    const canvasX = -(clickX - centerX) * zoom / scaleX;
+    const canvasY = -(clickY - centerY) * zoom / scaleY;
 
     onViewportChange({ x: canvasX, y: canvasY });
   };
@@ -137,31 +145,36 @@ export function MiniMap({
                 }}
               />
               
-              {/* Visualizations */}
-              {visualizations.map((viz) => (
-                <div
-                  key={viz.id}
-                  className="absolute bg-indigo-500 rounded-sm opacity-70 border border-indigo-600 hover:opacity-90 transition-opacity"
-                  style={{
-                    left: Math.max(0, Math.min(miniMapSize.width - Math.max(viz.width * scaleX, 4),
-                          miniMapCenterX + (viz.x * scaleX))),
-                    top: Math.max(0, Math.min(miniMapSize.height - Math.max(viz.height * scaleY, 4),
-                          miniMapCenterY - (viz.y * scaleY))), // Invert Y coordinate to match canvas coordinate system
-                    width: Math.max(viz.width * scaleX, 4),
-                    height: Math.max(viz.height * scaleY, 4)
-                  }}
-                  title="Visualization"
-                />
-              ))}
-              
+              {/* Visualizations — center-origin: world (wx,wy) → (centerX + wx*scaleX, centerY + wy*scaleY) */}
+              {visualizations.map((viz) => {
+                const elW = Math.max(viz.width * scaleX, 4);
+                const elH = Math.max(viz.height * scaleY, 4);
+                const elX = Math.max(0, Math.min(innerW - elW, centerX + viz.x * scaleX));
+                const elY = Math.max(0, Math.min(innerH - elH, centerY + viz.y * scaleY));
+                const isSelected = viz.id === selectedId;
+                return (
+                  <div
+                    key={viz.id}
+                    className={`absolute rounded-sm transition-all ${
+                      isSelected
+                        ? 'bg-blue-500 border-2 border-blue-300 opacity-100 shadow-[0_0_4px_2px_rgba(59,130,246,0.6)]'
+                        : 'bg-indigo-500 border border-indigo-600 opacity-70 hover:opacity-90'
+                    }`}
+                    style={{ left: elX, top: elY, width: elW, height: elH }}
+                    title="Visualization"
+                  />
+                );
+              })}
+
         {/* Viewport indicator */}
         <div
-          className="absolute border-2 border-blue-500 bg-blue-200/20 cursor-move"
+          className="absolute bg-blue-200/20 cursor-move"
           style={{
             left: `${viewportRect.x}px`,
             top: `${viewportRect.y}px`,
             width: `${viewportRect.width}px`,
-            height: `${viewportRect.height}px`
+            height: `${viewportRect.height}px`,
+            boxShadow: 'inset 0 0 0 2px #3b82f6',
           }}
         >
           {/* Click indicator */}
@@ -178,7 +191,7 @@ export function MiniMap({
               </div>
               <div className="flex justify-between">
                 <span>Canvas:</span>
-                <span className="font-medium">{canvasSize.width} × {canvasSize.height}</span>
+                <span className="font-medium">{Math.round(canvasSize.width)} × {Math.round(canvasSize.height)}</span>
               </div>
             </div>
 
