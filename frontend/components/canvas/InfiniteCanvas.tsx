@@ -443,7 +443,7 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [updateViewport, canvasElements]);
+  }, [updateViewport, canvasElements, minZoom]);
 
   // Set cursor based on selected tool
   useEffect(() => {

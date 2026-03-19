@@ -11,8 +11,8 @@ interface ElementBounds {
  * Returns { width, height } where each dimension = 2 * halfExtent.
  * halfExtent = max(MIN_HALF, maxAbsExtentFromOrigin + PADDING).
  *
- * Uses reduce instead of spread+Math.max to avoid call stack overflow
- * with large element counts.
+ * Uses an explicit loop instead of spread+Math.max to avoid call stack
+ * overflow with large element counts.
  */
 export function computeCanvasBounds(elements: ElementBounds[]): { width: number; height: number } {
   if (elements.length === 0) {
