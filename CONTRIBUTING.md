@@ -27,11 +27,11 @@ Thank you for contributing to GraphSense! This guide will help you get started.
 
 ```bash
 # Fork the repository on GitHub, then:
-git clone https://github.com/calebyhan/vthacks25.git
-cd vthacks25
+git clone https://github.com/calebyhan/graphsense.git
+cd graphsense
 
 # Add upstream remote
-git remote add upstream https://github.com/calebyhan/vthacks25.git
+git remote add upstream https://github.com/calebyhan/graphsense.git
 ```
 
 ### 2. Secret Management (Doppler)
@@ -85,6 +85,11 @@ doppler run -- uvicorn main:app --reload --port 8000
 cd frontend
 npm install
 doppler run -- npm run dev
+
+# Terminal 3: Celery Worker
+cd backend
+source .venv/bin/activate
+doppler run -- celery -A app.worker worker --loglevel=info
 ```
 
 ### 4. Verify Installation
@@ -181,7 +186,7 @@ We use **Git Flow** with the following branches:
 ### Creating the PR
 
 1. **Push your branch** to your fork
-2. **Open a PR** against `main` branch of `calebyhan/vthacks25`
+2. **Open a PR** against `main` branch of `calebyhan/graphsense`
 3. **Fill out the PR template** (see `.github/pull_request_template.md`)
 4. **Link relevant issues** using keywords: `Closes #123`, `Fixes #456`
 

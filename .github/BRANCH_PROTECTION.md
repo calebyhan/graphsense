@@ -6,7 +6,7 @@ This is the recommended branch/ruleset configuration for this repository.
 
 Apply to:
 - `main`
-- `develop` (optional, same profile)
+- Any long-lived integration branch (optional, same profile)
 
 ## Turn On
 
@@ -68,7 +68,7 @@ This aligns with linear history and avoids merge-commit noise.
 1. Repository `Settings` -> `Rules` -> `Rulesets` (recommended) or `Branches`.
 2. Create/update rule for `main`.
 3. Apply toggles exactly as above.
-4. Repeat for `develop` if desired.
+4. Repeat for any long-lived integration branch if desired.
 5. Validate on a test PR.
 
 ## Validation Checklist
