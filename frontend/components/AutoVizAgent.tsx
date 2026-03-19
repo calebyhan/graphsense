@@ -335,18 +335,14 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   // Handle drag & drop from DataPanel to Canvas
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const rect = canvasRef.current?.getBoundingClientRect();
-
-    if (rect && selectedDataset) {
-      // Convert screen coordinates to world coordinates
-      // Transform: screen = containerCenter + worldPos * zoom + pan
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-      const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
-      const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
-
-      createVisualization(selectedDataset, { x: canvasX, y: canvasY });
-    }
+    if (!selectedDataset) return;
+    // e.currentTarget is the InfiniteCanvas container (viewport div), so rect gives correct dimensions
+    const rect = e.currentTarget.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
+    const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
+    createVisualization(selectedDataset, { x: canvasX, y: canvasY });
   }, [selectedDataset, viewport, createVisualization]);
 
   // Create visualization from recommendation
@@ -441,6 +437,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
             onCursorMove={emitCursor}
             minZoom={minZoom}
             canvasSize={canvasDimensions}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
             onCanvasClick={(e) => {
               // Deselect on canvas background click (not during pan/drag)
               if (selectedTool !== 'drag') setSelectedVizId(null);
@@ -461,8 +459,6 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
             <div
               ref={canvasRef}
               style={{ width: canvasDimensions.width, height: canvasDimensions.height }}
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
             >
               {/* Render canvas store elements only - no duplicates */}
               {canvasElements.map((element) => (

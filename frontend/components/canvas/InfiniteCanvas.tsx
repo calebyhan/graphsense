@@ -36,11 +36,13 @@ interface InfiniteCanvasProps {
   children: React.ReactNode;
   onCanvasClick?: (e: React.MouseEvent) => void;
   onCursorMove?: (x: number, y: number) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
   minZoom?: number;
   canvasSize?: { width: number; height: number };
 }
 
-export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, minZoom = 0.1, canvasSize }: InfiniteCanvasProps) {
+export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, onDrop, onDragOver, minZoom = 0.1, canvasSize }: InfiniteCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -628,6 +630,8 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onDrop={onDrop}
+      onDragOver={onDragOver}
       style={{
         cursor: selectedTool === 'drag' ? (isDragging.current ? 'grabbing' : 'grab') : 'default',
         touchAction: 'none',

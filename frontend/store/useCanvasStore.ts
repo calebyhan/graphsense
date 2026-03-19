@@ -122,7 +122,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       const canvasElements = state.canvasElements.map((element) =>
         element.id === id ? { ...element, ...updates } : element
       );
-      return { canvasElements, selectedElements: [], canvasBounds: computeCanvasBounds(canvasElements) };
+      return { canvasElements, canvasBounds: computeCanvasBounds(canvasElements) };
     });
   },
 
@@ -264,7 +264,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   getViewportCenterPosition: () => {
-    const { viewport, canvasContainerSize } = get();
+    const { viewport } = get();
     const offsetRange = 50;
     const randomOffsetX = (Math.random() - 0.5) * offsetRange;
     const randomOffsetY = (Math.random() - 0.5) * offsetRange;
