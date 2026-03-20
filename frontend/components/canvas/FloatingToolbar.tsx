@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { 
-  MousePointer, 
-  Hand, 
-  Type, 
-  Trash2, 
+import {
+  MousePointer,
+  Hand,
+  Type,
+  Trash2,
   GripVertical,
   Database,
   BarChart3,
+  Table2,
+  Map,
+  StickyNote,
   ZoomIn,
   ZoomOut,
   Maximize
@@ -29,7 +32,10 @@ const tools = [
   { id: 'drag' as ToolType, name: 'Hand', icon: Hand, shortcut: 'H' },
   { id: 'chart' as ToolType, name: 'Chart', icon: BarChart3, shortcut: 'C' },
   { id: 'dataset' as ToolType, name: 'Dataset', icon: Database, shortcut: 'D' },
-  { id: 'text' as ToolType, name: 'Text', icon: Type, shortcut: 'T' },
+  { id: 'table' as ToolType, name: 'Table', icon: Table2, shortcut: 'T' },
+  { id: 'map' as ToolType, name: 'Map', icon: Map, shortcut: 'M' },
+  { id: 'text' as ToolType, name: 'Text', icon: Type, shortcut: 'Shift+T' },
+  { id: 'note' as ToolType, name: 'Note', icon: StickyNote, shortcut: 'N' },
 ];
 
 export default function FloatingToolbar({
@@ -37,7 +43,7 @@ export default function FloatingToolbar({
   onDeleteSelected,
   hasSelection = false
 }: FloatingToolbarProps) {
-  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements } = useCanvasStore();
+  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements, canvasContainerSize } = useCanvasStore();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -46,7 +52,7 @@ export default function FloatingToolbar({
   React.useEffect(() => {
     const updatePosition = () => {
       setPosition({
-        x: window.innerWidth / 2 - 300, // 600px width / 2
+        x: window.innerWidth / 2 - 375, // 750px width / 2
         y: window.innerHeight - 100
       });
     };
@@ -69,7 +75,7 @@ export default function FloatingToolbar({
 
   const handleMouseMove = React.useCallback((e: MouseEvent) => {
     if (isDragging) {
-      const newX = Math.max(0, Math.min(window.innerWidth - 600, e.clientX - dragStart.x));
+      const newX = Math.max(0, Math.min(window.innerWidth - 750, e.clientX - dragStart.x));
       const newY = Math.max(0, Math.min(window.innerHeight - 80, e.clientY - dragStart.y));
       setPosition({ x: newX, y: newY });
     }
@@ -135,16 +141,11 @@ export default function FloatingToolbar({
     const boundingHeight = maxY - minY + padding * 2;
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth - 400 : 1200;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight - 200 : 800;
-    const zoomX = viewportWidth / boundingWidth;
-    const zoomY = viewportHeight / boundingHeight;
-    const fitZoom = Math.min(Math.min(zoomX, zoomY), 3);
+    const { width: cW, height: cH } = canvasContainerSize;
+    const fitZoom = Math.min(cW / boundingWidth, cH / boundingHeight, 3);
     const targetZoom = Math.max(0.1, fitZoom);
-    const viewportCenterX = viewportWidth / 2;
-    const viewportCenterY = viewportHeight / 2;
-    const targetX = viewportCenterX - (centerX * targetZoom);
-    const targetY = viewportCenterY - (centerY * targetZoom);
+    const targetX = -centerX * targetZoom;
+    const targetY = -centerY * targetZoom;
     updateViewport({ x: targetX, y: targetY, zoom: targetZoom });
   };
 
@@ -154,7 +155,7 @@ export default function FloatingToolbar({
       style={{
         left: position.x,
         top: position.y,
-        width: '600px'
+        width: '750px'
       }}
       onMouseDown={handleMouseDown}
     >

@@ -9,7 +9,7 @@ export interface Viewport {
 
 export interface CanvasElement {
   id: string;
-  type: 'dataset' | 'chart' | 'table' | 'map' | 'text';
+  type: 'dataset' | 'chart' | 'table' | 'map' | 'text' | 'note';
   position: { x: number; y: number };
   size: { width: number; height: number };
   data?: any;
@@ -17,7 +17,7 @@ export interface CanvasElement {
   zIndex?: number;
 }
 
-export type ToolType = 'pointer' | 'drag' | 'dataset' | 'table' | 'chart' | 'map' | 'text';
+export type ToolType = 'pointer' | 'drag' | 'dataset' | 'table' | 'chart' | 'map' | 'text' | 'note';
 
 // --- Collaboration types ---
 

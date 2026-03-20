@@ -3,7 +3,7 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 
 export function useKeyboardShortcuts(isReadOnly = false) {
-  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, canvasElements, updateViewport, viewport } = useCanvasStore();
+  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, canvasElements, updateViewport, viewport, canvasContainerSize } = useCanvasStore();
 
   const handleZoomIn = () => {
     // Zoom in by 10% increments for finer control
@@ -39,38 +39,17 @@ export function useKeyboardShortcuts(isReadOnly = false) {
       maxY = Math.max(maxY, bottom);
     });
 
-    // Add padding around elements
     const padding = 50;
     const boundingWidth = maxX - minX + padding * 2;
     const boundingHeight = maxY - minY + padding * 2;
-
-    // Calculate center of bounding box
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-
-    // Get viewport dimensions (subtract space for toolbars)
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth - 400 : 1200; // Account for side panels
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight - 200 : 800; // Account for top/bottom toolbars
-    
-    // Calculate zoom to fit elements in viewport
-    const zoomX = viewportWidth / boundingWidth;
-    const zoomY = viewportHeight / boundingHeight;
-    const fitZoom = Math.min(Math.min(zoomX, zoomY), 3); // Cap at 300%
-
-    // Calculate viewport position to center the bounding box
+    const { width: cW, height: cH } = canvasContainerSize;
+    const fitZoom = Math.min(cW / boundingWidth, cH / boundingHeight, 3);
     const targetZoom = Math.max(0.1, fitZoom);
-    const viewportCenterX = viewportWidth / 2;
-    const viewportCenterY = viewportHeight / 2;
-    
-    const targetX = viewportCenterX - (centerX * targetZoom);
-    const targetY = viewportCenterY - (centerY * targetZoom);
-
-    // Update viewport to fit and center all elements
-    updateViewport({ 
-      x: targetX, 
-      y: targetY, 
-      zoom: targetZoom 
-    });
+    const targetX = -centerX * targetZoom;
+    const targetY = -centerY * targetZoom;
+    updateViewport({ x: targetX, y: targetY, zoom: targetZoom });
   };
 
   useEffect(() => {
@@ -115,6 +94,12 @@ export function useKeyboardShortcuts(isReadOnly = false) {
         case 'm':
           if (!e.ctrlKey && !e.metaKey) {
             setSelectedTool('map');
+            e.preventDefault();
+          }
+          break;
+        case 'n':
+          if (!e.ctrlKey && !e.metaKey) {
+            setSelectedTool('note');
             e.preventDefault();
           }
           break;
@@ -167,5 +152,5 @@ export function useKeyboardShortcuts(isReadOnly = false) {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, handleFitToScreen, handleZoomIn, handleZoomOut, viewport, isReadOnly]);
+  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, handleFitToScreen, handleZoomIn, handleZoomOut, viewport, canvasContainerSize, isReadOnly]);
 }

@@ -17,6 +17,10 @@ import CanvasElement from '@/components/canvas/CanvasElement';
 import ChartCard from '@/components/canvas/elements/ChartCard';
 import DatasetCard from '@/components/canvas/elements/DatasetCard';
 import MapCard from '@/components/canvas/elements/MapCard';
+import TableCard from '@/components/canvas/elements/TableCard';
+import TextCard from '@/components/canvas/elements/TextCard';
+import NoteCard from '@/components/canvas/elements/NoteCard';
+import ConnectionLines from '@/components/canvas/ConnectionLines';
 import { canvasAPI } from '@/lib/api/backendClient';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -65,6 +69,45 @@ export interface ChartRecommendation {
   config?: any;
 }
 
+/** Return a natural initial size for a canvas element based on type + available metadata. */
+function getDefaultSize(
+  type: 'chart' | 'dataset' | 'table' | 'map' | 'text' | 'note',
+  opts: { chartType?: string; columns?: number; rows?: number } = {}
+): { width: number; height: number } {
+  const { chartType, columns = 0, rows = 0 } = opts;
+  switch (type) {
+    case 'chart': {
+      switch (chartType) {
+        // No axes — fill the container, square-ish
+        case 'pie':      return { width: 400, height: 400 };
+        case 'treemap':  return { width: 540, height: 440 };
+        // Two labeled axes — need generous width + height so labels aren't clipped
+        case 'scatter':  return { width: 560, height: 480 }; // symmetric axes
+        case 'heatmap':  return { width: 600, height: 520 }; // many ticks on both axes
+        case 'box_plot': return { width: 580, height: 460 };
+        case 'histogram':return { width: 580, height: 440 };
+        // Flow / layout charts — wide
+        case 'sankey':   return { width: 700, height: 440 };
+        // Standard x/y charts — wide enough for tick labels + legend
+        default:         return { width: 600, height: 420 }; // bar, line, area
+      }
+    }
+    case 'dataset': {
+      const w = Math.min(Math.max(320, columns * 110), 680);
+      const h = Math.min(Math.max(220, rows * 26 + 80), 480);
+      return { width: w, height: h };
+    }
+    case 'table': {
+      const w = Math.min(Math.max(360, columns * 130), 820);
+      const h = Math.min(Math.max(220, rows * 34 + 70), 520);
+      return { width: w, height: h };
+    }
+    case 'map':  return { width: 520, height: 400 };
+    case 'text': return { width: 280, height: 140 };
+    case 'note': return { width: 220, height: 160 };
+  }
+}
+
 export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, isOwner }: { readOnly?: boolean; emitCursor?: (x: number, y: number) => void; canvasId?: string; isOwner?: boolean }) {
   // State management
   const [_visualizations, setVisualizations] = useState<Visualization[]>([]);
@@ -83,6 +126,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const canvasContainerSize = useCanvasStore(s => s.canvasContainerSize);
   const selectedTool = useCanvasStore(s => s.selectedTool);
   const addElement = useCanvasStore(s => s.addElement);
+  const setSelectedTool = useCanvasStore(s => s.setSelectedTool);
+  const updateViewport = useCanvasStore(s => s.updateViewport);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
 
   // Theme transition hook
@@ -93,6 +138,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const initialLoadRef = useRef(true);
   // Captures the server-loaded layout so we don't auto-save on async element population
   const baselineLayoutKeyRef = useRef<string | null>(null);
+  const hasFitOnLoadRef = useRef(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
@@ -101,9 +147,36 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     if (thumbnailTimerRef.current) { clearTimeout(thumbnailTimerRef.current); thumbnailTimerRef.current = null; }
     initialLoadRef.current = true;
     baselineLayoutKeyRef.current = null;
+    hasFitOnLoadRef.current = false;
     setSaveState('idle');
     setLastSaved(null);
   }, [canvasId]);
+
+  // Fit-to-screen on initial load once elements and container size are both known
+  useEffect(() => {
+    if (hasFitOnLoadRef.current) return;
+    if (canvasElements.length === 0) return;
+    const { width: cW, height: cH } = canvasContainerSize;
+    if (cW === 0 || cH === 0) return;
+
+    hasFitOnLoadRef.current = true;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of canvasElements) {
+      minX = Math.min(minX, el.position.x);
+      minY = Math.min(minY, el.position.y);
+      maxX = Math.max(maxX, el.position.x + el.size.width);
+      maxY = Math.max(maxY, el.position.y + el.size.height);
+    }
+    const padding = 80;
+    const boundingWidth = maxX - minX + padding * 2;
+    const boundingHeight = maxY - minY + padding * 2;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const fitZoom = Math.min(cW / boundingWidth, cH / boundingHeight, 2);
+    const targetZoom = Math.max(0.1, fitZoom);
+    updateViewport({ x: -centerX * targetZoom, y: -centerY * targetZoom, zoom: targetZoom });
+  }, [canvasElements, canvasContainerSize, updateViewport]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -264,7 +337,33 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     } else {
       console.warn('Selected dataset has no data:', dataset.name);
     }
-  }, [startAnalysis]);
+
+    // Auto-add a dataset card the first time this dataset appears on the canvas
+    const alreadyOnCanvas = useCanvasStore
+      .getState()
+      .canvasElements.some(
+        (el) => el.type === 'dataset' && el.data?.datasetId === dataset.id
+      );
+    if (!alreadyOnCanvas) {
+      const center = useCanvasStore.getState().getViewportCenterPosition();
+      const dsSize = getDefaultSize('dataset', { columns: dataset.columns, rows: Math.min(dataset.rows, 10) });
+      const newId = addElement({
+        type: 'dataset',
+        position: { x: center.x - dsSize.width / 2, y: center.y - dsSize.height / 2 },
+        size: dsSize,
+        data: {
+          datasetId: dataset.id,
+          data: dataset.data || [],
+          title: dataset.name,
+        },
+      });
+      const justAdded = useCanvasStore.getState().canvasElements.find((el) => el.id === newId);
+      if (justAdded) {
+        const { data: _data, ...rest } = justAdded;
+        getActiveWebSocket()?.sendElementAdd({ ...rest, data: { datasetId: dataset.id, title: dataset.name } });
+      }
+    }
+  }, [startAnalysis, addElement]);
 
   const createVisualization = useCallback((
     dataset: Dataset,
@@ -273,13 +372,14 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     recommendation?: ChartRecommendation
   ) => {
     // Create visualization for local state tracking
+    const chartSize = getDefaultSize('chart', { chartType: type });
     const newViz: Visualization = {
       id: `viz-${Date.now()}`,
       title: type ? `${type.charAt(0).toUpperCase() + type.slice(1)} Chart` : 'Chart',
       type,
       dataSource: dataset.name,
       position,
-      size: { width: 500, height: 400 },
+      size: chartSize,
       confidence: recommendation?.confidence,
       reasoning: recommendation?.reasoning,
       config: recommendation?.config
@@ -300,7 +400,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     const canvasElement = {
       type: 'chart' as const,
       position: finalPosition,
-      size: { width: 500, height: 400 },
+      size: chartSize,
       data: {
         config: {
           ...recommendation?.config,
@@ -309,7 +409,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         chartType: type,
         recommendation: recommendation,
         title: chartTitle,
-        dataset: dataset
+        dataset: dataset,
+        sourceDatasetId: dataset.id,
       }
     };
 
@@ -397,6 +498,26 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     }
   }, [selectedVizId, handleVisualizationDelete]);
 
+  // Add a non-chart element at a given canvas position and switch back to pointer
+  const handleAddElement = useCallback((
+    type: 'text' | 'table' | 'map' | 'note',
+    position: { x: number; y: number },
+    size: { width: number; height: number }
+  ) => {
+    const data: Record<string, any> = {};
+    if ((type === 'table' || type === 'map') && selectedDataset) {
+      data.data = selectedDataset.data || [];
+      data.title = selectedDataset.name;
+      data.sourceDatasetId = selectedDataset.id;
+    }
+    const newId = addElement({ type, position, size, data });
+    const justAdded = useCanvasStore.getState().canvasElements.find(el => el.id === newId);
+    if (justAdded) {
+      getActiveWebSocket()?.sendElementAdd(justAdded);
+    }
+    setSelectedTool('pointer');
+  }, [selectedDataset, addElement, setSelectedTool]);
+
   // Prepare visualization positions for MiniMap - use canvas elements
   const visualizationPositions = canvasElements
     .filter(element => element.type === 'chart')
@@ -442,25 +563,47 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
             onCanvasClick={(e) => {
               // Deselect on canvas background click (not during pan/drag)
               if (selectedTool !== 'drag') setSelectedVizId(null);
-              // Handle canvas clicks for adding elements
-              if (e.detail === 2) { // Double click
-                const rect = e.currentTarget.getBoundingClientRect();
-                const screenX = e.clientX - rect.left;
-                const screenY = e.clientY - rect.top;
-                const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
-                const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
 
+              const rect = e.currentTarget.getBoundingClientRect();
+              const screenX = e.clientX - rect.left;
+              const screenY = e.clientY - rect.top;
+              const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
+              const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
+
+              if (e.detail === 2 && (selectedTool === 'pointer' || selectedTool === 'chart')) {
+                // Double-click to add a chart when a dataset is selected
                 if (selectedDataset) {
-                  createVisualization(selectedDataset, { x: canvasX - 200, y: canvasY - 150 });
+                  const sz = getDefaultSize('chart');
+                  createVisualization(selectedDataset, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 });
+                }
+              } else if (e.detail === 1) {
+                // Single-click to place non-chart elements
+                if (selectedTool === 'text') {
+                  const sz = getDefaultSize('text');
+                  handleAddElement('text', { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, sz);
+                } else if (selectedTool === 'table') {
+                  const cols = selectedDataset?.columns ?? 4;
+                  const rows = selectedDataset ? Math.min(selectedDataset.rows, 10) : 8;
+                  const sz = getDefaultSize('table', { columns: cols, rows });
+                  handleAddElement('table', { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, sz);
+                } else if (selectedTool === 'map') {
+                  const sz = getDefaultSize('map');
+                  handleAddElement('map', { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, sz);
+                } else if (selectedTool === 'note') {
+                  const sz = getDefaultSize('note');
+                  handleAddElement('note', { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, sz);
                 }
               }
             }}
           >
             <div
               ref={canvasRef}
-              style={{ width: canvasDimensions.width, height: canvasDimensions.height }}
+              style={{ width: canvasDimensions.width, height: canvasDimensions.height, position: 'relative' }}
             >
-              {/* Render canvas store elements only - no duplicates */}
+              <ConnectionLines
+                canvasWidth={canvasDimensions.width}
+                canvasHeight={canvasDimensions.height}
+              />
               {canvasElements.map((element) => (
                 <CanvasElement
                   key={element.id}
@@ -489,6 +632,26 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                       data={element.data?.data || []}
                       title={element.data?.title || 'Map'}
                       config={element.data?.config}
+                    />
+                  )}
+                  {element.type === 'table' && (
+                    <TableCard
+                      data={element.data?.data || []}
+                      title={element.data?.title || 'Table'}
+                    />
+                  )}
+                  {element.type === 'text' && (
+                    <TextCard
+                      initialContent={element.data?.content || ''}
+                      title={element.data?.title || 'Text'}
+                      editable={!readOnly}
+                    />
+                  )}
+                  {element.type === 'note' && (
+                    <NoteCard
+                      initialContent={element.data?.content || ''}
+                      color={element.data?.color}
+                      editable={!readOnly}
                     />
                   )}
                 </CanvasElement>
