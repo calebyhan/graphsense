@@ -1036,7 +1036,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
   
   if (isD3Chart) {
     return (
-      <div className="w-full h-full flex flex-col">
+      <div className="w-full h-full min-h-[320px] flex flex-col">
         {/* Performance indicator for D3 charts */}
         {metrics && performanceInfo && (
           <div className="mb-2">
@@ -1058,7 +1058,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
   }
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div className="w-full h-full min-h-[320px] flex flex-col">
       {/* Performance indicator */}
       {metrics && performanceInfo && (
         <div className="mb-2">

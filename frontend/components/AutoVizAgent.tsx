@@ -338,6 +338,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       console.warn('Selected dataset has no data:', dataset.name);
     }
 
+    // Don't mutate canvas in read-only mode
+    if (readOnly) return;
+
     // Auto-add a dataset card the first time this dataset appears on the canvas
     const alreadyOnCanvas = useCanvasStore
       .getState()
@@ -504,19 +507,28 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     position: { x: number; y: number },
     size: { width: number; height: number }
   ) => {
+    if (readOnly) return;
     const data: Record<string, any> = {};
     if ((type === 'table' || type === 'map') && selectedDataset) {
-      data.data = selectedDataset.data || [];
+      // Store only a bounded preview + metadata — not the full rows — to keep WS payloads small
+      data.data = (selectedDataset.data || []).slice(0, 100);
       data.title = selectedDataset.name;
       data.sourceDatasetId = selectedDataset.id;
     }
     const newId = addElement({ type, position, size, data });
     const justAdded = useCanvasStore.getState().canvasElements.find(el => el.id === newId);
     if (justAdded) {
-      getActiveWebSocket()?.sendElementAdd(justAdded);
+      // Strip raw rows from WS payload; recipients load data via sourceDatasetId
+      const { data: elData, ...rest } = justAdded;
+      getActiveWebSocket()?.sendElementAdd({
+        ...rest,
+        data: elData?.sourceDatasetId
+          ? { sourceDatasetId: elData.sourceDatasetId, title: elData.title }
+          : elData,
+      });
     }
     setSelectedTool('pointer');
-  }, [selectedDataset, addElement, setSelectedTool]);
+  }, [readOnly, selectedDataset, addElement, setSelectedTool]);
 
   // Prepare visualization positions for MiniMap - use canvas elements
   const visualizationPositions = canvasElements
@@ -569,6 +581,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
               const screenY = e.clientY - rect.top;
               const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
               const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
+
+              if (readOnly) return;
 
               if (e.detail === 2 && (selectedTool === 'pointer' || selectedTool === 'chart')) {
                 // Double-click to add a chart when a dataset is selected
@@ -645,6 +659,11 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                       initialContent={element.data?.content || ''}
                       title={element.data?.title || 'Text'}
                       editable={!readOnly}
+                      onUpdate={(content) => {
+                        const newData = { ...element.data, content };
+                        useCanvasStore.getState().updateElement(element.id, { data: newData });
+                        getActiveWebSocket()?.sendElementUpdate(element.id, { data: newData });
+                      }}
                     />
                   )}
                   {element.type === 'note' && (
@@ -652,6 +671,11 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                       initialContent={element.data?.content || ''}
                       color={element.data?.color}
                       editable={!readOnly}
+                      onUpdate={(content, color) => {
+                        const newData = { ...element.data, content, color };
+                        useCanvasStore.getState().updateElement(element.id, { data: newData });
+                        getActiveWebSocket()?.sendElementUpdate(element.id, { data: newData });
+                      }}
                     />
                   )}
                 </CanvasElement>

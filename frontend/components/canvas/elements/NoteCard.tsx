@@ -54,7 +54,9 @@ export default function NoteCard({
             {NOTE_COLORS.map(({ value, label }) => (
               <button
                 key={value}
+                type="button"
                 title={label}
+                aria-label={label}
                 className={`w-3.5 h-3.5 rounded-full border-2 transition-transform hover:scale-110 ${
                   noteColor === value ? 'border-gray-700' : 'border-transparent'
                 }`}

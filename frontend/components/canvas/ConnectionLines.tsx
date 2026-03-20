@@ -235,8 +235,8 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
         height: canvasHeight,
         overflow: 'visible',
         // zIndex above canvas elements; individual paths control their own hit-testing.
-        // CSS pointer-events:none on the SVG only affects the SVG element itself —
-        // children with their own pointer-events value are still hittable (not inherited).
+        // pointer-events is inherited in SVG/CSS, but our child elements explicitly
+        // override it with their own pointerEvents values, so they remain hittable.
         zIndex: 999,
         pointerEvents: 'none',
       }}

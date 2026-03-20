@@ -7,12 +7,14 @@ interface TextCardProps {
   initialContent?: string;
   title?: string;
   editable?: boolean;
+  onUpdate?: (content: string) => void;
 }
 
 export default function TextCard({
   initialContent = '',
   title = 'Text Block',
-  editable = true
+  editable = true,
+  onUpdate,
 }: TextCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState(initialContent);
@@ -32,6 +34,7 @@ export default function TextCard({
 
   const handleSave = () => {
     setIsEditing(false);
+    onUpdate?.(content);
   };
 
   const handleCancel = () => {
