@@ -633,13 +633,20 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                       title={element.data?.title}
                     />
                   )}
-                  {element.type === 'dataset' && (
-                    <DatasetCard
-                      data={element.data?.data || []}
-                      dataProfile={element.data?.dataProfile}
-                      title={element.data?.title || 'Dataset'}
-                    />
-                  )}
+                  {element.type === 'dataset' && (() => {
+                    // Remote clients receive dataset elements without row data (WS payload strips rows).
+                    // Fall back to the locally loaded dataset list so both clients see the same table.
+                    const hydrated = element.data?.data?.length
+                      ? element.data.data
+                      : datasets.find((d: Dataset) => d.id === element.data?.datasetId)?.data || [];
+                    return (
+                      <DatasetCard
+                        data={hydrated}
+                        dataProfile={element.data?.dataProfile}
+                        title={element.data?.title || 'Dataset'}
+                      />
+                    );
+                  })()}
                   {element.type === 'map' && (
                     <MapCard
                       data={element.data?.data || []}

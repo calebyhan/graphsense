@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { useCanvasStore, CanvasElement } from '@/store/useCanvasStore';
 
 type Side = 'top' | 'bottom' | 'left' | 'right';
@@ -231,6 +231,13 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
     connections.push(computeConnInfo(connId, p1, side1, p2, side2, elbowOffsets[connId] ?? 0));
   }
 
+  // Stable key representing the current set of connection IDs — changes only when connections are
+  // added/removed, not on every render, so the pruning effect below runs only when needed.
+  const connectionIdsKey = useMemo(
+    () => connections.map((c) => c.id).sort().join('|'),
+    [connections],
+  );
+
   // Prune elbowOffsets for connections that no longer exist to prevent unbounded growth
   useEffect(() => {
     const activeIds = new Set(connections.map((c) => c.id));
@@ -238,7 +245,7 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
       const pruned = Object.fromEntries(Object.entries(prev).filter(([k]) => activeIds.has(k)));
       return Object.keys(pruned).length === Object.keys(prev).length ? prev : pruned;
     });
-  }); // intentionally no dep array — runs after every render so it tracks deletions immediately
+  }, [connectionIdsKey]); // eslint-disable-line react-hooks/exhaustive-deps -- connectionIdsKey captures the full connections state needed here
 
   if (connections.length === 0) return null;
 
