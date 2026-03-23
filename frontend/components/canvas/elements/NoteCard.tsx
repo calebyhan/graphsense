@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StickyNote } from 'lucide-react';
 
 interface NoteCardProps {
@@ -28,15 +28,22 @@ export default function NoteCard({
   const [noteColor, setNoteColor] = useState(color);
   const [isEditing, setIsEditing] = useState(!initialContent && editable);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Track latest committed color in a ref so handleBlur always reads the current
+  // value rather than the stale closure captured at the time the blur fires.
+  const noteColorRef = useRef(noteColor);
 
-  // Sync from props when a collaborator updates content/color (skip while user is editing)
+  // Sync from props when a collaborator updates content/color (skip while user is editing
+  // to avoid overwriting in-progress edits with remote state)
   useEffect(() => {
     if (!isEditing) setContent(initialContent);
-  }, [initialContent]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialContent]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally omit isEditing
 
   useEffect(() => {
-    if (!isEditing) setNoteColor(color);
-  }, [color]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!isEditing) {
+      setNoteColor(color);
+      noteColorRef.current = color;
+    }
+  }, [color]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally omit isEditing
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -44,15 +51,17 @@ export default function NoteCard({
     }
   }, [isEditing]);
 
-  const handleBlur = () => {
+  const handleBlur = useCallback(() => {
     setIsEditing(false);
-    onUpdate?.(content, noteColor);
-  };
+    // Use the ref so we always broadcast the latest color, not a stale closure value
+    onUpdate?.(content, noteColorRef.current);
+  }, [content, onUpdate]);
 
-  const handleColorChange = (c: string) => {
+  const handleColorChange = useCallback((c: string) => {
+    noteColorRef.current = c;
     setNoteColor(c);
     onUpdate?.(content, c);
-  };
+  }, [content, onUpdate]);
 
   return (
     <div className="h-full flex flex-col rounded" style={{ backgroundColor: noteColor }}>
@@ -89,7 +98,7 @@ export default function NoteCard({
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 setIsEditing(false);
-                onUpdate?.(content, noteColor);
+                onUpdate?.(content, noteColorRef.current);
               }
             }}
           />

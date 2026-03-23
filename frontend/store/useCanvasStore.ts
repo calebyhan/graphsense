@@ -212,15 +212,22 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   setElements: (elements) => {
-    // Map DB rows to CanvasElement shape
-    const mapped: CanvasElement[] = elements.map((el: any) => ({
-      id: el.id,
-      type: el.element_type ?? el.type,
-      position: el.position,
-      size: el.size,
-      data: el.data,
-      zIndex: el.z_index ?? el.zIndex ?? 0,
-    }));
+    // Map DB rows to CanvasElement shape; skip rows with missing geometry to
+    // avoid downstream TypeError in ConnectionLines and canvasBounds
+    const mapped: CanvasElement[] = (elements as any[]).flatMap((el) => {
+      if (!el.position || !el.size) {
+        console.error('[useCanvasStore] Skipping element with missing position/size:', el.id);
+        return [];
+      }
+      return [{
+        id: el.id,
+        type: el.element_type ?? el.type,
+        position: el.position,
+        size: el.size,
+        data: el.data,
+        zIndex: el.z_index ?? el.zIndex ?? 0,
+      }];
+    });
     set({ canvasElements: mapped, selectedElements: [], canvasBounds: computeCanvasBounds(mapped) });
   },
 
@@ -228,11 +235,17 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set((state) => {
       // Avoid duplicates
       if (state.canvasElements.some((e) => e.id === element.id)) return state;
+      const position = (element as any).position;
+      const size = (element as any).size;
+      if (!position || !size) {
+        console.error('[useCanvasStore] Ignoring remote element with missing position/size:', element.id);
+        return state;
+      }
       const mapped: CanvasElement = {
         id: element.id,
         type: (element as any).element_type ?? element.type,
-        position: element.position,
-        size: element.size,
+        position,
+        size,
         data: element.data,
         zIndex: (element as any).z_index ?? element.zIndex ?? state.canvasElements.length,
       };

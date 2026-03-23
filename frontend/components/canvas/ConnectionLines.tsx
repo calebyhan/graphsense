@@ -32,6 +32,7 @@ function getSidePoint(el: CanvasElement, side: Side): Point {
 }
 
 const OPPOSITE: Record<Side, Side> = { right: 'left', left: 'right', top: 'bottom', bottom: 'top' };
+// Minimum world-space clearance (px at zoom=1) between a U-bend and the element face it exits from
 const U_GAP = 40;
 
 interface ConnInfo {
@@ -56,7 +57,7 @@ function computeConnInfo(
   const horizontal = side1 === 'left' || side1 === 'right';
 
   if (side2 === OPPOSITE[side1]) {
-    // Opposite faces → Z-shape
+    // Opposite faces → Z-shape (horizontal) or S-shape (vertical)
     if (horizontal) {
       const mx = (p1.x + p2.x) / 2 + elbowOffset;
       return {
@@ -155,9 +156,13 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
 
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    // pointercancel fires on mobile when the OS interrupts (e.g. incoming call).
+    // Without it the drag state gets stuck and the canvas stops responding.
+    window.addEventListener('pointercancel', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
     };
   }, [isDragging]);
 
@@ -200,9 +205,10 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
   );
 
   // Build a lookup: datasetId → dataset canvas element
+  // Guard on position/size: a malformed remote element would crash getBestSide
   const datasetMap = new Map<string, CanvasElement>();
   for (const el of canvasElements) {
-    if (el.type === 'dataset' && el.data?.datasetId) {
+    if (el.type === 'dataset' && el.data?.datasetId && el.position && el.size) {
       datasetMap.set(el.data.datasetId, el);
     }
   }
@@ -213,6 +219,8 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
     if (!srcId) continue;
     const src = datasetMap.get(srcId);
     if (!src) continue;
+    // Skip if either element is missing geometry (can happen with in-flight remote adds)
+    if (!el.position || !el.size) continue;
 
     const side1 = getBestSide(src, el);
     const side2 = getBestSide(el, src);
@@ -222,6 +230,15 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
 
     connections.push(computeConnInfo(connId, p1, side1, p2, side2, elbowOffsets[connId] ?? 0));
   }
+
+  // Prune elbowOffsets for connections that no longer exist to prevent unbounded growth
+  useEffect(() => {
+    const activeIds = new Set(connections.map((c) => c.id));
+    setElbowOffsets((prev) => {
+      const pruned = Object.fromEntries(Object.entries(prev).filter(([k]) => activeIds.has(k)));
+      return Object.keys(pruned).length === Object.keys(prev).length ? prev : pruned;
+    });
+  }); // intentionally no dep array — runs after every render so it tracks deletions immediately
 
   if (connections.length === 0) return null;
 
@@ -234,10 +251,9 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
         width: canvasWidth,
         height: canvasHeight,
         overflow: 'visible',
-        // zIndex above canvas elements; individual paths control their own hit-testing.
-        // pointer-events is inherited in SVG/CSS, but our child elements explicitly
-        // override it with their own pointerEvents values, so they remain hittable.
-        zIndex: 999,
+        // Rendered before canvas elements in the DOM so zIndex: 1 is sufficient.
+        // Child paths override pointerEvents individually for hit-testing.
+        zIndex: 1,
         pointerEvents: 'none',
       }}
     >

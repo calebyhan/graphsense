@@ -69,7 +69,10 @@ export interface ChartRecommendation {
   config?: any;
 }
 
-/** Return a natural initial size for a canvas element based on type + available metadata. */
+/** Return a natural initial size for a canvas element based on type + available metadata.
+ * @param opts.rows - For 'dataset'/'table', the number of rows to size for; callers should
+ *   cap this (typically ≤ 10) to avoid oversized initial elements.
+ */
 function getDefaultSize(
   type: 'chart' | 'dataset' | 'table' | 'map' | 'text' | 'note',
   opts: { chartType?: string; columns?: number; rows?: number } = {}
@@ -105,6 +108,8 @@ function getDefaultSize(
     case 'map':  return { width: 520, height: 400 };
     case 'text': return { width: 280, height: 140 };
     case 'note': return { width: 220, height: 160 };
+    default:
+      throw new Error(`getDefaultSize: unhandled element type "${type}"`);
   }
 }
 
@@ -228,7 +233,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         try {
           await canvasAPI.update(canvasId, { thumbnail: null }, session?.access_token);
           if (!cancelled) { baselineLayoutKeyRef.current = elementLayoutKey; setLastSaved(new Date()); setSaveState('saved'); }
-        } catch {
+        } catch (err) {
+          console.error('[AutoVizAgent] Failed to save canvas (empty):', err);
           if (!cancelled) setSaveState('idle');
         }
         return;
@@ -257,7 +263,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       try {
         await canvasAPI.update(canvasId, { thumbnail: { elements, bounds } }, session?.access_token);
         if (!cancelled) { baselineLayoutKeyRef.current = elementLayoutKey; setLastSaved(new Date()); setSaveState('saved'); }
-      } catch {
+      } catch (err) {
+        console.error('[AutoVizAgent] Failed to save canvas thumbnail:', err);
         if (!cancelled) setSaveState('idle');
       }
     }, 3000);
@@ -338,7 +345,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       console.warn('Selected dataset has no data:', dataset.name);
     }
 
-    // Don't mutate canvas in read-only mode
+    // Canvas mutations are not allowed in read-only mode
     if (readOnly) return;
 
     // Auto-add a dataset card the first time this dataset appears on the canvas
@@ -366,7 +373,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         getActiveWebSocket()?.sendElementAdd({ ...rest, data: { datasetId: dataset.id, title: dataset.name } });
       }
     }
-  }, [startAnalysis, addElement, readOnly]);
+  }, [startAnalysis, addElement, readOnly]); // readOnly must be in deps — guard inside closes over it
 
   const createVisualization = useCallback((
     dataset: Dataset,
@@ -398,11 +405,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                         `${recommendation.config.yAxis} vs ${recommendation.config.xAxis}` : null) ||
                       `${type} Visualization`;
 
-    // Use viewport-aware positioning if no specific position provided
-    const finalPosition = position || useCanvasStore.getState().getViewportCenterPosition();
     const canvasElement = {
       type: 'chart' as const,
-      position: finalPosition,
+      position,
       size: chartSize,
       data: {
         config: {
@@ -434,7 +439,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         zIndex: justAdded.zIndex,
       });
     }
-  }, [addElement, viewport]);
+  }, [addElement]);
 
   // Handle drag & drop from DataPanel to Canvas
   const handleDrop = useCallback((e: React.DragEvent) => {

@@ -25,6 +25,7 @@ export default function TextCard({
   }, [initialContent]); // eslint-disable-line react-hooks/exhaustive-deps
   const [fontSize, setFontSize] = useState('14');
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right'>('left');
+  // Formatting is applied inline via formatText(); these state vars are stubs pending keyboard shortcut implementation
   const [isBold] = useState(false);
   const [isItalic] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -91,14 +92,23 @@ export default function TextCard({
   };
 
   const renderMarkdown = (text: string) => {
-    // Simple markdown rendering
-    let html = text
+    // Escape HTML entities first to prevent injection
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+    let html = escaped
       // Bold text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       // Italic text
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      // Links
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-500 underline" target="_blank" rel="noopener noreferrer">$1</a>')
+      // Links — only allow http/https to block javascript: and other schemes
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, linkText, url) => {
+        const safeUrl = /^https?:\/\//i.test(url) ? url : '#';
+        return `<a href="${safeUrl}" class="text-blue-500 underline" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+      })
       // Lists
       .replace(/^• (.+)$/gm, '<li class="ml-4">$1</li>')
       // Line breaks
@@ -219,14 +229,14 @@ export default function TextCard({
             <button
               onClick={() => formatText('bold')}
               className="p-1 rounded hover:bg-gray-100"
-              title="Bold (Ctrl+B)"
+              title="Bold"
             >
               <Bold className="h-3 w-3" />
             </button>
             <button
               onClick={() => formatText('italic')}
               className="p-1 rounded hover:bg-gray-100"
-              title="Italic (Ctrl+I)"
+              title="Italic"
             >
               <Italic className="h-3 w-3" />
             </button>
