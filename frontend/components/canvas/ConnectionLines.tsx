@@ -172,8 +172,8 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
   useEffect(() => {
     if (!selectedConn || isDragging) return;
     const onDown = () => setSelectedConn(null);
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
   }, [selectedConn, isDragging]);
 
   const handleHitPointerDown = useCallback(
