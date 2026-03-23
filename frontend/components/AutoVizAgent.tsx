@@ -445,7 +445,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     const screenY = e.clientY - rect.top;
     const canvasX = (screenX - rect.width / 2 - viewport.x) / viewport.zoom;
     const canvasY = (screenY - rect.height / 2 - viewport.y) / viewport.zoom;
-    createVisualization(selectedDataset, { x: canvasX, y: canvasY });
+    const sz = getDefaultSize('chart');
+    createVisualization(selectedDataset, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 });
   }, [selectedDataset, viewport, createVisualization]);
 
   // Create visualization from recommendation

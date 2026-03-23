@@ -57,10 +57,10 @@ export function useKeyboardShortcuts(isReadOnly = false) {
           }
           break;
         case 't':
-          if (e.shiftKey) {
+          if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
             setSelectedTool('text');
             e.preventDefault();
-          } else if (!e.ctrlKey && !e.metaKey) {
+          } else if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
             setSelectedTool('table');
             e.preventDefault();
           }

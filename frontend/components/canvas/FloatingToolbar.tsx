@@ -31,7 +31,7 @@ const tools = [
   { id: 'pointer' as ToolType, name: 'Select', icon: MousePointer, shortcut: 'V' },
   { id: 'drag' as ToolType, name: 'Hand', icon: Hand, shortcut: 'H' },
   { id: 'chart' as ToolType, name: 'Chart', icon: BarChart3, shortcut: 'C' },
-  { id: 'dataset' as ToolType, name: 'Dataset', icon: Database, shortcut: 'D' },
+  { id: 'dataset' as ToolType, name: 'Dataset', icon: Database, shortcut: '' },
   { id: 'table' as ToolType, name: 'Table', icon: Table2, shortcut: 'T' },
   { id: 'map' as ToolType, name: 'Map', icon: Map, shortcut: 'M' },
   { id: 'text' as ToolType, name: 'Text', icon: Type, shortcut: 'Shift+T' },

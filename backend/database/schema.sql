@@ -488,7 +488,7 @@ CREATE POLICY "Agent analyses: canvas collaborator read"
 CREATE TABLE IF NOT EXISTS canvas_elements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     canvas_id UUID NOT NULL REFERENCES canvases(id) ON DELETE CASCADE,
-    element_type TEXT NOT NULL CHECK (element_type IN ('dataset', 'chart', 'table', 'map', 'text')),
+    element_type TEXT NOT NULL CHECK (element_type IN ('dataset', 'chart', 'table', 'map', 'text', 'note')),
     position JSONB NOT NULL,   -- { x: number, y: number }  (world coordinates)
     size JSONB NOT NULL,       -- { width: number, height: number }
     data JSONB,                -- element-specific payload (chart config, dataset ref, etc.)
