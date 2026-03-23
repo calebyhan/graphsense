@@ -52,8 +52,8 @@ export default function FloatingToolbar({
   React.useEffect(() => {
     const updatePosition = () => {
       setPosition({
-        x: window.innerWidth / 2 - 375, // 750px width / 2
-        y: window.innerHeight - 100
+        x: Math.max(0, Math.min(window.innerWidth - 750, window.innerWidth / 2 - 375)),
+        y: Math.max(0, Math.min(window.innerHeight - 80, window.innerHeight - 100)),
       });
     };
 

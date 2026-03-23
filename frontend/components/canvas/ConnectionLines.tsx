@@ -166,13 +166,12 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
     };
   }, [isDragging]);
 
-  // Click-outside deselect: listen on window, ignore events inside SVG elements
-  // of this component (they call stopPropagation on pointerdown).
+  // Click-outside deselect: listen on window. Clicks on this component's own paths
+  // call stopPropagation on pointerdown and never reach here, so we can deselect
+  // unconditionally — including clicks on other SVGs (e.g. chart canvases).
   useEffect(() => {
     if (!selectedConn || isDragging) return;
-    const onDown = (e: MouseEvent) => {
-      if (!(e.target instanceof SVGElement)) setSelectedConn(null);
-    };
+    const onDown = () => setSelectedConn(null);
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, [selectedConn, isDragging]);
