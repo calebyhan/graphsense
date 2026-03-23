@@ -29,6 +29,15 @@ export default function NoteCard({
   const [isEditing, setIsEditing] = useState(!initialContent && editable);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Sync from props when a collaborator updates content/color (skip while user is editing)
+  useEffect(() => {
+    if (!isEditing) setContent(initialContent);
+  }, [initialContent]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isEditing) setNoteColor(color);
+  }, [color]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (isEditing && textareaRef.current) {
       textareaRef.current.focus();

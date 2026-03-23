@@ -18,6 +18,11 @@ export default function TextCard({
 }: TextCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState(initialContent);
+
+  // Sync from props when a collaborator updates content (skip while user is editing)
+  useEffect(() => {
+    if (!isEditing) setContent(initialContent);
+  }, [initialContent]); // eslint-disable-line react-hooks/exhaustive-deps
   const [fontSize, setFontSize] = useState('14');
   const [alignment, setAlignment] = useState<'left' | 'center' | 'right'>('left');
   const [isBold] = useState(false);

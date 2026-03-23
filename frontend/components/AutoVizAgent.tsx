@@ -366,7 +366,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         getActiveWebSocket()?.sendElementAdd({ ...rest, data: { datasetId: dataset.id, title: dataset.name } });
       }
     }
-  }, [startAnalysis, addElement]);
+  }, [startAnalysis, addElement, readOnly]);
 
   const createVisualization = useCallback((
     dataset: Dataset,
@@ -518,14 +518,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     const newId = addElement({ type, position, size, data });
     const justAdded = useCanvasStore.getState().canvasElements.find(el => el.id === newId);
     if (justAdded) {
-      // Strip raw rows from WS payload; recipients load data via sourceDatasetId
-      const { data: elData, ...rest } = justAdded;
-      getActiveWebSocket()?.sendElementAdd({
-        ...rest,
-        data: elData?.sourceDatasetId
-          ? { sourceDatasetId: elData.sourceDatasetId, title: elData.title }
-          : elData,
-      });
+      // data.data is already bounded to 100 rows (set above), safe to send as-is
+      getActiveWebSocket()?.sendElementAdd(justAdded);
     }
     setSelectedTool('pointer');
   }, [readOnly, selectedDataset, addElement, setSelectedTool]);
