@@ -204,35 +204,39 @@ export default function ConnectionLines({ canvasWidth, canvasHeight }: Connectio
     [elbowOffsets],
   );
 
-  // Build a lookup: datasetId → dataset canvas element
-  // Guard on position/size: a malformed remote element would crash getBestSide
-  const datasetMap = new Map<string, CanvasElement>();
-  for (const el of canvasElements) {
-    if (el.type === 'dataset' && el.data?.datasetId && el.position && el.size) {
-      datasetMap.set(el.data.datasetId, el);
+  // Memoize so viewport-only re-renders in the parent (pan/zoom) don't recompute paths.
+  const connections: ConnInfo[] = useMemo(() => {
+    // Build a lookup: datasetId → dataset canvas element
+    // Guard on position/size: a malformed remote element would crash getBestSide
+    const datasetMap = new Map<string, CanvasElement>();
+    for (const el of canvasElements) {
+      if (el.type === 'dataset' && el.data?.datasetId && el.position && el.size) {
+        datasetMap.set(el.data.datasetId, el);
+      }
     }
-  }
 
-  const connections: ConnInfo[] = [];
-  for (const el of canvasElements) {
-    const srcId = el.data?.sourceDatasetId;
-    if (!srcId) continue;
-    const src = datasetMap.get(srcId);
-    if (!src) continue;
-    // Skip if either element is missing geometry (can happen with in-flight remote adds)
-    if (!el.position || !el.size) continue;
+    const result: ConnInfo[] = [];
+    for (const el of canvasElements) {
+      const srcId = el.data?.sourceDatasetId;
+      if (!srcId) continue;
+      const src = datasetMap.get(srcId);
+      if (!src) continue;
+      // Skip if either element is missing geometry (can happen with in-flight remote adds)
+      if (!el.position || !el.size) continue;
 
-    const side1 = getBestSide(src, el);
-    const side2 = getBestSide(el, src);
-    const p1 = getSidePoint(src, side1);
-    const p2 = getSidePoint(el, side2);
-    const connId = `${src.id}→${el.id}`;
+      const side1 = getBestSide(src, el);
+      const side2 = getBestSide(el, src);
+      const p1 = getSidePoint(src, side1);
+      const p2 = getSidePoint(el, side2);
+      const connId = `${src.id}→${el.id}`;
 
-    connections.push(computeConnInfo(connId, p1, side1, p2, side2, elbowOffsets[connId] ?? 0));
-  }
+      result.push(computeConnInfo(connId, p1, side1, p2, side2, elbowOffsets[connId] ?? 0));
+    }
+    return result;
+  }, [canvasElements, elbowOffsets]);
 
-  // Stable key representing the current set of connection IDs — changes only when connections are
-  // added/removed, not on every render, so the pruning effect below runs only when needed.
+  // Stable key representing the current set of connection IDs — changes only when connections
+  // are added/removed, so the pruning effect below runs only when needed.
   const connectionIdsKey = useMemo(
     () => connections.map((c) => c.id).sort().join('|'),
     [connections],

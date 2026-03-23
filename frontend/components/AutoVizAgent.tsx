@@ -363,7 +363,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         size: dsSize,
         data: {
           datasetId: dataset.id,
-          data: dataset.data || [],
+          // Rows are intentionally omitted here: DatasetCard hydrates from useDatasetManager
+          // at render time, so storing full rows in the element avoids large WS commit payloads
+          // on every drag/resize.
           title: dataset.name,
         },
       });
@@ -417,7 +419,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         chartType: type,
         recommendation: recommendation,
         title: chartTitle,
-        dataset: dataset,
+        // dataset object intentionally excluded — sourceDatasetId is sufficient for lookups
+        // and omitting raw rows keeps sendElementCommit payloads small on drag/resize.
         sourceDatasetId: dataset.id,
       }
     };
@@ -425,19 +428,10 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     const newElementId = addElement(canvasElement);
 
     // Broadcast new element to collaborators
-    // Strip raw dataset rows — chart renders from config.data which is already embedded
     const store = useCanvasStore.getState();
     const justAdded = store.canvasElements.find((el) => el.id === newElementId);
     if (justAdded) {
-      const { dataset: _dataset, ...dataWithoutRows } = justAdded.data ?? {};
-      getActiveWebSocket()?.sendElementAdd({
-        id: justAdded.id,
-        type: justAdded.type,
-        position: justAdded.position,
-        size: justAdded.size,
-        data: dataWithoutRows,
-        zIndex: justAdded.zIndex,
-      });
+      getActiveWebSocket()?.sendElementAdd(justAdded);
     }
   }, [addElement]);
 
@@ -462,10 +456,11 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
 
     // Use the viewport-aware positioning from canvas store
     const centerPosition = useCanvasStore.getState().getViewportCenterPosition();
+    const sz = getDefaultSize('chart', { chartType: recommendation.type });
 
     createVisualization(
       selectedDataset,
-      { x: centerPosition.x - 250, y: centerPosition.y - 200 },
+      { x: centerPosition.x - sz.width / 2, y: centerPosition.y - sz.height / 2 },
       recommendation.type,
       recommendation
     );
