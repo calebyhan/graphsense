@@ -227,9 +227,6 @@ html {
   transform: translateZ(0);
   will-change: transform;
   backface-visibility: hidden;
-  perspective: 1000px;
-  /* Hardware acceleration for smoother performance */
-  transform-style: preserve-3d;
   /* Comprehensive zoom prevention */
   -ms-content-zooming: none;
   -ms-touch-action: none;
@@ -242,8 +239,6 @@ html {
   -webkit-tap-highlight-color: transparent;
   /* Ensure proper cursor behavior */
   cursor: grab;
-  /* Optimize for GPU acceleration */
-  filter: blur(0px);
 }
 
 .canvas-optimized:active {
@@ -255,12 +250,8 @@ html {
   will-change: transform, left, top, width, height;
   backface-visibility: hidden;
   contain: layout style paint;
-  /* Hardware acceleration */
-  transform-style: preserve-3d;
   /* Optimize for drag performance */
   transition: none;
-  /* GPU acceleration */
-  filter: blur(0px);
 }
 
 /* Smooth transitions - Figma-style */

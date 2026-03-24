@@ -274,10 +274,6 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
 
   // Native wheel handler - optimized with RAF
   const handleNativeWheel = useOptimizedRaf((e: WheelEvent) => {
-    // Always prevent browser zoom and page scroll when over canvas
-    e.preventDefault();
-    e.stopPropagation();
-
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -342,8 +338,35 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
-    el.addEventListener('wheel', handleNativeWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleNativeWheel);
+
+    const listener = (e: WheelEvent) => {
+      // For plain scroll (no Ctrl/Cmd), check if the target is inside a scrollable
+      // child element that still has room to scroll in that direction. If so, let the
+      // browser handle it so the child scrolls instead of the canvas panning.
+      if (!e.ctrlKey && !e.metaKey) {
+        let node = e.target as Element | null;
+        while (node && node !== el) {
+          const style = window.getComputedStyle(node);
+          if (e.deltaY !== 0 && /auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight) {
+            const atTop = node.scrollTop <= 0 && e.deltaY < 0;
+            const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1 && e.deltaY > 0;
+            if (!atTop && !atBottom) return;
+          }
+          if (e.deltaX !== 0 && /auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth) {
+            const atLeft = node.scrollLeft <= 0 && e.deltaX < 0;
+            const atRight = node.scrollLeft + node.clientWidth >= node.scrollWidth - 1 && e.deltaX > 0;
+            if (!atLeft && !atRight) return;
+          }
+          node = node.parentElement;
+        }
+      }
+
+      e.preventDefault();
+      handleNativeWheel(e);
+    };
+
+    el.addEventListener('wheel', listener, { passive: false });
+    return () => el.removeEventListener('wheel', listener);
   }, [handleNativeWheel]);
 
   // Keyboard shortcuts for zoom/fit
@@ -655,7 +678,6 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
           transformOrigin: '0 0',
           willChange: 'transform',
           backfaceVisibility: 'hidden',
-          perspective: '1000px',
         }}
       >
         {children}

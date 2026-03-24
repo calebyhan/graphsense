@@ -9,12 +9,13 @@ import {
   GripVertical,
   Database,
   BarChart3,
+  Table,
+  Map,
+  StickyNote,
   ZoomIn,
   ZoomOut,
   Maximize,
   Crosshair,
-  Table,
-  Map
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -35,6 +36,7 @@ const tools = [
   { id: 'table' as ToolType, name: 'Table', icon: Table, shortcut: 'T' },
   { id: 'text' as ToolType, name: 'Text', icon: Type, shortcut: 'Shift+T' },
   { id: 'map' as ToolType, name: 'Map', icon: Map, shortcut: 'M' },
+  { id: 'note' as ToolType, name: 'Note', icon: StickyNote, shortcut: 'N' },
 ];
 
 export default function FloatingToolbar({
@@ -42,7 +44,7 @@ export default function FloatingToolbar({
   onDeleteSelected,
   hasSelection = false
 }: FloatingToolbarProps) {
-  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements, resetViewport } = useCanvasStore();
+  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements, resetViewport, canvasContainerSize } = useCanvasStore();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -51,8 +53,8 @@ export default function FloatingToolbar({
   React.useEffect(() => {
     const updatePosition = () => {
       setPosition({
-        x: window.innerWidth / 2 - 415, // 830px width / 2
-        y: window.innerHeight - 100
+        x: Math.max(0, Math.min(window.innerWidth - 830, window.innerWidth / 2 - 415)),
+        y: Math.max(0, Math.min(window.innerHeight - 80, window.innerHeight - 100)),
       });
     };
 
@@ -140,16 +142,11 @@ export default function FloatingToolbar({
     const boundingHeight = maxY - minY + padding * 2;
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth - 400 : 1200;
-    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight - 200 : 800;
-    const zoomX = viewportWidth / boundingWidth;
-    const zoomY = viewportHeight / boundingHeight;
-    const fitZoom = Math.min(Math.min(zoomX, zoomY), 3);
+    const { width: cW, height: cH } = canvasContainerSize;
+    const fitZoom = Math.min(cW / boundingWidth, cH / boundingHeight, 3);
     const targetZoom = Math.max(0.1, fitZoom);
-    const viewportCenterX = viewportWidth / 2;
-    const viewportCenterY = viewportHeight / 2;
-    const targetX = viewportCenterX - (centerX * targetZoom);
-    const targetY = viewportCenterY - (centerY * targetZoom);
+    const targetX = -centerX * targetZoom;
+    const targetY = -centerY * targetZoom;
     updateViewport({ x: targetX, y: targetY, zoom: targetZoom });
   };
 
