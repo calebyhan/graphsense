@@ -30,6 +30,18 @@ export interface CollaboratorState {
 
 export type ElementLocks = Record<string, string>; // element_id → user_id
 
+/** Raw row shape returned by the DB or sent over WebSocket — may use snake_case field names. */
+export interface ServerElementRow {
+  id: string;
+  element_type?: string;
+  type?: string;
+  position?: { x: number; y: number };
+  size?: { width: number; height: number };
+  data?: any;
+  z_index?: number;
+  zIndex?: number;
+}
+
 interface CanvasStore {
   viewport: Viewport;
   canvasContainerSize: { width: number; height: number };
@@ -66,8 +78,8 @@ interface CanvasStore {
   setElementLocks: (locks: ElementLocks) => void;
   setElementLock: (elementId: string, userId: string) => void;
   releaseElementLock: (elementId: string) => void;
-  setElements: (elements: CanvasElement[]) => void;
-  addElementFromRemote: (element: CanvasElement) => void;
+  setElements: (elements: ServerElementRow[]) => void;
+  addElementFromRemote: (element: ServerElementRow) => void;
 
   // Collaboration derived helpers
   isElementLockedByOther: (elementId: string) => boolean;
@@ -214,14 +226,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setElements: (elements) => {
     // Map DB rows to CanvasElement shape; skip rows with missing geometry to
     // avoid downstream TypeError in ConnectionLines and canvasBounds
-    const mapped: CanvasElement[] = (elements as any[]).flatMap((el) => {
+    const mapped: CanvasElement[] = elements.flatMap((el) => {
       if (!el.position || !el.size) {
         console.error('[useCanvasStore] Skipping element with missing position/size:', el.id);
         return [];
       }
       return [{
         id: el.id,
-        type: el.element_type ?? el.type,
+        type: (el.element_type ?? el.type) as CanvasElement['type'],
         position: el.position,
         size: el.size,
         data: el.data,
@@ -235,19 +247,17 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set((state) => {
       // Avoid duplicates
       if (state.canvasElements.some((e) => e.id === element.id)) return state;
-      const position = (element as any).position;
-      const size = (element as any).size;
-      if (!position || !size) {
+      if (!element.position || !element.size) {
         console.error('[useCanvasStore] Ignoring remote element with missing position/size:', element.id);
         return state;
       }
       const mapped: CanvasElement = {
         id: element.id,
-        type: (element as any).element_type ?? element.type,
-        position,
-        size,
+        type: (element.element_type ?? element.type) as CanvasElement['type'],
+        position: element.position,
+        size: element.size,
         data: element.data,
-        zIndex: (element as any).z_index ?? element.zIndex ?? state.canvasElements.length,
+        zIndex: element.z_index ?? element.zIndex ?? state.canvasElements.length,
       };
       const canvasElements = [...state.canvasElements, mapped];
       return { canvasElements, canvasBounds: computeCanvasBounds(canvasElements) };

@@ -60,6 +60,7 @@ class CanvasWebSocket {
         // Malformed JSON from server — not actionable, skip silently.
         return;
       }
+      if (typeof data !== 'object' || data === null || typeof data.type !== 'string') return;
       const type = data.type as string;
       const handlers = this.listeners.get(type);
       if (handlers) {
