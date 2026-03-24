@@ -53,17 +53,24 @@ class CanvasWebSocket {
     };
 
     this.ws.onmessage = (event) => {
+      let data: any;
       try {
-        const data = JSON.parse(event.data);
-        const type = data.type as string;
-        const handlers = this.listeners.get(type);
-        if (handlers) {
-          for (const handler of handlers) {
+        data = JSON.parse(event.data);
+      } catch {
+        // Malformed JSON from server — not actionable, skip silently.
+        return;
+      }
+      if (typeof data !== 'object' || data === null || typeof data.type !== 'string') return;
+      const type = data.type as string;
+      const handlers = this.listeners.get(type);
+      if (handlers) {
+        for (const handler of handlers) {
+          try {
             handler(data);
+          } catch (err) {
+            console.error('[CanvasWebSocket] Handler error for message type:', type, err);
           }
         }
-      } catch {
-        // ignore malformed messages
       }
     };
 
@@ -74,7 +81,8 @@ class CanvasWebSocket {
       }
     };
 
-    this.ws.onerror = () => {
+    this.ws.onerror = (event) => {
+      console.error('[CanvasWebSocket] Connection error for canvas:', this.canvasId, event);
       // onclose will fire after this, triggering reconnect
     };
   }

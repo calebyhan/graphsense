@@ -1036,7 +1036,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
   
   if (isD3Chart) {
     return (
-      <div className="w-full h-80 flex flex-col">
+      <div className="w-full h-full min-h-[320px] flex flex-col">
         {/* Performance indicator for D3 charts */}
         {metrics && performanceInfo && (
           <div className="mb-2">
@@ -1049,8 +1049,8 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
             />
           </div>
         )}
-        
-        <div className="flex-1 flex items-center justify-center">
+
+        <div className="flex-1 flex items-center justify-center overflow-auto">
           {renderChart()}
         </div>
       </div>
@@ -1058,7 +1058,7 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
   }
 
   return (
-    <div className="w-full h-80 flex flex-col">
+    <div className="w-full h-full min-h-[320px] flex flex-col">
       {/* Performance indicator */}
       {metrics && performanceInfo && (
         <div className="mb-2">
@@ -1071,8 +1071,8 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
           />
         </div>
       )}
-      
-      <div className="flex-1 relative">
+
+      <div className="flex-1 relative min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           {renderChart()}
         </ResponsiveContainer>
