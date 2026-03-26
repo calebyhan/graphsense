@@ -85,6 +85,12 @@ interface CanvasStore {
   isElementLockedByOther: (elementId: string) => boolean;
   getElementLockHolder: (elementId: string) => CollaboratorState | undefined;
 
+  // Z-order actions
+  bringForward: (id: string) => void;
+  sendBackward: (id: string) => void;
+  bringToFront: (id: string) => void;
+  sendToBack: (id: string) => void;
+
   // Utility actions
   getElementById: (id: string) => CanvasElement | undefined;
   getSelectedElements: () => CanvasElement[];
@@ -146,6 +152,62 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         selectedElements: state.selectedElements.filter((selectedId) => selectedId !== id),
         canvasBounds: computeCanvasBounds(canvasElements),
       };
+    });
+  },
+
+  bringForward: (id) => {
+    set((state) => {
+      const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+      const idx = sorted.findIndex((el) => el.id === id);
+      if (idx === -1 || idx === sorted.length - 1) return state;
+      // Swap zIndex with the next element up
+      const above = sorted[idx + 1];
+      const thisZ = sorted[idx].zIndex ?? idx;
+      const aboveZ = above.zIndex ?? (idx + 1);
+      const canvasElements = state.canvasElements.map((el) => {
+        if (el.id === id) return { ...el, zIndex: aboveZ };
+        if (el.id === above.id) return { ...el, zIndex: thisZ };
+        return el;
+      });
+      return { canvasElements };
+    });
+  },
+
+  sendBackward: (id) => {
+    set((state) => {
+      const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+      const idx = sorted.findIndex((el) => el.id === id);
+      if (idx <= 0) return state;
+      // Swap zIndex with the next element down
+      const below = sorted[idx - 1];
+      const thisZ = sorted[idx].zIndex ?? idx;
+      const belowZ = below.zIndex ?? (idx - 1);
+      const canvasElements = state.canvasElements.map((el) => {
+        if (el.id === id) return { ...el, zIndex: belowZ };
+        if (el.id === below.id) return { ...el, zIndex: thisZ };
+        return el;
+      });
+      return { canvasElements };
+    });
+  },
+
+  bringToFront: (id) => {
+    set((state) => {
+      const maxZ = Math.max(...state.canvasElements.map((el) => el.zIndex ?? 0));
+      const canvasElements = state.canvasElements.map((el) =>
+        el.id === id ? { ...el, zIndex: maxZ + 1 } : el
+      );
+      return { canvasElements };
+    });
+  },
+
+  sendToBack: (id) => {
+    set((state) => {
+      const minZ = Math.min(...state.canvasElements.map((el) => el.zIndex ?? 0));
+      const canvasElements = state.canvasElements.map((el) =>
+        el.id === id ? { ...el, zIndex: minZ - 1 } : el
+      );
+      return { canvasElements };
     });
   },
 

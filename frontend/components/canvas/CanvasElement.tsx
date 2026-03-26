@@ -40,9 +40,10 @@ interface CanvasElementProps {
   isSelected?: boolean;
   onSelect?: () => void;
   onDelete?: () => void;
+  onContextMenu?: (e: React.MouseEvent, elementId: string) => void;
 }
 
-export default function CanvasElement({ element, children, isSelected, onSelect, onDelete }: CanvasElementProps) {
+export default function CanvasElement({ element, children, isSelected, onSelect, onDelete, onContextMenu }: CanvasElementProps) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -261,6 +262,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
         transform: isDragging || isResizing ? 'translateZ(0)' : 'none',
       }}
       onMouseDown={handleMouseDown}
+      onContextMenu={onContextMenu ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e, element.id); } : undefined}
     >
       {/* Element Header */}
       <div className="element-header flex items-center justify-between p-2 bg-gray-50 rounded-t-lg border-b border-gray-200">

@@ -7,7 +7,7 @@ import { DataPanel } from '@/components/panels/DataPanel';
 import { VisualizationPanel } from '@/components/panels/VisualizationPanel';
 import { TopNavigation } from '@/components/navigation/TopNavigation';
 
-import { useCanvasStore } from '@/store/useCanvasStore';
+import { useCanvasStore, ToolType } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
@@ -21,6 +21,7 @@ import TextCard from '@/components/canvas/elements/TextCard';
 import TableCard from '@/components/canvas/elements/TableCard';
 import NoteCard from '@/components/canvas/elements/NoteCard';
 import ConnectionLines from '@/components/canvas/ConnectionLines';
+import ContextMenu, { ContextMenuState } from '@/components/canvas/ContextMenu';
 import { canvasAPI } from '@/lib/api/backendClient';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -146,6 +147,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const hasFitOnLoadRef = useRef(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, elementId: null });
 
   // Reset autosave state when canvasId changes (e.g. navigation without full remount)
   useEffect(() => {
@@ -525,6 +527,76 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     setSelectedTool('pointer');
   }, [readOnly, selectedDataset, addElement, setSelectedTool]);
 
+  // Fit all elements into the viewport
+  const handleFitToScreen = useCallback(() => {
+    const { canvasElements: els, canvasContainerSize: cSize, updateViewport: updVp } = useCanvasStore.getState();
+    if (els.length === 0) { updVp({ x: 0, y: 0, zoom: 1 }); return; }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of els) {
+      minX = Math.min(minX, el.position.x);
+      minY = Math.min(minY, el.position.y);
+      maxX = Math.max(maxX, el.position.x + el.size.width);
+      maxY = Math.max(maxY, el.position.y + el.size.height);
+    }
+    const padding = 50;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const fitZoom = Math.min(cSize.width / (maxX - minX + padding * 2), cSize.height / (maxY - minY + padding * 2), 3);
+    updVp({ x: -centerX * Math.max(0.1, fitZoom), y: -centerY * Math.max(0.1, fitZoom), zoom: Math.max(0.1, fitZoom) });
+  }, []);
+
+  // Duplicate an element with a +20px offset
+  const handleDuplicateElement = useCallback((id: string) => {
+    if (readOnly) return;
+    const el = useCanvasStore.getState().canvasElements.find(e => e.id === id);
+    if (!el) return;
+    const newId = addElement({ ...el, position: { x: el.position.x + 20, y: el.position.y + 20 } });
+    const justAdded = useCanvasStore.getState().canvasElements.find(e => e.id === newId);
+    if (justAdded) getActiveWebSocket()?.sendElementAdd(justAdded);
+  }, [readOnly, addElement]);
+
+  // Context menu: canvas background right-click
+  const handleCanvasContextMenu = useCallback((e: React.MouseEvent) => {
+    if (readOnly) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const vp = useCanvasStore.getState().viewport;
+    const canvasX = (e.clientX - rect.left - rect.width / 2 - vp.x) / vp.zoom;
+    const canvasY = (e.clientY - rect.top - rect.height / 2 - vp.y) / vp.zoom;
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, elementId: null, canvasX, canvasY });
+  }, [readOnly]);
+
+  // Context menu: element right-click
+  const handleElementContextMenu = useCallback((e: React.MouseEvent, elementId: string) => {
+    if (readOnly) return;
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, elementId });
+  }, [readOnly]);
+
+  // Place an element from the context menu at given canvas coords
+  const handleContextMenuPlace = useCallback((tool: ToolType, canvasX: number, canvasY: number) => {
+    if (readOnly) return;
+    if (tool === 'chart') {
+      if (selectedDataset) {
+        const sz = getDefaultSize('chart');
+        createVisualization(selectedDataset, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 });
+      }
+      return;
+    }
+    if (tool === 'dataset') {
+      if (selectedDataset) {
+        const sz = getDefaultSize('dataset', { columns: selectedDataset.columns, rows: Math.min(selectedDataset.rows, 10) });
+        addElement({ type: 'dataset', position: { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, size: sz, data: { datasetId: selectedDataset.id, title: selectedDataset.name } });
+      }
+      return;
+    }
+    if (tool === 'text' || tool === 'table' || tool === 'map' || tool === 'note') {
+      const sz = tool === 'table'
+        ? getDefaultSize('table', { columns: selectedDataset?.columns ?? 4, rows: selectedDataset ? Math.min(selectedDataset.rows, 10) : 8 })
+        : getDefaultSize(tool);
+      handleAddElement(tool, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, sz);
+    }
+  }, [readOnly, selectedDataset, createVisualization, addElement, handleAddElement]);
+
   // Prepare visualization positions for MiniMap - use canvas elements
   const visualizationPositions = canvasElements
     .filter(element => element.type === 'chart')
@@ -567,6 +639,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
             canvasSize={canvasDimensions}
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
+            onContextMenu={handleCanvasContextMenu}
             onCanvasClick={(e) => {
               // Deselect on canvas background click (not during pan/drag)
               if (selectedTool !== 'drag') setSelectedVizId(null);
@@ -628,6 +701,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                   isSelected={selectedVizId === element.id}
                   onSelect={() => handleVisualizationSelect(element.id)}
                   onDelete={readOnly ? undefined : () => handleVisualizationDelete(element.id)}
+                  onContextMenu={readOnly ? undefined : handleElementContextMenu}
                 >
                   {element.type === 'chart' && (
                     <ChartCard
@@ -692,6 +766,18 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
               ))}
             </div>
           </InfiniteCanvas>
+
+          {/* Context Menu */}
+          {!readOnly && (
+            <ContextMenu
+              state={contextMenu}
+              onClose={() => setContextMenu(m => ({ ...m, visible: false }))}
+              onDeleteElement={handleVisualizationDelete}
+              onDuplicateElement={handleDuplicateElement}
+              onPlaceElement={handleContextMenuPlace}
+              onFitToScreen={handleFitToScreen}
+            />
+          )}
 
           {/* Floating Toolbar — hidden in read-only mode */}
           {!readOnly && (
