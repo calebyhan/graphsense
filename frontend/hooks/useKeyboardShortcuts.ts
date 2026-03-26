@@ -113,6 +113,5 @@ export function useKeyboardShortcuts(isReadOnly = false) {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-<<<<<<< HEAD
   }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, handleFitToScreen, isReadOnly]);
 }
