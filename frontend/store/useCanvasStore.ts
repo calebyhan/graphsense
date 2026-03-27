@@ -412,8 +412,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
     // Use the same dynamic minZoom formula as AutoVizAgent so toolbar/keyboard fits match the F-key fit.
-    const contentWidth = maxX - minX;
-    const contentHeight = maxY - minY;
+    const contentWidth = Math.max(maxX - minX, 1);
+    const contentHeight = Math.max(maxY - minY, 1);
     const dynamicMinZoom = Math.max(0.05, Math.min(cSize.width / contentWidth, cSize.height / contentHeight));
     const fitZoom = Math.min(cSize.width / (contentWidth + padding * 2), cSize.height / (contentHeight + padding * 2), 3);
     const targetZoom = Math.max(dynamicMinZoom, fitZoom);
