@@ -147,8 +147,8 @@ export default function ContextMenu({
   // Nudge menu into viewport so it never clips off-screen
   const menuWidth = 220;
   const menuHeight = state.elementId ? 260 : 340;
-  const left = Math.min(state.x, window.innerWidth - menuWidth - 8);
-  const top = Math.min(state.y, window.innerHeight - menuHeight - 8);
+  const left = Math.max(8, Math.min(state.x, window.innerWidth - menuWidth - 8));
+  const top = Math.max(8, Math.min(state.y, window.innerHeight - menuHeight - 8));
 
   return (
     <div

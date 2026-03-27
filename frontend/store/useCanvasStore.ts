@@ -164,38 +164,36 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   bringForward: (id) => {
     set((state) => {
-      // Normalize zIndex to contiguous integers first to prevent collision after non-contiguous ops
       const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-      const normalized = sorted.map((el, i) => ({ ...el, zIndex: i }));
-      const idx = normalized.findIndex((el) => el.id === id);
-      if (idx === -1 || idx === normalized.length - 1) return state;
-      // Swap zIndex with the next element up
-      const thisZ = normalized[idx].zIndex;
-      const aboveZ = normalized[idx + 1].zIndex;
-      const byId: Record<string, number> = {};
-      normalized.forEach((el) => { byId[el.id] = el.zIndex; });
-      byId[id] = aboveZ;
-      byId[normalized[idx + 1].id] = thisZ;
-      const canvasElements = state.canvasElements.map((el) => ({ ...el, zIndex: byId[el.id] }));
+      const idx = sorted.findIndex((el) => el.id === id);
+      if (idx === -1 || idx === sorted.length - 1) return state;
+      // Swap only target and its immediate neighbor above — no full renormalization
+      const targetZ = sorted[idx].zIndex ?? 0;
+      const neighborZ = sorted[idx + 1].zIndex ?? 0;
+      const neighborId = sorted[idx + 1].id;
+      const canvasElements = state.canvasElements.map((el) => {
+        if (el.id === id) return { ...el, zIndex: neighborZ };
+        if (el.id === neighborId) return { ...el, zIndex: targetZ };
+        return el;
+      });
       return { canvasElements };
     });
   },
 
   sendBackward: (id) => {
     set((state) => {
-      // Normalize zIndex to contiguous integers first to prevent collision after non-contiguous ops
       const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-      const normalized = sorted.map((el, i) => ({ ...el, zIndex: i }));
-      const idx = normalized.findIndex((el) => el.id === id);
+      const idx = sorted.findIndex((el) => el.id === id);
       if (idx <= 0) return state;
-      // Swap zIndex with the next element down
-      const thisZ = normalized[idx].zIndex;
-      const belowZ = normalized[idx - 1].zIndex;
-      const byId: Record<string, number> = {};
-      normalized.forEach((el) => { byId[el.id] = el.zIndex; });
-      byId[id] = belowZ;
-      byId[normalized[idx - 1].id] = thisZ;
-      const canvasElements = state.canvasElements.map((el) => ({ ...el, zIndex: byId[el.id] }));
+      // Swap only target and its immediate neighbor below — no full renormalization
+      const targetZ = sorted[idx].zIndex ?? 0;
+      const neighborZ = sorted[idx - 1].zIndex ?? 0;
+      const neighborId = sorted[idx - 1].id;
+      const canvasElements = state.canvasElements.map((el) => {
+        if (el.id === id) return { ...el, zIndex: neighborZ };
+        if (el.id === neighborId) return { ...el, zIndex: targetZ };
+        return el;
+      });
       return { canvasElements };
     });
   },
