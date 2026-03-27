@@ -109,7 +109,10 @@ export default function ContextMenu({
     const handleClick = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) onCloseRef.current();
     };
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
+    // stopPropagation prevents useKeyboardShortcuts from also clearing canvas selection on the same Escape
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current(); }
+    };
     document.addEventListener('mousedown', handleClick, true);
     document.addEventListener('keydown', handleKey);
     return () => {
@@ -121,9 +124,9 @@ export default function ContextMenu({
   // Guard before any window/DOM access
   if (!state.visible) return null;
 
-  // Extract background-specific coords — only present when elementId is null (discriminated union)
-  const bgCanvasX = !state.elementId ? (state as { canvasX: number }).canvasX : 0;
-  const bgCanvasY = !state.elementId ? (state as { canvasY: number }).canvasY : 0;
+  // TypeScript narrows the discriminated union on elementId === null → canvasX/canvasY are required
+  const bgCanvasX = state.elementId === null ? state.canvasX : 0;
+  const bgCanvasY = state.elementId === null ? state.canvasY : 0;
 
   // Nudge menu into viewport so it never clips off-screen
   const menuWidth = 220;
@@ -138,7 +141,7 @@ export default function ContextMenu({
       style={{ left, top }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {state.elementId ? (
+      {state.elementId !== null ? (
         /* ── Element context menu ── */
         <>
           <MenuItem

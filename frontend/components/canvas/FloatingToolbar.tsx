@@ -114,13 +114,18 @@ export default function FloatingToolbar({
   };
 
   const handleZoomIn = () => {
-    const newZoom = Math.min(5, viewport.zoom + 0.1);
-    updateViewport({ ...viewport, zoom: newZoom });
+    const vp = useCanvasStore.getState().viewport;
+    const newZoom = Math.min(5, vp.zoom + 0.1);
+    // Scale pan proportionally to keep the world origin pinned at the same screen position
+    const scale = newZoom / vp.zoom;
+    updateViewport({ x: vp.x * scale, y: vp.y * scale, zoom: newZoom });
   };
 
   const handleZoomOut = () => {
-    const newZoom = Math.max(0.1, viewport.zoom - 0.1);
-    updateViewport({ ...viewport, zoom: newZoom });
+    const vp = useCanvasStore.getState().viewport;
+    const newZoom = Math.max(0.1, vp.zoom - 0.1);
+    const scale = newZoom / vp.zoom;
+    updateViewport({ x: vp.x * scale, y: vp.y * scale, zoom: newZoom });
   };
 
   const handleFitToScreen = () => useCanvasStore.getState().fitToScreen();

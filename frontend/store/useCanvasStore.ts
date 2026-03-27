@@ -364,7 +364,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (missing.length > 0) {
       console.warn('[useCanvasStore] copyElements: some element IDs not found', missing);
     }
-    set({ clipboardElements: els });
+    // Guard: don't overwrite a valid clipboard with an empty result from stale IDs
+    if (els.length === 0) return;
+    // Deep-clone at copy time so clipboard is a snapshot independent of subsequent mutations
+    set({ clipboardElements: els.map((el) => structuredClone(el)) });
   },
 
   pasteElements: () => {
@@ -375,14 +378,16 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       ...el,
       id: crypto.randomUUID(),
       position: { x: el.position.x + OFFSET, y: el.position.y + OFFSET },
-      // Deep-clone data to prevent shared object references with the source element
+      // data was already deep-cloned at copy time; clone again so each paste is independent
       data: el.data != null ? structuredClone(el.data) : el.data,
     }));
     const newIds = newEls.map((el) => el.id);
     set((state) => {
+      // Use actual max zIndex rather than array length — these diverge after bringToFront/sendToBack
+      const maxZ = state.canvasElements.reduce((m, el) => Math.max(m, el.zIndex ?? 0), -1);
       const canvasElements = [
         ...state.canvasElements.map((el) => ({ ...el, selected: false })),
-        ...newEls.map((el, i) => ({ ...el, zIndex: state.canvasElements.length + i, selected: true })),
+        ...newEls.map((el, i) => ({ ...el, zIndex: maxZ + 1 + i, selected: true })),
       ];
       return { canvasElements, canvasBounds: computeCanvasBounds(canvasElements), selectedElements: newIds };
     });

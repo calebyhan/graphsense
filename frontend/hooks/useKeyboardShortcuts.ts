@@ -9,7 +9,11 @@ export function useKeyboardShortcuts(isReadOnly = false) {
     if (typeof window === 'undefined') return;
 
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
         return;
       }
 
@@ -85,12 +89,7 @@ export function useKeyboardShortcuts(isReadOnly = false) {
             e.preventDefault();
           }
           break;
-        case 'f':
-          if (!e.ctrlKey && !e.metaKey) {
-            useCanvasStore.getState().fitToScreen();
-            e.preventDefault();
-          }
-          break;
+        // 'f' / Ctrl+0 (zoom fit) are handled by InfiniteCanvas which has live container dims
         // Ctrl+=/+, Ctrl+-, Ctrl+0 (zoom in/out/fit) are handled by InfiniteCanvas
         // with pan-compensated zooming — do not duplicate here.
         case ' ':

@@ -550,7 +550,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
       console.error('[AutoVizAgent] handleDuplicateElement: element not found in store', { id });
       return;
     }
-    const newId = addElement({ ...el, position: { x: el.position.x + 20, y: el.position.y + 20 } });
+    // Destructure id out so addElement receives Omit<CanvasElement, 'id'> cleanly
+    const { id: _oldId, ...elWithoutId } = el;
+    const newId = addElement({ ...elWithoutId, position: { x: el.position.x + 20, y: el.position.y + 20 } });
     const justAdded = useCanvasStore.getState().canvasElements.find(e => e.id === newId);
     if (!justAdded) {
       console.error('[AutoVizAgent] handleDuplicateElement: newly-added element missing from store', { newId });
@@ -611,7 +613,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     if (tool === 'dataset') {
       if (selectedDataset) {
         const sz = getDefaultSize('dataset', { columns: selectedDataset.columns, rows: Math.min(selectedDataset.rows, 10) });
-        addElement({ type: 'dataset', position: { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, size: sz, data: { datasetId: selectedDataset.id, title: selectedDataset.name } });
+        const dsId = addElement({ type: 'dataset', position: { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, size: sz, data: { datasetId: selectedDataset.id, title: selectedDataset.name } });
+        const dsAdded = useCanvasStore.getState().canvasElements.find(el => el.id === dsId);
+        if (dsAdded) getActiveWebSocket()?.sendElementAdd(dsAdded);
       }
       return;
     }
@@ -692,7 +696,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                   setSelectedTool('pointer');
                 } else if (selectedTool === 'dataset' && selectedDataset) {
                   const sz = getDefaultSize('dataset', { columns: selectedDataset.columns, rows: Math.min(selectedDataset.rows, 10) });
-                  addElement({ type: 'dataset', position: { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, size: sz, data: { datasetId: selectedDataset.id, title: selectedDataset.name } });
+                  const dsId = addElement({ type: 'dataset', position: { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, size: sz, data: { datasetId: selectedDataset.id, title: selectedDataset.name } });
+                  const dsAdded = useCanvasStore.getState().canvasElements.find(el => el.id === dsId);
+                  if (dsAdded) getActiveWebSocket()?.sendElementAdd(dsAdded);
                   setSelectedTool('pointer');
                 } else if (selectedTool === 'text') {
                   const sz = getDefaultSize('text');

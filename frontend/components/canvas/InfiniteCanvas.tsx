@@ -454,17 +454,20 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
     return () => el.removeEventListener('wheel', listener);
   }, [handleNativeWheel]);
 
-  // Escape key cancels an in-progress rubber-band selection
+  // Escape key cancels an in-progress rubber-band selection.
+  // stopPropagation prevents useKeyboardShortcuts from also clearing the full selection
+  // and resetting the tool on the same event.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && dragSelectStartRef.current) {
         dragSelectStartRef.current = null;
         dragSelectCurrentRef.current = null;
         setDragSelectRect(null);
+        e.stopPropagation();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true); // capture phase so we run first
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, []);
 
   // Keyboard shortcuts for zoom/fit
