@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCanvasStore, ToolType } from '@/store/useCanvasStore';
+import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 
 export type ContextMenuState =
   | { visible: false }
@@ -101,6 +102,19 @@ export default function ContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const { setSelectedTool, resetViewport, bringForward, sendBackward, bringToFront, sendToBack } = useCanvasStore();
 
+  // Apply a z-order action and broadcast any zIndex changes to collaborators.
+  const applyZOrder = (action: () => void) => {
+    const before = useCanvasStore.getState().canvasElements;
+    const beforeMap: Record<string, number> = {};
+    before.forEach((el) => { beforeMap[el.id] = el.zIndex ?? 0; });
+    action();
+    useCanvasStore.getState().canvasElements.forEach((el) => {
+      if ((el.zIndex ?? 0) !== beforeMap[el.id]) {
+        getActiveWebSocket()?.sendElementUpdate(el.id, { zIndex: el.zIndex });
+      }
+    });
+  };
+
   // Keep a stable ref to onClose so the effect doesn't need to re-register listeners on every render
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; });
@@ -161,22 +175,22 @@ export default function ContextMenu({
           <MenuItem
             icon={<ArrowUp className="w-4 h-4" />}
             label="Bring Forward"
-            onClick={() => { bringForward(state.elementId!); onClose(); }}
+            onClick={() => { applyZOrder(() => bringForward(state.elementId!)); onClose(); }}
           />
           <MenuItem
             icon={<ArrowDown className="w-4 h-4" />}
             label="Send Backward"
-            onClick={() => { sendBackward(state.elementId!); onClose(); }}
+            onClick={() => { applyZOrder(() => sendBackward(state.elementId!)); onClose(); }}
           />
           <MenuItem
             icon={<ChevronsUp className="w-4 h-4" />}
             label="Bring to Front"
-            onClick={() => { bringToFront(state.elementId!); onClose(); }}
+            onClick={() => { applyZOrder(() => bringToFront(state.elementId!)); onClose(); }}
           />
           <MenuItem
             icon={<ChevronsDown className="w-4 h-4" />}
             label="Send to Back"
-            onClick={() => { sendToBack(state.elementId!); onClose(); }}
+            onClick={() => { applyZOrder(() => sendToBack(state.elementId!)); onClose(); }}
           />
           <Separator />
           <MenuItem

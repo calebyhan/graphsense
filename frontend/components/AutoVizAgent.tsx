@@ -552,8 +552,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     }
     // Destructure id and zIndex out — addElement assigns a fresh zIndex so the duplicate doesn't
     // share the same stacking value as the original (which would cause non-deterministic CSS ordering).
-    const { id: _oldId, zIndex: _oldZIndex, ...elWithoutIdAndZ } = el;
-    const newId = addElement({ ...elWithoutIdAndZ, position: { x: el.position.x + 20, y: el.position.y + 20 } });
+    const { id: _oldId, zIndex: _oldZIndex, selected: _oldSelected, ...elWithoutIdAndZ } = el;
+    const newId = addElement({ ...elWithoutIdAndZ, selected: false, position: { x: el.position.x + 20, y: el.position.y + 20 } });
     const justAdded = useCanvasStore.getState().canvasElements.find(e => e.id === newId);
     if (!justAdded) {
       console.error('[AutoVizAgent] handleDuplicateElement: newly-added element missing from store', { newId });
