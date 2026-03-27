@@ -220,7 +220,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         console.warn('[useCanvasStore] sendToBack: element not found', id);
         return state;
       }
-      const minZ = state.canvasElements.reduce((m, el) => Math.min(m, el.zIndex ?? 0), 0);
+      const minZ = state.canvasElements.reduce((m, el) => Math.min(m, el.zIndex ?? Infinity), Infinity);
       const canvasElements = state.canvasElements.map((el) =>
         el.id === id ? { ...el, zIndex: minZ - 1 } : el
       );
