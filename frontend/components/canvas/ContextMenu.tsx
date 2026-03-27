@@ -53,6 +53,7 @@ interface MenuItemProps {
 function MenuItem({ icon, label, shortcut, onClick, danger, disabled }: MenuItemProps) {
   return (
     <button
+      type="button"
       className={cn(
         'flex items-center gap-2 w-full px-3 py-1.5 text-sm rounded-md transition-colors text-left',
         disabled
@@ -153,7 +154,6 @@ export default function ContextMenu({
           <MenuItem
             icon={<Copy className="w-4 h-4" />}
             label="Duplicate"
-            shortcut="⌘D"
             onClick={() => { onDuplicateElement(state.elementId!); onClose(); }}
           />
           <Separator />
