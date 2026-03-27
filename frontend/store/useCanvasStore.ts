@@ -133,7 +133,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const newElement: CanvasElement = {
       ...element,
       id,
-      zIndex: element.zIndex || get().canvasElements.length,
+      zIndex: element.zIndex ?? get().canvasElements.length,
     };
     set((state) => {
       const canvasElements = [...state.canvasElements, newElement];
@@ -164,43 +164,50 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   bringForward: (id) => {
     set((state) => {
+      // Normalize zIndex to contiguous integers first to prevent collision after non-contiguous ops
       const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-      const idx = sorted.findIndex((el) => el.id === id);
-      if (idx === -1 || idx === sorted.length - 1) return state;
+      const normalized = sorted.map((el, i) => ({ ...el, zIndex: i }));
+      const idx = normalized.findIndex((el) => el.id === id);
+      if (idx === -1 || idx === normalized.length - 1) return state;
       // Swap zIndex with the next element up
-      const above = sorted[idx + 1];
-      const thisZ = sorted[idx].zIndex ?? idx;
-      const aboveZ = above.zIndex ?? (idx + 1);
-      const canvasElements = state.canvasElements.map((el) => {
-        if (el.id === id) return { ...el, zIndex: aboveZ };
-        if (el.id === above.id) return { ...el, zIndex: thisZ };
-        return el;
-      });
+      const thisZ = normalized[idx].zIndex;
+      const aboveZ = normalized[idx + 1].zIndex;
+      const byId: Record<string, number> = {};
+      normalized.forEach((el) => { byId[el.id] = el.zIndex; });
+      byId[id] = aboveZ;
+      byId[normalized[idx + 1].id] = thisZ;
+      const canvasElements = state.canvasElements.map((el) => ({ ...el, zIndex: byId[el.id] }));
       return { canvasElements };
     });
   },
 
   sendBackward: (id) => {
     set((state) => {
+      // Normalize zIndex to contiguous integers first to prevent collision after non-contiguous ops
       const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-      const idx = sorted.findIndex((el) => el.id === id);
+      const normalized = sorted.map((el, i) => ({ ...el, zIndex: i }));
+      const idx = normalized.findIndex((el) => el.id === id);
       if (idx <= 0) return state;
       // Swap zIndex with the next element down
-      const below = sorted[idx - 1];
-      const thisZ = sorted[idx].zIndex ?? idx;
-      const belowZ = below.zIndex ?? (idx - 1);
-      const canvasElements = state.canvasElements.map((el) => {
-        if (el.id === id) return { ...el, zIndex: belowZ };
-        if (el.id === below.id) return { ...el, zIndex: thisZ };
-        return el;
-      });
+      const thisZ = normalized[idx].zIndex;
+      const belowZ = normalized[idx - 1].zIndex;
+      const byId: Record<string, number> = {};
+      normalized.forEach((el) => { byId[el.id] = el.zIndex; });
+      byId[id] = belowZ;
+      byId[normalized[idx - 1].id] = thisZ;
+      const canvasElements = state.canvasElements.map((el) => ({ ...el, zIndex: byId[el.id] }));
       return { canvasElements };
     });
   },
 
   bringToFront: (id) => {
     set((state) => {
-      const maxZ = Math.max(...state.canvasElements.map((el) => el.zIndex ?? 0));
+      if (state.canvasElements.length === 0) return state;
+      if (!state.canvasElements.some((el) => el.id === id)) {
+        console.warn('[useCanvasStore] bringToFront: element not found', id);
+        return state;
+      }
+      const maxZ = state.canvasElements.reduce((m, el) => Math.max(m, el.zIndex ?? 0), 0);
       const canvasElements = state.canvasElements.map((el) =>
         el.id === id ? { ...el, zIndex: maxZ + 1 } : el
       );
@@ -210,7 +217,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   sendToBack: (id) => {
     set((state) => {
-      const minZ = Math.min(...state.canvasElements.map((el) => el.zIndex ?? 0));
+      if (state.canvasElements.length === 0) return state;
+      if (!state.canvasElements.some((el) => el.id === id)) {
+        console.warn('[useCanvasStore] sendToBack: element not found', id);
+        return state;
+      }
+      const minZ = state.canvasElements.reduce((m, el) => Math.min(m, el.zIndex ?? 0), 0);
       const canvasElements = state.canvasElements.map((el) =>
         el.id === id ? { ...el, zIndex: minZ - 1 } : el
       );
@@ -348,6 +360,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   copyElements: (ids) => {
     const els = get().canvasElements.filter((el) => ids.includes(el.id));
+    const missing = ids.filter((id) => !els.some((el) => el.id === id));
+    if (missing.length > 0) {
+      console.warn('[useCanvasStore] copyElements: some element IDs not found', missing);
+    }
     set({ clipboardElements: els });
   },
 
@@ -359,6 +375,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       ...el,
       id: crypto.randomUUID(),
       position: { x: el.position.x + OFFSET, y: el.position.y + OFFSET },
+      // Deep-clone data to prevent shared object references with the source element
+      data: el.data != null ? structuredClone(el.data) : el.data,
     }));
     const newIds = newEls.map((el) => el.id);
     set((state) => {
@@ -374,6 +392,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   fitToScreen: () => {
     const { canvasElements: els, canvasContainerSize: cSize } = get();
     if (els.length === 0) { set({ viewport: { x: 0, y: 0, zoom: 1 } }); return; }
+    if (cSize.width === 0 || cSize.height === 0) {
+      console.warn('[useCanvasStore] fitToScreen: container size not yet measured, skipping fit');
+      return;
+    }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const el of els) {
       minX = Math.min(minX, el.position.x);

@@ -157,7 +157,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const hasFitOnLoadRef = useRef(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, elementId: null });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false });
 
   // Reset autosave state when canvasId changes (e.g. navigation without full remount)
   useEffect(() => {
@@ -546,25 +546,38 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const handleDuplicateElement = useCallback((id: string) => {
     if (readOnly) return;
     const el = useCanvasStore.getState().canvasElements.find(e => e.id === id);
-    if (!el) return;
+    if (!el) {
+      console.error('[AutoVizAgent] handleDuplicateElement: element not found in store', { id });
+      return;
+    }
     const newId = addElement({ ...el, position: { x: el.position.x + 20, y: el.position.y + 20 } });
     const justAdded = useCanvasStore.getState().canvasElements.find(e => e.id === newId);
-    if (justAdded) getActiveWebSocket()?.sendElementAdd(justAdded);
+    if (!justAdded) {
+      console.error('[AutoVizAgent] handleDuplicateElement: newly-added element missing from store', { newId });
+      return;
+    }
+    getActiveWebSocket()?.sendElementAdd(justAdded);
   }, [readOnly, addElement]);
 
-  const handleCopyElements = useCallback(() => {
+  const handleCopyElements = useCallback((targetId?: string) => {
     if (readOnly) return;
-    const { selectedElements: sel } = useCanvasStore.getState();
-    if (sel.length > 0) useCanvasStore.getState().copyElements(sel);
+    // Prefer the explicitly targeted element (right-click on unselected item); fall back to selection
+    const ids = targetId ? [targetId] : useCanvasStore.getState().selectedElements;
+    if (ids.length > 0) useCanvasStore.getState().copyElements(ids);
   }, [readOnly]);
 
   const handlePasteElements = useCallback(() => {
     if (readOnly) return;
     const newIds = useCanvasStore.getState().pasteElements();
-    const state = useCanvasStore.getState();
+    if (newIds.length === 0) return;
+    const { canvasElements } = useCanvasStore.getState();
     newIds.forEach((id) => {
-      const el = state.canvasElements.find((e) => e.id === id);
-      if (el) getActiveWebSocket()?.sendElementAdd(el);
+      const el = canvasElements.find((e) => e.id === id);
+      if (!el) {
+        console.error('[AutoVizAgent] handlePasteElements: pasted element missing from store', { id });
+        return;
+      }
+      getActiveWebSocket()?.sendElementAdd(el);
     });
   }, [readOnly]);
 
@@ -784,7 +797,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
           {!readOnly && (
             <ContextMenu
               state={contextMenu}
-              onClose={() => setContextMenu(m => ({ ...m, visible: false }))}
+              onClose={() => setContextMenu({ visible: false })}
               onDeleteElement={handleVisualizationDelete}
               onDuplicateElement={handleDuplicateElement}
               onCopyElements={handleCopyElements}

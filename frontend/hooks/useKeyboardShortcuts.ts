@@ -3,8 +3,7 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 
 export function useKeyboardShortcuts(isReadOnly = false) {
-  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection } = useCanvasStore();
-
+  const { setSelectedTool, resetViewport, clearSelection } = useCanvasStore();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -28,7 +27,18 @@ export function useKeyboardShortcuts(isReadOnly = false) {
             break;
           case 'v':
             if (!isReadOnly) {
-              useCanvasStore.getState().pasteElements();
+              const newIds = useCanvasStore.getState().pasteElements();
+              if (newIds.length > 0) {
+                const { canvasElements } = useCanvasStore.getState();
+                newIds.forEach((id) => {
+                  const el = canvasElements.find((e) => e.id === id);
+                  if (!el) {
+                    console.error('[useKeyboardShortcuts] Ctrl+V: pasted element missing from store', { id });
+                    return;
+                  }
+                  getActiveWebSocket()?.sendElementAdd(el);
+                });
+              }
               e.preventDefault();
             }
             break;
@@ -88,15 +98,20 @@ export function useKeyboardShortcuts(isReadOnly = false) {
           e.preventDefault();
           break;
         case 'delete':
-        case 'backspace':
-          if (!isReadOnly && selectedElements.length > 0) {
-            selectedElements.forEach(id => {
-              getActiveWebSocket()?.sendElementRemove(id);
-              removeElement(id);
-            });
-            e.preventDefault();
+        case 'backspace': {
+          if (!isReadOnly) {
+            // Read fresh state inside the handler to avoid stale closure issues
+            const { selectedElements, removeElement } = useCanvasStore.getState();
+            if (selectedElements.length > 0) {
+              selectedElements.forEach(id => {
+                getActiveWebSocket()?.sendElementRemove(id);
+                removeElement(id);
+              });
+              e.preventDefault();
+            }
           }
           break;
+        }
         case 'escape':
           clearSelection();
           setSelectedTool('pointer');
@@ -107,5 +122,5 @@ export function useKeyboardShortcuts(isReadOnly = false) {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, isReadOnly]);
+  }, [setSelectedTool, resetViewport, clearSelection, isReadOnly]);
 }

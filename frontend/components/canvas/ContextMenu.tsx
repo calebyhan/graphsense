@@ -24,23 +24,17 @@ import {
 import { cn } from '@/lib/utils';
 import { useCanvasStore, ToolType } from '@/store/useCanvasStore';
 
-export interface ContextMenuState {
-  visible: boolean;
-  x: number;
-  y: number;
-  /** null = canvas background, string = element id */
-  elementId: string | null;
-  /** canvas-space coords for placing elements on background right-click */
-  canvasX?: number;
-  canvasY?: number;
-}
+export type ContextMenuState =
+  | { visible: false }
+  | { visible: true; x: number; y: number; elementId: string }
+  | { visible: true; x: number; y: number; elementId: null; canvasX: number; canvasY: number };
 
 interface ContextMenuProps {
   state: ContextMenuState;
   onClose: () => void;
   onDeleteElement: (id: string) => void;
   onDuplicateElement: (id: string) => void;
-  onCopyElements: () => void;
+  onCopyElements: (elementId?: string) => void;
   onPasteElements: () => void;
   hasClipboard: boolean;
   onPlaceElement: (tool: ToolType, canvasX: number, canvasY: number) => void;
@@ -105,28 +99,37 @@ export default function ContextMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const { setSelectedTool, resetViewport, bringForward, sendBackward, bringToFront, sendToBack } = useCanvasStore();
 
-  // Close on outside click or Escape
+  // Keep a stable ref to onClose so the effect doesn't need to re-register listeners on every render
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+
+  // Close on outside click or Escape — depends only on visibility, not on onClose identity
   useEffect(() => {
     if (!state.visible) return;
     const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onCloseRef.current();
     };
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
     document.addEventListener('mousedown', handleClick, true);
     document.addEventListener('keydown', handleKey);
     return () => {
       document.removeEventListener('mousedown', handleClick, true);
       document.removeEventListener('keydown', handleKey);
     };
-  }, [state.visible, onClose]);
+  }, [state.visible]);
+
+  // Guard before any window/DOM access
+  if (!state.visible) return null;
+
+  // Extract background-specific coords — only present when elementId is null (discriminated union)
+  const bgCanvasX = !state.elementId ? (state as { canvasX: number }).canvasX : 0;
+  const bgCanvasY = !state.elementId ? (state as { canvasY: number }).canvasY : 0;
 
   // Nudge menu into viewport so it never clips off-screen
   const menuWidth = 220;
   const menuHeight = state.elementId ? 260 : 340;
   const left = Math.min(state.x, window.innerWidth - menuWidth - 8);
   const top = Math.min(state.y, window.innerHeight - menuHeight - 8);
-
-  if (!state.visible) return null;
 
   return (
     <div
@@ -142,7 +145,7 @@ export default function ContextMenu({
             icon={<Copy className="w-4 h-4" />}
             label="Copy"
             shortcut="⌘C"
-            onClick={() => { onCopyElements(); onClose(); }}
+            onClick={() => { onCopyElements(state.elementId ?? undefined); onClose(); }}
           />
           <MenuItem
             icon={<Copy className="w-4 h-4" />}
@@ -218,7 +221,7 @@ export default function ContextMenu({
               label={label}
               shortcut={shortcut}
               onClick={() => {
-                onPlaceElement(tool, state.canvasX ?? 0, state.canvasY ?? 0);
+                onPlaceElement(tool, bgCanvasX, bgCanvasY);
                 onClose();
               }}
             />
