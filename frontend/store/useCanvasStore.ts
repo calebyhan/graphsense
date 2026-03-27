@@ -133,7 +133,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const newElement: CanvasElement = {
       ...element,
       id,
-      zIndex: element.zIndex ?? get().canvasElements.length,
+      zIndex: element.zIndex ?? get().canvasElements.reduce((m, el) => Math.max(m, el.zIndex ?? 0), -1) + 1,
     };
     set((state) => {
       const canvasElements = [...state.canvasElements, newElement];
