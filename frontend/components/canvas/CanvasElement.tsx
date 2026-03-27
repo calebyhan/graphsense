@@ -123,6 +123,19 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
       return;
     }
 
+    // Shift+click anywhere on the element toggles it in/out of the selection
+    if (e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const current = useCanvasStore.getState().selectedElements;
+      if (current.includes(element.id)) {
+        selectElements(current.filter((id) => id !== element.id));
+      } else {
+        selectElements([...current, element.id]);
+      }
+      return; // Don't start a drag on shift+click
+    }
+
     if (e.target !== e.currentTarget && !target.closest('.element-header')) {
       return;
     }

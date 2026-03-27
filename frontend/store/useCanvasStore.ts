@@ -91,6 +91,11 @@ interface CanvasStore {
   bringToFront: (id: string) => void;
   sendToBack: (id: string) => void;
 
+  // Clipboard actions
+  clipboardElements: CanvasElement[];
+  copyElements: (ids: string[]) => void;
+  pasteElements: () => string[];
+
   // Utility actions
   fitToScreen: () => void;
   getElementById: (id: string) => CanvasElement | undefined;
@@ -105,6 +110,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selectedTool: 'pointer',
   canvasElements: [],
   selectedElements: [],
+  clipboardElements: [],
 
   // Collaboration initial state
   collaborators: [],
@@ -338,6 +344,31 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const holderId = elementLocks[elementId];
     if (!holderId) return undefined;
     return collaborators.find((c) => c.userId === holderId);
+  },
+
+  copyElements: (ids) => {
+    const els = get().canvasElements.filter((el) => ids.includes(el.id));
+    set({ clipboardElements: els });
+  },
+
+  pasteElements: () => {
+    const { clipboardElements } = get();
+    if (clipboardElements.length === 0) return [];
+    const OFFSET = 24;
+    const newEls: CanvasElement[] = clipboardElements.map((el) => ({
+      ...el,
+      id: crypto.randomUUID(),
+      position: { x: el.position.x + OFFSET, y: el.position.y + OFFSET },
+    }));
+    const newIds = newEls.map((el) => el.id);
+    set((state) => {
+      const canvasElements = [
+        ...state.canvasElements.map((el) => ({ ...el, selected: false })),
+        ...newEls.map((el, i) => ({ ...el, zIndex: state.canvasElements.length + i, selected: true })),
+      ];
+      return { canvasElements, canvasBounds: computeCanvasBounds(canvasElements), selectedElements: newIds };
+    });
+    return newIds;
   },
 
   fitToScreen: () => {

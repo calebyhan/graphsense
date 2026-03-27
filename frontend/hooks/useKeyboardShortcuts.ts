@@ -14,8 +14,28 @@ export function useKeyboardShortcuts(isReadOnly = false) {
         return;
       }
 
-      // Ctrl/Meta shortcuts (zoom/fit) are handled by InfiniteCanvas which has correct viewport math
-      if (e.ctrlKey || e.metaKey) return;
+      // Ctrl/Meta shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'c':
+            if (!isReadOnly) {
+              const sel = useCanvasStore.getState().selectedElements;
+              if (sel.length > 0) {
+                useCanvasStore.getState().copyElements(sel);
+                e.preventDefault();
+              }
+            }
+            break;
+          case 'v':
+            if (!isReadOnly) {
+              useCanvasStore.getState().pasteElements();
+              e.preventDefault();
+            }
+            break;
+          // Zoom/fit handled by InfiniteCanvas which has correct viewport math
+        }
+        return;
+      }
 
       switch (e.key.toLowerCase()) {
         case 'v':

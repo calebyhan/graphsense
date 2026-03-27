@@ -14,6 +14,7 @@ import {
   Crosshair,
   Trash2,
   Copy,
+  Clipboard,
   ArrowUp,
   ArrowDown,
   ChevronsUp,
@@ -39,6 +40,9 @@ interface ContextMenuProps {
   onClose: () => void;
   onDeleteElement: (id: string) => void;
   onDuplicateElement: (id: string) => void;
+  onCopyElements: () => void;
+  onPasteElements: () => void;
+  hasClipboard: boolean;
   onPlaceElement: (tool: ToolType, canvasX: number, canvasY: number) => void;
   onFitToScreen: () => void;
 }
@@ -92,6 +96,9 @@ export default function ContextMenu({
   onClose,
   onDeleteElement,
   onDuplicateElement,
+  onCopyElements,
+  onPasteElements,
+  hasClipboard,
   onPlaceElement,
   onFitToScreen,
 }: ContextMenuProps) {
@@ -115,7 +122,7 @@ export default function ContextMenu({
 
   // Nudge menu into viewport so it never clips off-screen
   const menuWidth = 220;
-  const menuHeight = state.elementId ? 220 : 300;
+  const menuHeight = state.elementId ? 260 : 340;
   const left = Math.min(state.x, window.innerWidth - menuWidth - 8);
   const top = Math.min(state.y, window.innerHeight - menuHeight - 8);
 
@@ -131,6 +138,12 @@ export default function ContextMenu({
       {state.elementId ? (
         /* ── Element context menu ── */
         <>
+          <MenuItem
+            icon={<Copy className="w-4 h-4" />}
+            label="Copy"
+            shortcut="⌘C"
+            onClick={() => { onCopyElements(); onClose(); }}
+          />
           <MenuItem
             icon={<Copy className="w-4 h-4" />}
             label="Duplicate"
@@ -177,6 +190,14 @@ export default function ContextMenu({
       ) : (
         /* ── Canvas background context menu ── */
         <>
+          <MenuItem
+            icon={<Clipboard className="w-4 h-4" />}
+            label="Paste"
+            shortcut="⌘V"
+            disabled={!hasClipboard}
+            onClick={() => { onPasteElements(); onClose(); }}
+          />
+          <Separator />
           <MenuItem
             icon={<MousePointer className="w-4 h-4" />}
             label="Select"

@@ -67,6 +67,8 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
   const dragSelectStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragSelectCurrentRef = useRef<{ x: number; y: number } | null>(null);
   const [dragSelectRect, setDragSelectRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  // Track shift key at mousedown so small-click handler can skip clearSelection
+  const shiftAtMouseDownRef = useRef(false);
 
   const {
     viewport,
@@ -111,6 +113,7 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
       // Skip drag-select/deselect when clicking interactive controls inside elements
       const target = e.target as HTMLElement;
       const isInteractive = !!target.closest('button, input, select, textarea, a, [role="button"]');
+      shiftAtMouseDownRef.current = e.shiftKey;
       if (!isInteractive) {
         const containerRect = canvasRef.current?.getBoundingClientRect();
         if (containerRect) {
@@ -231,8 +234,11 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
           }
         }
       } else {
-        // Plain click (no significant drag) anywhere on canvas — clear selection
-        useCanvasStore.getState().clearSelection();
+        // Plain click (no significant drag) on canvas background — clear selection,
+        // unless shift was held (shift+click on background adds nothing but shouldn't deselect)
+        if (!shiftAtMouseDownRef.current) {
+          useCanvasStore.getState().clearSelection();
+        }
       }
 
       dragSelectStartRef.current = null;
@@ -447,6 +453,19 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
     el.addEventListener('wheel', listener, { passive: false });
     return () => el.removeEventListener('wheel', listener);
   }, [handleNativeWheel]);
+
+  // Escape key cancels an in-progress rubber-band selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && dragSelectStartRef.current) {
+        dragSelectStartRef.current = null;
+        dragSelectCurrentRef.current = null;
+        setDragSelectRect(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Keyboard shortcuts for zoom/fit
   useEffect(() => {

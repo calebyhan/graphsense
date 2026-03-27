@@ -135,6 +135,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const addElement = useCanvasStore(s => s.addElement);
   const updateViewport = useCanvasStore(s => s.updateViewport);
   const storeSelectedElements = useCanvasStore(s => s.selectedElements);
+  const hasClipboard = useCanvasStore(s => s.clipboardElements.length > 0);
 
   // Sync selectedVizId with store selection. Clear it when the store no longer includes it
   // (covers both rubber-band deselect and rubber-band switching to a different element set).
@@ -551,6 +552,22 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     if (justAdded) getActiveWebSocket()?.sendElementAdd(justAdded);
   }, [readOnly, addElement]);
 
+  const handleCopyElements = useCallback(() => {
+    if (readOnly) return;
+    const { selectedElements: sel } = useCanvasStore.getState();
+    if (sel.length > 0) useCanvasStore.getState().copyElements(sel);
+  }, [readOnly]);
+
+  const handlePasteElements = useCallback(() => {
+    if (readOnly) return;
+    const newIds = useCanvasStore.getState().pasteElements();
+    const state = useCanvasStore.getState();
+    newIds.forEach((id) => {
+      const el = state.canvasElements.find((e) => e.id === id);
+      if (el) getActiveWebSocket()?.sendElementAdd(el);
+    });
+  }, [readOnly]);
+
   // Context menu: canvas background right-click
   const handleCanvasContextMenu = useCallback((e: React.MouseEvent) => {
     if (readOnly) return;
@@ -770,6 +787,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
               onClose={() => setContextMenu(m => ({ ...m, visible: false }))}
               onDeleteElement={handleVisualizationDelete}
               onDuplicateElement={handleDuplicateElement}
+              onCopyElements={handleCopyElements}
+              onPasteElements={handlePasteElements}
+              hasClipboard={hasClipboard}
               onPlaceElement={handleContextMenuPlace}
               onFitToScreen={handleFitToScreen}
             />
