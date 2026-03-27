@@ -134,6 +134,16 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const setSelectedTool = useCanvasStore(s => s.setSelectedTool);
   const addElement = useCanvasStore(s => s.addElement);
   const updateViewport = useCanvasStore(s => s.updateViewport);
+  const storeSelectedElements = useCanvasStore(s => s.selectedElements);
+
+  // Sync selectedVizId with store selection — when the canvas store clears all selections
+  // (e.g. via rubber-band deselect), also clear the local selectedVizId so the element
+  // loses its visual selection state.
+  useEffect(() => {
+    if (storeSelectedElements.length === 0) {
+      setSelectedVizId(null);
+    }
+  }, [storeSelectedElements]);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
 
   // Theme transition hook
@@ -499,7 +509,10 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   }, [selectedVizId]);
 
   const handleDeleteSelected = useCallback(() => {
-    if (selectedVizId) {
+    const { selectedElements } = useCanvasStore.getState();
+    if (selectedElements.length > 0) {
+      selectedElements.forEach(id => handleVisualizationDelete(id));
+    } else if (selectedVizId) {
       handleVisualizationDelete(selectedVizId);
     }
   }, [selectedVizId, handleVisualizationDelete]);

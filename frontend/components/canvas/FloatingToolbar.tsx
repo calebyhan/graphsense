@@ -48,19 +48,22 @@ export default function FloatingToolbar({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const toolbarRef = React.useRef<HTMLDivElement>(null);
 
   // Initialize toolbar position at bottom center
   React.useEffect(() => {
     const updatePosition = () => {
+      const w = toolbarRef.current?.offsetWidth ?? 0;
       setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 830, window.innerWidth / 2 - 415)),
+        x: Math.max(0, Math.min(window.innerWidth - w, window.innerWidth / 2 - w / 2)),
         y: Math.max(0, Math.min(window.innerHeight - 80, window.innerHeight - 100)),
       });
     };
 
-    updatePosition();
+    // Small delay so the DOM has rendered and offsetWidth is available
+    const id = setTimeout(updatePosition, 0);
     window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
+    return () => { clearTimeout(id); window.removeEventListener('resize', updatePosition); };
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -76,7 +79,8 @@ export default function FloatingToolbar({
 
   const handleMouseMove = React.useCallback((e: MouseEvent) => {
     if (isDragging) {
-      const newX = Math.max(0, Math.min(window.innerWidth - 830, e.clientX - dragStart.x));
+      const w = toolbarRef.current?.offsetWidth ?? 0;
+      const newX = Math.max(0, Math.min(window.innerWidth - w, e.clientX - dragStart.x));
       const newY = Math.max(0, Math.min(window.innerHeight - 80, e.clientY - dragStart.y));
       setPosition({ x: newX, y: newY });
     }
@@ -152,11 +156,11 @@ export default function FloatingToolbar({
 
   return (
     <div
+      ref={toolbarRef}
       className="fixed z-50 animate-fade-in"
       style={{
         left: position.x,
         top: position.y,
-        width: '830px'
       }}
       onMouseDown={handleMouseDown}
     >

@@ -63,6 +63,11 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
   const zoomAnimationId = useRef<number | undefined>(undefined);
   const zoomIndicatorTimeout = useRef<number | undefined>(undefined);
 
+  // Drag-select (rubber-band) state
+  const dragSelectStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragSelectCurrentRef = useRef<{ x: number; y: number } | null>(null);
+  const [dragSelectRect, setDragSelectRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
   const {
     viewport,
     updateViewport,
@@ -102,9 +107,16 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
       isDragging.current = true;
       lastMousePos.current = { x: e.clientX, y: e.clientY };
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
-    } else if (selectedTool === 'pointer' && e.target === e.currentTarget) {
-      const { clearSelection } = useCanvasStore.getState();
-      clearSelection();
+    } else if (selectedTool === 'pointer') {
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (containerRect) {
+        const pos = { x: e.clientX - containerRect.left, y: e.clientY - containerRect.top };
+        dragSelectStartRef.current = pos;
+        dragSelectCurrentRef.current = pos;
+        // Header clicks call stopPropagation so they never reach here.
+        // Anything reaching us under pointer tool (background or element content) is valid
+        // for rubber-band and deselect.
+      }
     }
 
     if (onCanvasClick && e.target === e.currentTarget) {
@@ -136,6 +148,23 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
       }
     }
 
+    // Update rubber-band selection rect
+    if (dragSelectStartRef.current) {
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (containerRect) {
+        const cx = e.clientX - containerRect.left;
+        const cy = e.clientY - containerRect.top;
+        dragSelectCurrentRef.current = { x: cx, y: cy };
+        const start = dragSelectStartRef.current;
+        setDragSelectRect({
+          x: Math.min(start.x, cx),
+          y: Math.min(start.y, cy),
+          width: Math.abs(cx - start.x),
+          height: Math.abs(cy - start.y),
+        });
+      }
+    }
+
     if (!isDragging.current) return;
 
     const deltaX = e.clientX - lastMousePos.current.x;
@@ -160,6 +189,53 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
     isDragging.current = false;
     if (canvasRef.current) {
       canvasRef.current.style.cursor = selectedTool === 'drag' ? 'grab' : 'default';
+    }
+
+    if (dragSelectStartRef.current) {
+      const start = dragSelectStartRef.current;
+      const current = dragSelectCurrentRef.current ?? start;
+      const w = Math.abs(current.x - start.x);
+      const h = Math.abs(current.y - start.y);
+
+      if (w > 4 || h > 4) {
+        // Convert screen rect to world coords and select intersecting elements
+        const vp = viewportRef.current;
+        const el = canvasRef.current;
+        if (el) {
+          const cW = el.clientWidth;
+          const cH = el.clientHeight;
+          const toWorld = (sx: number, sy: number) => ({
+            x: (sx - cW / 2 - vp.x) / vp.zoom,
+            y: (sy - cH / 2 - vp.y) / vp.zoom,
+          });
+          const wx1 = Math.min(start.x, current.x);
+          const wy1 = Math.min(start.y, current.y);
+          const wx2 = Math.max(start.x, current.x);
+          const wy2 = Math.max(start.y, current.y);
+          const tl = toWorld(wx1, wy1);
+          const br = toWorld(wx2, wy2);
+
+          const { canvasElements: els, selectElements } = useCanvasStore.getState();
+          const hit = els.filter(ce =>
+            ce.position.x < br.x &&
+            ce.position.x + ce.size.width > tl.x &&
+            ce.position.y < br.y &&
+            ce.position.y + ce.size.height > tl.y
+          );
+          if (hit.length > 0) {
+            selectElements(hit.map(ce => ce.id));
+          } else {
+            useCanvasStore.getState().clearSelection();
+          }
+        }
+      } else {
+        // Plain click (no significant drag) anywhere on canvas — clear selection
+        useCanvasStore.getState().clearSelection();
+      }
+
+      dragSelectStartRef.current = null;
+      dragSelectCurrentRef.current = null;
+      setDragSelectRect(null);
     }
   }, [selectedTool]);
 
@@ -685,6 +761,19 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
         {children}
         <ElementLockOverlay />
       </div>
+
+      {/* Drag-select rubber-band rect */}
+      {dragSelectRect && dragSelectRect.width > 4 && (
+        <div
+          className="absolute pointer-events-none border border-blue-500 bg-blue-500/10"
+          style={{
+            left: dragSelectRect.x,
+            top: dragSelectRect.y,
+            width: dragSelectRect.width,
+            height: dragSelectRect.height,
+          }}
+        />
+      )}
 
       {/* Collaborator cursors — rendered outside canvas transform (screen-space) */}
       <CollaboratorCursors />

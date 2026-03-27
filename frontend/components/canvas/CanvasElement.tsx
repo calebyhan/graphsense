@@ -249,7 +249,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
   return (
     <div
       ref={elementRef}
-      className={`absolute bg-white rounded-lg shadow-lg border-2 canvas-element-optimized ${isDragging || isResizing ? 'performance-mode' : 'smooth-transition'} ${
+      className={`absolute bg-white rounded-lg shadow-lg border-2 overflow-hidden canvas-element-optimized ${isDragging || isResizing ? 'performance-mode' : 'smooth-transition'} ${
         isActuallySelected ? 'border-blue-500 shadow-xl' : lockedByOther ? 'border-orange-400' : 'border-gray-200'
       } ${lockedByOther ? 'cursor-not-allowed' : isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
       style={{
