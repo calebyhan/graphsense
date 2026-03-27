@@ -108,14 +108,16 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
       lastMousePos.current = { x: e.clientX, y: e.clientY };
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
     } else if (selectedTool === 'pointer') {
-      const containerRect = canvasRef.current?.getBoundingClientRect();
-      if (containerRect) {
-        const pos = { x: e.clientX - containerRect.left, y: e.clientY - containerRect.top };
-        dragSelectStartRef.current = pos;
-        dragSelectCurrentRef.current = pos;
-        // Header clicks call stopPropagation so they never reach here.
-        // Anything reaching us under pointer tool (background or element content) is valid
-        // for rubber-band and deselect.
+      // Skip drag-select/deselect when clicking interactive controls inside elements
+      const target = e.target as HTMLElement;
+      const isInteractive = !!target.closest('button, input, select, textarea, a, [role="button"]');
+      if (!isInteractive) {
+        const containerRect = canvasRef.current?.getBoundingClientRect();
+        if (containerRect) {
+          const pos = { x: e.clientX - containerRect.left, y: e.clientY - containerRect.top };
+          dragSelectStartRef.current = pos;
+          dragSelectCurrentRef.current = pos;
+        }
       }
     }
 

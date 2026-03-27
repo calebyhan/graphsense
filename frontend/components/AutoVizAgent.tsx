@@ -136,14 +136,13 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const updateViewport = useCanvasStore(s => s.updateViewport);
   const storeSelectedElements = useCanvasStore(s => s.selectedElements);
 
-  // Sync selectedVizId with store selection — when the canvas store clears all selections
-  // (e.g. via rubber-band deselect), also clear the local selectedVizId so the element
-  // loses its visual selection state.
+  // Sync selectedVizId with store selection. Clear it when the store no longer includes it
+  // (covers both rubber-band deselect and rubber-band switching to a different element set).
   useEffect(() => {
-    if (storeSelectedElements.length === 0) {
+    if (selectedVizId !== null && !storeSelectedElements.includes(selectedVizId)) {
       setSelectedVizId(null);
     }
-  }, [storeSelectedElements]);
+  }, [storeSelectedElements, selectedVizId]);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
 
   // Theme transition hook
@@ -540,23 +539,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     setSelectedTool('pointer');
   }, [readOnly, selectedDataset, addElement, setSelectedTool]);
 
-  // Fit all elements into the viewport
-  const handleFitToScreen = useCallback(() => {
-    const { canvasElements: els, canvasContainerSize: cSize, updateViewport: updVp } = useCanvasStore.getState();
-    if (els.length === 0) { updVp({ x: 0, y: 0, zoom: 1 }); return; }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const el of els) {
-      minX = Math.min(minX, el.position.x);
-      minY = Math.min(minY, el.position.y);
-      maxX = Math.max(maxX, el.position.x + el.size.width);
-      maxY = Math.max(maxY, el.position.y + el.size.height);
-    }
-    const padding = 50;
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const fitZoom = Math.min(cSize.width / (maxX - minX + padding * 2), cSize.height / (maxY - minY + padding * 2), 3);
-    updVp({ x: -centerX * Math.max(0.1, fitZoom), y: -centerY * Math.max(0.1, fitZoom), zoom: Math.max(0.1, fitZoom) });
-  }, []);
+  const handleFitToScreen = useCallback(() => useCanvasStore.getState().fitToScreen(), []);
 
   // Duplicate an element with a +20px offset
   const handleDuplicateElement = useCallback((id: string) => {

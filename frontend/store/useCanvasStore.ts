@@ -92,6 +92,7 @@ interface CanvasStore {
   sendToBack: (id: string) => void;
 
   // Utility actions
+  fitToScreen: () => void;
   getElementById: (id: string) => CanvasElement | undefined;
   getSelectedElements: () => CanvasElement[];
   getViewportCenterPosition: () => { x: number; y: number };
@@ -337,6 +338,24 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const holderId = elementLocks[elementId];
     if (!holderId) return undefined;
     return collaborators.find((c) => c.userId === holderId);
+  },
+
+  fitToScreen: () => {
+    const { canvasElements: els, canvasContainerSize: cSize } = get();
+    if (els.length === 0) { set({ viewport: { x: 0, y: 0, zoom: 1 } }); return; }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of els) {
+      minX = Math.min(minX, el.position.x);
+      minY = Math.min(minY, el.position.y);
+      maxX = Math.max(maxX, el.position.x + el.size.width);
+      maxY = Math.max(maxY, el.position.y + el.size.height);
+    }
+    const padding = 50;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const fitZoom = Math.min(cSize.width / (maxX - minX + padding * 2), cSize.height / (maxY - minY + padding * 2), 3);
+    const targetZoom = Math.max(0.1, fitZoom);
+    set({ viewport: { x: -centerX * targetZoom, y: -centerY * targetZoom, zoom: targetZoom } });
   },
 
   getElementById: (id) => {

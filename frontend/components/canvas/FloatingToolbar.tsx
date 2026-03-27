@@ -44,7 +44,7 @@ export default function FloatingToolbar({
   onDeleteSelected,
   hasSelection = false
 }: FloatingToolbarProps) {
-  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements, resetViewport, canvasContainerSize } = useCanvasStore();
+  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, resetViewport } = useCanvasStore();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -123,36 +123,7 @@ export default function FloatingToolbar({
     updateViewport({ ...viewport, zoom: newZoom });
   };
 
-  const handleFitToScreen = () => {
-    if (canvasElements.length === 0) {
-      updateViewport({ x: 0, y: 0, zoom: 1 });
-      return;
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    canvasElements.forEach(element => {
-      const left = element.position.x;
-      const top = element.position.y;
-      const right = element.position.x + element.size.width;
-      const bottom = element.position.y + element.size.height;
-      minX = Math.min(minX, left);
-      minY = Math.min(minY, top);
-      maxX = Math.max(maxX, right);
-      maxY = Math.max(maxY, bottom);
-    });
-
-    const padding = 50;
-    const boundingWidth = maxX - minX + padding * 2;
-    const boundingHeight = maxY - minY + padding * 2;
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const { width: cW, height: cH } = canvasContainerSize;
-    const fitZoom = Math.min(cW / boundingWidth, cH / boundingHeight, 3);
-    const targetZoom = Math.max(0.1, fitZoom);
-    const targetX = -centerX * targetZoom;
-    const targetY = -centerY * targetZoom;
-    updateViewport({ x: targetX, y: targetY, zoom: targetZoom });
-  };
+  const handleFitToScreen = () => useCanvasStore.getState().fitToScreen();
 
   return (
     <div
