@@ -1,60 +1,72 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useCanvasStore } from '@/store/useCanvasStore';
 import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 
 export function useKeyboardShortcuts(isReadOnly = false) {
-  const { setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection } = useCanvasStore();
-
-  // Read fresh state inside the handler to avoid stale closures
-  const handleFitToScreen = useCallback(() => {
-    const { canvasElements, canvasContainerSize, updateViewport } = useCanvasStore.getState();
-    if (canvasElements.length === 0) {
-      updateViewport({ x: 0, y: 0, zoom: 1 });
-      return;
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const el of canvasElements) {
-      minX = Math.min(minX, el.position.x);
-      minY = Math.min(minY, el.position.y);
-      maxX = Math.max(maxX, el.position.x + el.size.width);
-      maxY = Math.max(maxY, el.position.y + el.size.height);
-    }
-
-    const padding = 50;
-    const boundingWidth = maxX - minX + padding * 2;
-    const boundingHeight = maxY - minY + padding * 2;
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const { width: cW, height: cH } = canvasContainerSize;
-    const fitZoom = Math.min(cW / boundingWidth, cH / boundingHeight, 3);
-    const targetZoom = Math.max(0.1, fitZoom);
-    updateViewport({ x: -centerX * targetZoom, y: -centerY * targetZoom, zoom: targetZoom });
-  }, []);
+  const { setSelectedTool, resetViewport, clearSelection } = useCanvasStore();
 
   useEffect(() => {
-    // Only add event listeners on the client side
     if (typeof window === 'undefined') return;
 
     const handleKeyPress = (e: KeyboardEvent) => {
-      // Ignore if typing in input/textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
         return;
       }
 
-      // Tool shortcuts
+      // Ctrl/Meta shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'c':
+            if (!isReadOnly) {
+              const sel = useCanvasStore.getState().selectedElements;
+              if (sel.length > 0) {
+                useCanvasStore.getState().copyElements(sel);
+                e.preventDefault();
+              }
+            }
+            break;
+          case 'v':
+            if (!isReadOnly) {
+              const newIds = useCanvasStore.getState().pasteElements();
+              if (newIds.length > 0) {
+                const { canvasElements } = useCanvasStore.getState();
+                newIds.forEach((id) => {
+                  const el = canvasElements.find((e) => e.id === id);
+                  if (!el) {
+                    console.error('[useKeyboardShortcuts] Ctrl+V: pasted element missing from store', { id });
+                    return;
+                  }
+                  getActiveWebSocket()?.sendElementAdd(el);
+                });
+              }
+              e.preventDefault();
+            }
+            break;
+          // Zoom/fit handled by InfiniteCanvas which has correct viewport math
+        }
+        return;
+      }
+
       switch (e.key.toLowerCase()) {
         case 'v':
-          if (!e.ctrlKey && !e.metaKey) {
-            setSelectedTool('pointer');
-            e.preventDefault();
-          }
+          setSelectedTool('pointer');
+          e.preventDefault();
           break;
         case 'h':
-          if (!e.ctrlKey && !e.metaKey) {
-            setSelectedTool('drag');
-            e.preventDefault();
-          }
+          setSelectedTool('drag');
+          e.preventDefault();
+          break;
+        case 'c':
+          setSelectedTool('chart');
+          e.preventDefault();
+          break;
+        case 'd':
+          setSelectedTool('dataset');
+          e.preventDefault();
           break;
         case 't':
           if (e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -62,12 +74,6 @@ export function useKeyboardShortcuts(isReadOnly = false) {
             e.preventDefault();
           } else if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
             setSelectedTool('table');
-            e.preventDefault();
-          }
-          break;
-        case 'c':
-          if (!e.ctrlKey && !e.metaKey) {
-            setSelectedTool('chart');
             e.preventDefault();
           }
           break;
@@ -83,12 +89,7 @@ export function useKeyboardShortcuts(isReadOnly = false) {
             e.preventDefault();
           }
           break;
-        case 'f':
-          if (!e.ctrlKey && !e.metaKey) {
-            handleFitToScreen();
-            e.preventDefault();
-          }
-          break;
+        // 'f' / Ctrl+0 (zoom fit) are handled by InfiniteCanvas which has live container dims
         // Ctrl+=/+, Ctrl+-, Ctrl+0 (zoom in/out/fit) are handled by InfiniteCanvas
         // with pan-compensated zooming — do not duplicate here.
         case ' ':
@@ -96,15 +97,20 @@ export function useKeyboardShortcuts(isReadOnly = false) {
           e.preventDefault();
           break;
         case 'delete':
-        case 'backspace':
-          if (!isReadOnly && selectedElements.length > 0) {
-            selectedElements.forEach(id => {
-              getActiveWebSocket()?.sendElementRemove(id);
-              removeElement(id);
-            });
-            e.preventDefault();
+        case 'backspace': {
+          if (!isReadOnly) {
+            // Read fresh state inside the handler to avoid stale closure issues
+            const { selectedElements, removeElement } = useCanvasStore.getState();
+            if (selectedElements.length > 0) {
+              selectedElements.forEach(id => {
+                getActiveWebSocket()?.sendElementRemove(id);
+                removeElement(id);
+              });
+              e.preventDefault();
+            }
           }
           break;
+        }
         case 'escape':
           clearSelection();
           setSelectedTool('pointer');
@@ -115,5 +121,5 @@ export function useKeyboardShortcuts(isReadOnly = false) {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [setSelectedTool, resetViewport, selectedElements, removeElement, clearSelection, handleFitToScreen, isReadOnly]);
+  }, [setSelectedTool, resetViewport, clearSelection, isReadOnly]);
 }

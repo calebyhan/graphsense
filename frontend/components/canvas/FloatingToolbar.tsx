@@ -9,12 +9,13 @@ import {
   GripVertical,
   Database,
   BarChart3,
-  Table2,
+  Table,
   Map,
   StickyNote,
   ZoomIn,
   ZoomOut,
-  Maximize
+  Maximize,
+  Crosshair,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -31,10 +32,10 @@ const tools = [
   { id: 'pointer' as ToolType, name: 'Select', icon: MousePointer, shortcut: 'V' },
   { id: 'drag' as ToolType, name: 'Hand', icon: Hand, shortcut: 'H' },
   { id: 'chart' as ToolType, name: 'Chart', icon: BarChart3, shortcut: 'C' },
-  { id: 'dataset' as ToolType, name: 'Dataset', icon: Database, shortcut: '' },
-  { id: 'table' as ToolType, name: 'Table', icon: Table2, shortcut: 'T' },
-  { id: 'map' as ToolType, name: 'Map', icon: Map, shortcut: 'M' },
+  { id: 'dataset' as ToolType, name: 'Dataset', icon: Database, shortcut: 'D' },
+  { id: 'table' as ToolType, name: 'Table', icon: Table, shortcut: 'T' },
   { id: 'text' as ToolType, name: 'Text', icon: Type, shortcut: 'Shift+T' },
+  { id: 'map' as ToolType, name: 'Map', icon: Map, shortcut: 'M' },
   { id: 'note' as ToolType, name: 'Note', icon: StickyNote, shortcut: 'N' },
 ];
 
@@ -43,23 +44,26 @@ export default function FloatingToolbar({
   onDeleteSelected,
   hasSelection = false
 }: FloatingToolbarProps) {
-  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, canvasElements, canvasContainerSize } = useCanvasStore();
+  const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, resetViewport } = useCanvasStore();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const toolbarRef = React.useRef<HTMLDivElement>(null);
 
   // Initialize toolbar position at bottom center
   React.useEffect(() => {
     const updatePosition = () => {
+      const w = toolbarRef.current?.offsetWidth ?? 0;
       setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 750, window.innerWidth / 2 - 375)),
+        x: Math.max(0, Math.min(window.innerWidth - w, window.innerWidth / 2 - w / 2)),
         y: Math.max(0, Math.min(window.innerHeight - 80, window.innerHeight - 100)),
       });
     };
 
-    updatePosition();
+    // Small delay so the DOM has rendered and offsetWidth is available
+    const id = setTimeout(updatePosition, 0);
     window.addEventListener('resize', updatePosition);
-    return () => window.removeEventListener('resize', updatePosition);
+    return () => { clearTimeout(id); window.removeEventListener('resize', updatePosition); };
   }, []);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -75,7 +79,8 @@ export default function FloatingToolbar({
 
   const handleMouseMove = React.useCallback((e: MouseEvent) => {
     if (isDragging) {
-      const newX = Math.max(0, Math.min(window.innerWidth - 750, e.clientX - dragStart.x));
+      const w = toolbarRef.current?.offsetWidth ?? 0;
+      const newX = Math.max(0, Math.min(window.innerWidth - w, e.clientX - dragStart.x));
       const newY = Math.max(0, Math.min(window.innerHeight - 80, e.clientY - dragStart.y));
       setPosition({ x: newX, y: newY });
     }
@@ -109,53 +114,29 @@ export default function FloatingToolbar({
   };
 
   const handleZoomIn = () => {
-    const newZoom = Math.min(5, viewport.zoom + 0.1);
-    updateViewport({ ...viewport, zoom: newZoom });
+    const vp = useCanvasStore.getState().viewport;
+    const newZoom = Math.min(5, vp.zoom + 0.1);
+    // Scale pan proportionally to keep the world origin pinned at the same screen position
+    const scale = newZoom / vp.zoom;
+    updateViewport({ x: vp.x * scale, y: vp.y * scale, zoom: newZoom });
   };
 
   const handleZoomOut = () => {
-    const newZoom = Math.max(0.1, viewport.zoom - 0.1);
-    updateViewport({ ...viewport, zoom: newZoom });
+    const vp = useCanvasStore.getState().viewport;
+    const newZoom = Math.max(0.1, vp.zoom - 0.1);
+    const scale = newZoom / vp.zoom;
+    updateViewport({ x: vp.x * scale, y: vp.y * scale, zoom: newZoom });
   };
 
-  const handleFitToScreen = () => {
-    if (canvasElements.length === 0) {
-      updateViewport({ x: 0, y: 0, zoom: 1 });
-      return;
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    canvasElements.forEach(element => {
-      const left = element.position.x;
-      const top = element.position.y;
-      const right = element.position.x + element.size.width;
-      const bottom = element.position.y + element.size.height;
-      minX = Math.min(minX, left);
-      minY = Math.min(minY, top);
-      maxX = Math.max(maxX, right);
-      maxY = Math.max(maxY, bottom);
-    });
-
-    const padding = 50;
-    const boundingWidth = maxX - minX + padding * 2;
-    const boundingHeight = maxY - minY + padding * 2;
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const { width: cW, height: cH } = canvasContainerSize;
-    const fitZoom = Math.min(cW / boundingWidth, cH / boundingHeight, 3);
-    const targetZoom = Math.max(0.1, fitZoom);
-    const targetX = -centerX * targetZoom;
-    const targetY = -centerY * targetZoom;
-    updateViewport({ x: targetX, y: targetY, zoom: targetZoom });
-  };
+  const handleFitToScreen = () => useCanvasStore.getState().fitToScreen();
 
   return (
     <div
+      ref={toolbarRef}
       className="fixed z-50 animate-fade-in"
       style={{
         left: position.x,
         top: position.y,
-        width: '750px'
       }}
       onMouseDown={handleMouseDown}
     >
@@ -221,9 +202,19 @@ export default function FloatingToolbar({
               size="sm"
               onClick={handleFitToScreen}
               className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
-              title="Fit to Screen (Ctrl+0)"
+              title="Fit to Screen (Ctrl+0 / F)"
             >
               <Maximize className="w-5 h-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetViewport}
+              className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+              title="Go to Origin (Space)"
+            >
+              <Crosshair className="w-5 h-5" />
             </Button>
           </div>
 

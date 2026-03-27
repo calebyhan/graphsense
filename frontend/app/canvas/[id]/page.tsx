@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCanvasPermission } from '@/hooks/useCanvasPermission';
 import { useRealtimeCanvas } from '@/hooks/useRealtimeCanvas';
 import AutoVizAgent from '@/components/AutoVizAgent';
-import DataLoader from '@/components/canvas/DataLoader';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 
 function CanvasContent() {
@@ -79,7 +78,6 @@ function CanvasContent() {
       )}
 
       <AutoVizAgent readOnly={isReadOnly} emitCursor={emitCursor} canvasId={id} isOwner={isOwner} />
-      <DataLoader readOnly={isReadOnly} />
     </>
   );
 }

@@ -85,7 +85,19 @@ interface CanvasStore {
   isElementLockedByOther: (elementId: string) => boolean;
   getElementLockHolder: (elementId: string) => CollaboratorState | undefined;
 
+  // Z-order actions
+  bringForward: (id: string) => void;
+  sendBackward: (id: string) => void;
+  bringToFront: (id: string) => void;
+  sendToBack: (id: string) => void;
+
+  // Clipboard actions
+  clipboardElements: CanvasElement[];
+  copyElements: (ids: string[]) => void;
+  pasteElements: () => string[];
+
   // Utility actions
+  fitToScreen: () => void;
   getElementById: (id: string) => CanvasElement | undefined;
   getSelectedElements: () => CanvasElement[];
   getViewportCenterPosition: () => { x: number; y: number };
@@ -98,6 +110,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selectedTool: 'pointer',
   canvasElements: [],
   selectedElements: [],
+  clipboardElements: [],
 
   // Collaboration initial state
   collaborators: [],
@@ -120,7 +133,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const newElement: CanvasElement = {
       ...element,
       id,
-      zIndex: element.zIndex || get().canvasElements.length,
+      zIndex: element.zIndex ?? get().canvasElements.reduce((m, el) => Math.max(m, el.zIndex ?? 0), -1) + 1,
     };
     set((state) => {
       const canvasElements = [...state.canvasElements, newElement];
@@ -146,6 +159,72 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         selectedElements: state.selectedElements.filter((selectedId) => selectedId !== id),
         canvasBounds: computeCanvasBounds(canvasElements),
       };
+    });
+  },
+
+  bringForward: (id) => {
+    set((state) => {
+      const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+      const idx = sorted.findIndex((el) => el.id === id);
+      if (idx === -1 || idx === sorted.length - 1) return state;
+      // Swap only target and its immediate neighbor above — no full renormalization
+      const targetZ = sorted[idx].zIndex ?? 0;
+      const neighborZ = sorted[idx + 1].zIndex ?? 0;
+      const neighborId = sorted[idx + 1].id;
+      const canvasElements = state.canvasElements.map((el) => {
+        if (el.id === id) return { ...el, zIndex: neighborZ };
+        if (el.id === neighborId) return { ...el, zIndex: targetZ };
+        return el;
+      });
+      return { canvasElements };
+    });
+  },
+
+  sendBackward: (id) => {
+    set((state) => {
+      const sorted = [...state.canvasElements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+      const idx = sorted.findIndex((el) => el.id === id);
+      if (idx <= 0) return state;
+      // Swap only target and its immediate neighbor below — no full renormalization
+      const targetZ = sorted[idx].zIndex ?? 0;
+      const neighborZ = sorted[idx - 1].zIndex ?? 0;
+      const neighborId = sorted[idx - 1].id;
+      const canvasElements = state.canvasElements.map((el) => {
+        if (el.id === id) return { ...el, zIndex: neighborZ };
+        if (el.id === neighborId) return { ...el, zIndex: targetZ };
+        return el;
+      });
+      return { canvasElements };
+    });
+  },
+
+  bringToFront: (id) => {
+    set((state) => {
+      if (state.canvasElements.length === 0) return state;
+      if (!state.canvasElements.some((el) => el.id === id)) {
+        console.warn('[useCanvasStore] bringToFront: element not found', id);
+        return state;
+      }
+      const maxZ = state.canvasElements.reduce((m, el) => Math.max(m, el.zIndex ?? 0), 0);
+      const canvasElements = state.canvasElements.map((el) =>
+        el.id === id ? { ...el, zIndex: maxZ + 1 } : el
+      );
+      return { canvasElements };
+    });
+  },
+
+  sendToBack: (id) => {
+    set((state) => {
+      if (state.canvasElements.length === 0) return state;
+      if (!state.canvasElements.some((el) => el.id === id)) {
+        console.warn('[useCanvasStore] sendToBack: element not found', id);
+        return state;
+      }
+      const minZ = state.canvasElements.reduce((m, el) => Math.min(m, el.zIndex ?? Infinity), Infinity);
+      const canvasElements = state.canvasElements.map((el) =>
+        el.id === id ? { ...el, zIndex: minZ - 1 } : el
+      );
+      return { canvasElements };
     });
   },
 
@@ -275,6 +354,68 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const holderId = elementLocks[elementId];
     if (!holderId) return undefined;
     return collaborators.find((c) => c.userId === holderId);
+  },
+
+  copyElements: (ids) => {
+    const els = get().canvasElements.filter((el) => ids.includes(el.id));
+    const missing = ids.filter((id) => !els.some((el) => el.id === id));
+    if (missing.length > 0) {
+      console.warn('[useCanvasStore] copyElements: some element IDs not found', missing);
+    }
+    // Guard: don't overwrite a valid clipboard with an empty result from stale IDs
+    if (els.length === 0) return;
+    // Deep-clone at copy time so clipboard is a snapshot independent of subsequent mutations
+    set({ clipboardElements: els.map((el) => structuredClone(el)) });
+  },
+
+  pasteElements: () => {
+    const { clipboardElements } = get();
+    if (clipboardElements.length === 0) return [];
+    const OFFSET = 24;
+    const newEls: CanvasElement[] = clipboardElements.map((el) => ({
+      ...el,
+      id: crypto.randomUUID(),
+      position: { x: el.position.x + OFFSET, y: el.position.y + OFFSET },
+      // data was already deep-cloned at copy time; clone again so each paste is independent
+      data: el.data != null ? structuredClone(el.data) : el.data,
+    }));
+    const newIds = newEls.map((el) => el.id);
+    set((state) => {
+      // Use actual max zIndex rather than array length — these diverge after bringToFront/sendToBack
+      const maxZ = state.canvasElements.reduce((m, el) => Math.max(m, el.zIndex ?? 0), -1);
+      const canvasElements = [
+        ...state.canvasElements.map((el) => ({ ...el, selected: false })),
+        ...newEls.map((el, i) => ({ ...el, zIndex: maxZ + 1 + i, selected: true })),
+      ];
+      return { canvasElements, canvasBounds: computeCanvasBounds(canvasElements), selectedElements: newIds };
+    });
+    return newIds;
+  },
+
+  fitToScreen: () => {
+    const { canvasElements: els, canvasContainerSize: cSize } = get();
+    if (els.length === 0) { set({ viewport: { x: 0, y: 0, zoom: 1 } }); return; }
+    if (cSize.width === 0 || cSize.height === 0) {
+      console.warn('[useCanvasStore] fitToScreen: container size not yet measured, skipping fit');
+      return;
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of els) {
+      minX = Math.min(minX, el.position.x);
+      minY = Math.min(minY, el.position.y);
+      maxX = Math.max(maxX, el.position.x + el.size.width);
+      maxY = Math.max(maxY, el.position.y + el.size.height);
+    }
+    const padding = 50;
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    // Use the same dynamic minZoom formula as AutoVizAgent so toolbar/keyboard fits match the F-key fit.
+    const contentWidth = Math.max(maxX - minX, 1);
+    const contentHeight = Math.max(maxY - minY, 1);
+    const dynamicMinZoom = Math.max(0.05, Math.min(cSize.width / contentWidth, cSize.height / contentHeight));
+    const fitZoom = Math.min(cSize.width / (contentWidth + padding * 2), cSize.height / (contentHeight + padding * 2), 3);
+    const targetZoom = Math.max(dynamicMinZoom, fitZoom);
+    set({ viewport: { x: -centerX * targetZoom, y: -centerY * targetZoom, zoom: targetZoom } });
   },
 
   getElementById: (id) => {

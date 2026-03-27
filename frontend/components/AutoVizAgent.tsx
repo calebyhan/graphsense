@@ -7,7 +7,7 @@ import { DataPanel } from '@/components/panels/DataPanel';
 import { VisualizationPanel } from '@/components/panels/VisualizationPanel';
 import { TopNavigation } from '@/components/navigation/TopNavigation';
 
-import { useCanvasStore } from '@/store/useCanvasStore';
+import { useCanvasStore, ToolType } from '@/store/useCanvasStore';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { getActiveWebSocket } from '@/lib/realtime/canvasWebSocket';
 import { useThemeTransition } from '@/hooks/useThemeTransition';
@@ -17,10 +17,11 @@ import CanvasElement from '@/components/canvas/CanvasElement';
 import ChartCard from '@/components/canvas/elements/ChartCard';
 import DatasetCard from '@/components/canvas/elements/DatasetCard';
 import MapCard from '@/components/canvas/elements/MapCard';
-import TableCard from '@/components/canvas/elements/TableCard';
 import TextCard from '@/components/canvas/elements/TextCard';
+import TableCard from '@/components/canvas/elements/TableCard';
 import NoteCard from '@/components/canvas/elements/NoteCard';
 import ConnectionLines from '@/components/canvas/ConnectionLines';
+import ContextMenu, { ContextMenuState } from '@/components/canvas/ContextMenu';
 import { canvasAPI } from '@/lib/api/backendClient';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -130,9 +131,19 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const canvasBounds = useCanvasStore(s => s.canvasBounds);
   const canvasContainerSize = useCanvasStore(s => s.canvasContainerSize);
   const selectedTool = useCanvasStore(s => s.selectedTool);
-  const addElement = useCanvasStore(s => s.addElement);
   const setSelectedTool = useCanvasStore(s => s.setSelectedTool);
+  const addElement = useCanvasStore(s => s.addElement);
   const updateViewport = useCanvasStore(s => s.updateViewport);
+  const storeSelectedElements = useCanvasStore(s => s.selectedElements);
+  const hasClipboard = useCanvasStore(s => s.clipboardElements.length > 0);
+
+  // Sync selectedVizId with store selection. Clear it when the store no longer includes it
+  // (covers both rubber-band deselect and rubber-band switching to a different element set).
+  useEffect(() => {
+    if (selectedVizId !== null && !storeSelectedElements.includes(selectedVizId)) {
+      setSelectedVizId(null);
+    }
+  }, [storeSelectedElements, selectedVizId]);
   const { rawData, dataProfile, recommendations: storeRecommendations, agentStates, isLoading, startAnalysis } = useAnalysisStore();
 
   // Theme transition hook
@@ -146,6 +157,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const hasFitOnLoadRef = useRef(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false });
 
   // Reset autosave state when canvasId changes (e.g. navigation without full remount)
   useEffect(() => {
@@ -497,7 +509,10 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   }, [selectedVizId]);
 
   const handleDeleteSelected = useCallback(() => {
-    if (selectedVizId) {
+    const { selectedElements } = useCanvasStore.getState();
+    if (selectedElements.length > 0) {
+      selectedElements.forEach(id => handleVisualizationDelete(id));
+    } else if (selectedVizId) {
       handleVisualizationDelete(selectedVizId);
     }
   }, [selectedVizId, handleVisualizationDelete]);
@@ -524,6 +539,94 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     }
     setSelectedTool('pointer');
   }, [readOnly, selectedDataset, addElement, setSelectedTool]);
+
+  const handleFitToScreen = useCallback(() => useCanvasStore.getState().fitToScreen(), []);
+
+  // Duplicate an element with a +20px offset
+  const handleDuplicateElement = useCallback((id: string) => {
+    if (readOnly) return;
+    const el = useCanvasStore.getState().canvasElements.find(e => e.id === id);
+    if (!el) {
+      console.error('[AutoVizAgent] handleDuplicateElement: element not found in store', { id });
+      return;
+    }
+    // Destructure id and zIndex out — addElement assigns a fresh zIndex so the duplicate doesn't
+    // share the same stacking value as the original (which would cause non-deterministic CSS ordering).
+    const { id: _oldId, zIndex: _oldZIndex, selected: _oldSelected, ...elWithoutIdAndZ } = el;
+    const newId = addElement({ ...elWithoutIdAndZ, selected: false, position: { x: el.position.x + 20, y: el.position.y + 20 } });
+    const justAdded = useCanvasStore.getState().canvasElements.find(e => e.id === newId);
+    if (!justAdded) {
+      console.error('[AutoVizAgent] handleDuplicateElement: newly-added element missing from store', { newId });
+      return;
+    }
+    getActiveWebSocket()?.sendElementAdd(justAdded);
+  }, [readOnly, addElement]);
+
+  const handleCopyElements = useCallback((targetId?: string) => {
+    if (readOnly) return;
+    // Prefer the explicitly targeted element (right-click on unselected item); fall back to selection
+    const ids = targetId ? [targetId] : useCanvasStore.getState().selectedElements;
+    if (ids.length > 0) useCanvasStore.getState().copyElements(ids);
+  }, [readOnly]);
+
+  const handlePasteElements = useCallback(() => {
+    if (readOnly) return;
+    const newIds = useCanvasStore.getState().pasteElements();
+    if (newIds.length === 0) return;
+    const { canvasElements } = useCanvasStore.getState();
+    newIds.forEach((id) => {
+      const el = canvasElements.find((e) => e.id === id);
+      if (!el) {
+        console.error('[AutoVizAgent] handlePasteElements: pasted element missing from store', { id });
+        return;
+      }
+      getActiveWebSocket()?.sendElementAdd(el);
+    });
+  }, [readOnly]);
+
+  // Context menu: canvas background right-click
+  const handleCanvasContextMenu = useCallback((e: React.MouseEvent) => {
+    if (readOnly) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const vp = useCanvasStore.getState().viewport;
+    const canvasX = (e.clientX - rect.left - rect.width / 2 - vp.x) / vp.zoom;
+    const canvasY = (e.clientY - rect.top - rect.height / 2 - vp.y) / vp.zoom;
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, elementId: null, canvasX, canvasY });
+  }, [readOnly]);
+
+  // Context menu: element right-click
+  const handleElementContextMenu = useCallback((e: React.MouseEvent, elementId: string) => {
+    if (readOnly) return;
+    setContextMenu({ visible: true, x: e.clientX, y: e.clientY, elementId });
+  }, [readOnly]);
+
+  // Place an element from the context menu at given canvas coords
+  const handleContextMenuPlace = useCallback((tool: ToolType, canvasX: number, canvasY: number) => {
+    if (readOnly) return;
+    if (tool === 'chart') {
+      if (selectedDataset) {
+        const sz = getDefaultSize('chart');
+        createVisualization(selectedDataset, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 });
+      }
+      return;
+    }
+    if (tool === 'dataset') {
+      if (selectedDataset) {
+        const sz = getDefaultSize('dataset', { columns: selectedDataset.columns, rows: Math.min(selectedDataset.rows, 10) });
+        const dsId = addElement({ type: 'dataset', position: { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, size: sz, data: { datasetId: selectedDataset.id, title: selectedDataset.name } });
+        const dsAdded = useCanvasStore.getState().canvasElements.find(el => el.id === dsId);
+        if (dsAdded) getActiveWebSocket()?.sendElementAdd(dsAdded);
+      }
+      return;
+    }
+    if (tool === 'text' || tool === 'table' || tool === 'map' || tool === 'note') {
+      const sz = tool === 'table'
+        ? getDefaultSize('table', { columns: selectedDataset?.columns ?? 4, rows: selectedDataset ? Math.min(selectedDataset.rows, 10) : 8 })
+        : getDefaultSize(tool);
+      handleAddElement(tool, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, sz);
+    }
+  }, [readOnly, selectedDataset, createVisualization, addElement, handleAddElement]);
 
   // Prepare visualization positions for MiniMap - use canvas elements
   const visualizationPositions = canvasElements
@@ -567,6 +670,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
             canvasSize={canvasDimensions}
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
+            onContextMenu={handleCanvasContextMenu}
             onCanvasClick={(e) => {
               // Deselect on canvas background click (not during pan/drag)
               if (selectedTool !== 'drag') setSelectedVizId(null);
@@ -579,15 +683,25 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
 
               if (readOnly) return;
 
-              if (e.detail === 2 && (selectedTool === 'pointer' || selectedTool === 'chart')) {
-                // Double-click to add a chart when a dataset is selected
+              if (e.detail === 2 && selectedTool === 'pointer') {
+                // Double-click in pointer mode to add a chart when a dataset is selected
                 if (selectedDataset) {
                   const sz = getDefaultSize('chart');
                   createVisualization(selectedDataset, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 });
                 }
               } else if (e.detail === 1) {
-                // Single-click to place non-chart elements
-                if (selectedTool === 'text') {
+                // Single-click placement for active placement tools
+                if (selectedTool === 'chart' && selectedDataset) {
+                  const sz = getDefaultSize('chart');
+                  createVisualization(selectedDataset, { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 });
+                  setSelectedTool('pointer');
+                } else if (selectedTool === 'dataset' && selectedDataset) {
+                  const sz = getDefaultSize('dataset', { columns: selectedDataset.columns, rows: Math.min(selectedDataset.rows, 10) });
+                  const dsId = addElement({ type: 'dataset', position: { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, size: sz, data: { datasetId: selectedDataset.id, title: selectedDataset.name } });
+                  const dsAdded = useCanvasStore.getState().canvasElements.find(el => el.id === dsId);
+                  if (dsAdded) getActiveWebSocket()?.sendElementAdd(dsAdded);
+                  setSelectedTool('pointer');
+                } else if (selectedTool === 'text') {
                   const sz = getDefaultSize('text');
                   handleAddElement('text', { x: canvasX - sz.width / 2, y: canvasY - sz.height / 2 }, sz);
                 } else if (selectedTool === 'table') {
@@ -620,6 +734,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
                   isSelected={selectedVizId === element.id}
                   onSelect={() => handleVisualizationSelect(element.id)}
                   onDelete={readOnly ? undefined : () => handleVisualizationDelete(element.id)}
+                  onContextMenu={readOnly ? undefined : handleElementContextMenu}
                 >
                   {element.type === 'chart' && (
                     <ChartCard
@@ -684,6 +799,21 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
               ))}
             </div>
           </InfiniteCanvas>
+
+          {/* Context Menu */}
+          {!readOnly && (
+            <ContextMenu
+              state={contextMenu}
+              onClose={() => setContextMenu({ visible: false })}
+              onDeleteElement={handleVisualizationDelete}
+              onDuplicateElement={handleDuplicateElement}
+              onCopyElements={handleCopyElements}
+              onPasteElements={handlePasteElements}
+              hasClipboard={hasClipboard}
+              onPlaceElement={handleContextMenuPlace}
+              onFitToScreen={handleFitToScreen}
+            />
+          )}
 
           {/* Floating Toolbar — hidden in read-only mode */}
           {!readOnly && (

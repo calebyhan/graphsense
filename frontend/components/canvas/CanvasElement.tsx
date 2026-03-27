@@ -40,9 +40,10 @@ interface CanvasElementProps {
   isSelected?: boolean;
   onSelect?: () => void;
   onDelete?: () => void;
+  onContextMenu?: (e: React.MouseEvent, elementId: string) => void;
 }
 
-export default function CanvasElement({ element, children, isSelected, onSelect, onDelete }: CanvasElementProps) {
+export default function CanvasElement({ element, children, isSelected, onSelect, onDelete, onContextMenu }: CanvasElementProps) {
   const elementRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -116,10 +117,25 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
   const isActuallySelected = isSelected || isStoreSelected;
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only handle primary (left) clicks — right-click opens context menu and must not acquire a lock
+    if (e.button !== 0) return;
     // Don't start dragging if clicking on a button or interactive element
     const target = e.target as HTMLElement;
     if (target.tagName === 'BUTTON' || target.closest('button')) {
       return;
+    }
+
+    // Shift+click anywhere on the element toggles it in/out of the selection
+    if (e.shiftKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      const current = useCanvasStore.getState().selectedElements;
+      if (current.includes(element.id)) {
+        selectElements(current.filter((id) => id !== element.id));
+      } else {
+        selectElements([...current, element.id]);
+      }
+      return; // Don't start a drag on shift+click
     }
 
     if (e.target !== e.currentTarget && !target.closest('.element-header')) {
@@ -261,6 +277,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
         transform: isDragging || isResizing ? 'translateZ(0)' : 'none',
       }}
       onMouseDown={handleMouseDown}
+      onContextMenu={onContextMenu ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e, element.id); } : undefined}
     >
       {/* Element Header */}
       <div className="element-header flex items-center justify-between p-2 bg-gray-50 rounded-t-lg border-b border-gray-200">

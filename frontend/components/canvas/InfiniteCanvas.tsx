@@ -35,6 +35,7 @@ function useOptimizedRaf<T extends (...args: any[]) => void>(func: T): T {
 interface InfiniteCanvasProps {
   children: React.ReactNode;
   onCanvasClick?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   onCursorMove?: (x: number, y: number) => void;
   onDrop?: (e: React.DragEvent) => void;
   onDragOver?: (e: React.DragEvent) => void;
@@ -42,7 +43,7 @@ interface InfiniteCanvasProps {
   canvasSize?: { width: number; height: number };
 }
 
-export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, onDrop, onDragOver, minZoom = 0.1, canvasSize }: InfiniteCanvasProps) {
+export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu, onCursorMove, onDrop, onDragOver, minZoom = 0.1, canvasSize }: InfiniteCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -61,6 +62,13 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
   const [isZooming, setIsZooming] = useState(false);
   const zoomAnimationId = useRef<number | undefined>(undefined);
   const zoomIndicatorTimeout = useRef<number | undefined>(undefined);
+
+  // Drag-select (rubber-band) state
+  const dragSelectStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragSelectCurrentRef = useRef<{ x: number; y: number } | null>(null);
+  const [dragSelectRect, setDragSelectRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  // Track shift key at mousedown so small-click handler can skip clearSelection
+  const shiftAtMouseDownRef = useRef(false);
 
   const {
     viewport,
@@ -101,9 +109,19 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
       isDragging.current = true;
       lastMousePos.current = { x: e.clientX, y: e.clientY };
       if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
-    } else if (selectedTool === 'pointer' && e.target === e.currentTarget) {
-      const { clearSelection } = useCanvasStore.getState();
-      clearSelection();
+    } else if (selectedTool === 'pointer') {
+      // Skip drag-select/deselect when clicking interactive controls inside elements
+      const target = e.target as HTMLElement;
+      const isInteractive = !!target.closest('button, input, select, textarea, a, [role="button"]');
+      shiftAtMouseDownRef.current = e.shiftKey;
+      if (!isInteractive) {
+        const containerRect = canvasRef.current?.getBoundingClientRect();
+        if (containerRect) {
+          const pos = { x: e.clientX - containerRect.left, y: e.clientY - containerRect.top };
+          dragSelectStartRef.current = pos;
+          dragSelectCurrentRef.current = pos;
+        }
+      }
     }
 
     if (onCanvasClick && e.target === e.currentTarget) {
@@ -135,6 +153,23 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
       }
     }
 
+    // Update rubber-band selection rect
+    if (dragSelectStartRef.current) {
+      const containerRect = canvasRef.current?.getBoundingClientRect();
+      if (containerRect) {
+        const cx = e.clientX - containerRect.left;
+        const cy = e.clientY - containerRect.top;
+        dragSelectCurrentRef.current = { x: cx, y: cy };
+        const start = dragSelectStartRef.current;
+        setDragSelectRect({
+          x: Math.min(start.x, cx),
+          y: Math.min(start.y, cy),
+          width: Math.abs(cx - start.x),
+          height: Math.abs(cy - start.y),
+        });
+      }
+    }
+
     if (!isDragging.current) return;
 
     const deltaX = e.clientX - lastMousePos.current.x;
@@ -159,6 +194,56 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
     isDragging.current = false;
     if (canvasRef.current) {
       canvasRef.current.style.cursor = selectedTool === 'drag' ? 'grab' : 'default';
+    }
+
+    if (dragSelectStartRef.current) {
+      const start = dragSelectStartRef.current;
+      const current = dragSelectCurrentRef.current ?? start;
+      const w = Math.abs(current.x - start.x);
+      const h = Math.abs(current.y - start.y);
+
+      if (w > 4 || h > 4) {
+        // Convert screen rect to world coords and select intersecting elements
+        const vp = viewportRef.current;
+        const el = canvasRef.current;
+        if (el) {
+          const cW = el.clientWidth;
+          const cH = el.clientHeight;
+          const toWorld = (sx: number, sy: number) => ({
+            x: (sx - cW / 2 - vp.x) / vp.zoom,
+            y: (sy - cH / 2 - vp.y) / vp.zoom,
+          });
+          const wx1 = Math.min(start.x, current.x);
+          const wy1 = Math.min(start.y, current.y);
+          const wx2 = Math.max(start.x, current.x);
+          const wy2 = Math.max(start.y, current.y);
+          const tl = toWorld(wx1, wy1);
+          const br = toWorld(wx2, wy2);
+
+          const { canvasElements: els, selectElements } = useCanvasStore.getState();
+          const hit = els.filter(ce =>
+            ce.position.x < br.x &&
+            ce.position.x + ce.size.width > tl.x &&
+            ce.position.y < br.y &&
+            ce.position.y + ce.size.height > tl.y
+          );
+          if (hit.length > 0) {
+            selectElements(hit.map(ce => ce.id));
+          } else {
+            useCanvasStore.getState().clearSelection();
+          }
+        }
+      } else {
+        // Plain click (no significant drag) on canvas background — clear selection,
+        // unless shift was held (shift+click on background adds nothing but shouldn't deselect)
+        if (!shiftAtMouseDownRef.current) {
+          useCanvasStore.getState().clearSelection();
+        }
+      }
+
+      dragSelectStartRef.current = null;
+      dragSelectCurrentRef.current = null;
+      setDragSelectRect(null);
     }
   }, [selectedTool]);
 
@@ -369,6 +454,22 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
     return () => el.removeEventListener('wheel', listener);
   }, [handleNativeWheel]);
 
+  // Escape key cancels an in-progress rubber-band selection.
+  // stopPropagation prevents useKeyboardShortcuts from also clearing the full selection
+  // and resetting the tool on the same event.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && dragSelectStartRef.current) {
+        dragSelectStartRef.current = null;
+        dragSelectCurrentRef.current = null;
+        setDragSelectRect(null);
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, true); // capture phase so we run first
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
+
   // Keyboard shortcuts for zoom/fit
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -382,6 +483,44 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
           active.isContentEditable);
 
       if (isInputFocused) return;
+
+      const fitAllElements = () => {
+        if (canvasElements.length === 0) {
+          const nv = { x: 0, y: 0, zoom: 1 };
+          viewportRef.current = nv;
+          setLocalViewport(nv);
+          updateViewport(nv);
+          return;
+        }
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const element of canvasElements) {
+          minX = Math.min(minX, element.position.x);
+          minY = Math.min(minY, element.position.y);
+          maxX = Math.max(maxX, element.position.x + element.size.width);
+          maxY = Math.max(maxY, element.position.y + element.size.height);
+        }
+
+        const padding = 50;
+        const boundingWidth = maxX - minX + padding * 2;
+        const boundingHeight = maxY - minY + padding * 2;
+        const centerX_elements = (minX + maxX) / 2;
+        const centerY_elements = (minY + maxY) / 2;
+
+        const containerEl = canvasRef.current;
+        const viewportWidth = containerEl ? containerEl.clientWidth : 800;
+        const viewportHeight = containerEl ? containerEl.clientHeight : 600;
+
+        const fitZoom = Math.min(viewportWidth / boundingWidth, viewportHeight / boundingHeight, 3);
+        const targetZoom = Math.max(minZoom, fitZoom);
+        const targetX = -centerX_elements * targetZoom;
+        const targetY = -centerY_elements * targetZoom;
+
+        const nv = { x: targetX, y: targetY, zoom: targetZoom };
+        viewportRef.current = nv;
+        setLocalViewport(nv);
+        updateViewport(nv);
+      };
 
       if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') {
@@ -410,57 +549,11 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
           updateViewport(nv);
         } else if (e.key === '0') {
           e.preventDefault();
-
-          if (canvasElements.length === 0) {
-            const nv = { x: 0, y: 0, zoom: 1 };
-            viewportRef.current = nv;
-            setLocalViewport(nv);
-            updateViewport(nv);
-            return;
-          }
-
-          // Fit all elements - optimized
-          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-          for (const element of canvasElements) {
-            const left = element.position.x;
-            const top = element.position.y;
-            const right = element.position.x + element.size.width;
-            const bottom = element.position.y + element.size.height;
-
-            minX = Math.min(minX, left);
-            minY = Math.min(minY, top);
-            maxX = Math.max(maxX, right);
-            maxY = Math.max(maxY, bottom);
-          }
-
-          const padding = 50;
-          const boundingWidth = maxX - minX + padding * 2;
-          const boundingHeight = maxY - minY + padding * 2;
-
-          const centerX_elements = (minX + maxX) / 2;
-          const centerY_elements = (minY + maxY) / 2;
-
-          // Use actual container dimensions for accurate fit calculation
-          const containerEl = canvasRef.current;
-          const viewportWidth = containerEl ? containerEl.clientWidth : 800;
-          const viewportHeight = containerEl ? containerEl.clientHeight : 600;
-
-          const zoomX = viewportWidth / boundingWidth;
-          const zoomY = viewportHeight / boundingHeight;
-          const fitZoom = Math.min(Math.min(zoomX, zoomY), 3);
-
-          const targetZoom = Math.max(minZoom, fitZoom);
-
-          // In the center-origin coordinate system vx=0 places world origin at screen center.
-          // To center elements at (cx, cy): vx = -cx * zoom
-          const targetX = -centerX_elements * targetZoom;
-          const targetY = -centerY_elements * targetZoom;
-
-          const nv = { x: targetX, y: targetY, zoom: targetZoom };
-          viewportRef.current = nv;
-          setLocalViewport(nv);
-          updateViewport(nv);
+          fitAllElements();
         }
+      } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        fitAllElements();
       }
     };
 
@@ -655,6 +748,7 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
       onPointerCancel={handlePointerUp}
       onDrop={onDrop}
       onDragOver={onDragOver}
+      onContextMenu={onContextMenu}
       style={{
         cursor: selectedTool === 'drag' ? (isDragging.current ? 'grabbing' : 'grab') : 'default',
         touchAction: 'none',
@@ -691,6 +785,19 @@ export default function InfiniteCanvas({ children, onCanvasClick, onCursorMove, 
         {children}
         <ElementLockOverlay />
       </div>
+
+      {/* Drag-select rubber-band rect */}
+      {dragSelectRect && dragSelectRect.width > 4 && (
+        <div
+          className="absolute pointer-events-none border border-blue-500 bg-blue-500/10"
+          style={{
+            left: dragSelectRect.x,
+            top: dragSelectRect.y,
+            width: dragSelectRect.width,
+            height: dragSelectRect.height,
+          }}
+        />
+      )}
 
       {/* Collaborator cursors — rendered outside canvas transform (screen-space) */}
       <CollaboratorCursors />
