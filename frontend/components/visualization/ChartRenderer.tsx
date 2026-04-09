@@ -1437,11 +1437,13 @@ const ChartRenderer = memo(({ config, chartType }: ChartRendererProps) => {
         </div>
       )}
 
-      <div className="flex-1 relative min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <ChartErrorBoundary>{renderChart()}</ChartErrorBoundary>
-        </ResponsiveContainer>
-      </div>
+      <ChartErrorBoundary>
+        <div className="flex-1 relative min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            {renderChart()}
+          </ResponsiveContainer>
+        </div>
+      </ChartErrorBoundary>
     </div>
   );
 });

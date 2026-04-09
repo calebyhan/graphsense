@@ -80,7 +80,7 @@ export class RecommendationProcessor {
       chartType: chartType as any,
       confidence: Math.min(
         this.normalizeConfidence(recommendation.confidence || 0.8),
-        compatibility.confidence
+        compatibility.confidence * 100
       ),
       justification: this.extractReasoningText(recommendation),
       config: this.optimizeConfig(config, compatibility),
