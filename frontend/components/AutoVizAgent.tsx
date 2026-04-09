@@ -58,7 +58,7 @@ export interface Visualization {
 }
 
 /** Raw recommendation from the backend API, before client-side processing.
- * Use RawRecommendation from @/lib/types for processed, render-ready recommendations. */
+ * For processed, render-ready recommendations, use ChartRecommendation from @/lib/types. */
 export interface RawRecommendation {
   id: string;
   type: 'line' | 'bar' | 'column' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
