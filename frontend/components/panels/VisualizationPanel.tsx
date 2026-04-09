@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dataset, ChartRecommendation } from '@/components/AutoVizAgent';
+import { Dataset, RawRecommendation } from '@/components/AutoVizAgent';
 import AgentProgress from '@/components/analysis/AgentProgress';
 import { useAnalysisStore } from '@/store/useAnalysisStore';
 import { MiniMap } from '@/components/canvas/MiniMap';
@@ -14,9 +14,9 @@ import { useCanvasStore } from '@/store/useCanvasStore';
 
 interface VisualizationPanelProps {
   selectedDataset: Dataset | null;
-  recommendations: ChartRecommendation[];
+  recommendations: RawRecommendation[];
   isAnalyzing: boolean;
-  onCreateVisualization: (recommendation: ChartRecommendation) => void;
+  onCreateVisualization: (recommendation: RawRecommendation) => void;
   onAutoViz: () => void;
   visualizationPositions?: Array<{
     id: string;
@@ -126,7 +126,7 @@ export function VisualizationPanel({
   const handleManualChartCreate = (chartType: string) => {
     if (!selectedDataset) return;
     
-    const manualRecommendation: ChartRecommendation = {
+    const manualRecommendation: RawRecommendation = {
       id: `manual-${Date.now()}`,
       type: chartType as any,
       name: chartType ? `${chartType.charAt(0).toUpperCase() + chartType.slice(1)} Chart` : 'Chart',

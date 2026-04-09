@@ -14,6 +14,7 @@ interface RecommendationCardProps {
 const chartIcons = {
   line: LineChart,
   bar: BarChart3,
+  column: BarChart3,
   scatter: Circle,
   pie: PieChart,
   histogram: BarChart2,
@@ -27,6 +28,7 @@ const chartIcons = {
 const chartColors = {
   line: 'text-blue-500',
   bar: 'text-green-500',
+  column: 'text-green-500',
   scatter: 'text-purple-500',
   pie: 'text-orange-500',
   histogram: 'text-indigo-500',

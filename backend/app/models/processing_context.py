@@ -87,7 +87,13 @@ class ProcessingContext:
         if self._column_metadata is None:
             self._build_column_metadata()
         return self._column_metadata.get("text", [])
-    
+
+    def get_column_samples(self) -> Dict[str, List[Any]]:
+        """Get representative sample values per column for prompt enrichment"""
+        if self._column_metadata is None:
+            self._build_column_metadata()
+        return self._column_metadata.get("samples", {})
+
     def _build_column_metadata(self) -> None:
         """Build and cache column metadata"""
         try:
@@ -96,17 +102,18 @@ class ProcessingContext:
                 "numeric": [],
                 "categorical": [],
                 "temporal": [],
-                "text": []
+                "text": [],
+                "samples": {},  # 5 representative values per column for prompt enrichment
             }
-            
+
             logger.info(f"Building column metadata for {len(self.sample_data.columns)} columns: {list(self.sample_data.columns)}")
-            
+
             for column in self.sample_data.columns:
                 series = self.sample_data[column]
                 data_type = self._infer_data_type(series)
-                
+
                 metadata["types"][column] = data_type
-                
+
                 if data_type == "numeric":
                     metadata["numeric"].append(column)
                 elif data_type == "categorical":
@@ -115,20 +122,44 @@ class ProcessingContext:
                     metadata["temporal"].append(column)
                 else:
                     metadata["text"].append(column)
-                
+
+                # Collect representative sample values (mix of head + random interior)
+                non_null = series.dropna()
+                if len(non_null) > 0:
+                    n = min(5, len(non_null))
+                    try:
+                        sample_vals = non_null.sample(n=n, random_state=42).tolist()
+                    except (ValueError, IndexError) as e:
+                        logger.debug(f"Column '{column}' sampling fell back to head({n}): {e}")
+                        sample_vals = non_null.head(n).tolist()
+                    # Convert numpy scalars to native Python types for JSON serialisation
+                    metadata["samples"][column] = [
+                        v.item() if hasattr(v, "item") else v for v in sample_vals
+                    ]
+                else:
+                    metadata["samples"][column] = []
+
                 logger.debug(f"Column '{column}': {data_type} (nunique={series.nunique()}, dtype={series.dtype})")
-            
+
             self._column_metadata = metadata
             logger.info(f"Column metadata built - numeric: {len(metadata['numeric'])}, categorical: {len(metadata['categorical'])}, temporal: {len(metadata['temporal'])}, text: {len(metadata['text'])}")
             
         except Exception as e:
-            logger.error(f"Failed to build column metadata: {e}")
+            try:
+                col_count = len(self.sample_data.columns) if self.sample_data is not None else "unknown"
+            except Exception:
+                col_count = "unknown"
+            logger.error(
+                f"Failed to build column metadata for dataset with {col_count} columns: {e}",
+                exc_info=True,
+            )
             self._column_metadata = {
                 "types": {},
                 "numeric": [],
                 "categorical": [],
                 "temporal": [],
-                "text": []
+                "text": [],
+                "samples": {},
             }
     
     def _infer_data_type(self, series: pd.Series) -> str:
@@ -140,7 +171,24 @@ class ProcessingContext:
                 return "temporal"
             elif pd.api.types.is_bool_dtype(series):
                 return "categorical"  # Treat boolean as categorical
-            elif series.nunique() < 50 and series.nunique() / len(series) < 0.5:
+            elif series.dtype == object:
+                # Probe for date strings (e.g. "2024-01-15") — only on string columns.
+                # Guard: skip if all non-null values are bare 4-digit integers (year strings
+                # like "2020", "2021") to avoid misclassifying year labels as temporal.
+                non_null = series.dropna()
+                if len(non_null) > 0:
+                    sample = non_null.head(50)
+                    sample_strs = sample.astype(str)
+                    is_bare_year = sample_strs.str.match(r"^\d{4}$").mean() > 0.9
+                    if not is_bare_year:
+                        parsed = pd.to_datetime(sample, errors="coerce", format="mixed")
+                        if parsed.notna().mean() > 0.7:
+                            return "temporal"
+                # Fall through to categorical / text
+                if len(series) > 0 and series.nunique() < 50 and series.nunique() / len(series) < 0.5:
+                    return "categorical"
+                return "text"
+            elif len(series) > 0 and series.nunique() < 50 and series.nunique() / len(series) < 0.5:
                 return "categorical"
             else:
                 return "text"

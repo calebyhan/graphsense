@@ -124,6 +124,7 @@ class TestColumnMetadata:
             "categorical": [],
             "temporal": [],
             "text": [],
+            "samples": {},
         }
 
 
@@ -287,3 +288,116 @@ class TestGetSystemMemoryInfo:
         with patch("app.models.processing_context.psutil.virtual_memory", side_effect=RuntimeError("fail")):
             result = ctx.get_system_memory_info()
         assert result == {}
+
+
+# ── get_column_samples ────────────────────────────────────────────────────────
+
+class TestGetColumnSamples:
+    def test_returns_dict_with_column_names(self):
+        ctx = _make_ctx()
+        samples = ctx.get_column_samples()
+        assert isinstance(samples, dict)
+        assert "num" in samples
+        assert "cat" in samples
+
+    def test_each_column_has_at_most_five_values(self):
+        ctx = _make_ctx(rows=20)
+        samples = ctx.get_column_samples()
+        for vals in samples.values():
+            assert len(vals) <= 5
+
+    def test_all_null_column_returns_empty_list(self):
+        df = pd.DataFrame({"all_null": [None, None, None]})
+        ctx = ProcessingContext(dataset_id="ds_null", sample_data=df, original_size=3)
+        samples = ctx.get_column_samples()
+        assert samples["all_null"] == []
+
+    def test_uses_cache_on_second_call(self):
+        ctx = _make_ctx()
+        ctx.get_column_samples()
+        with patch.object(ctx, "_build_column_metadata", wraps=ctx._build_column_metadata) as mock_build:
+            ctx.get_column_samples()
+            mock_build.assert_not_called()
+
+    def test_numpy_scalars_converted_to_native_types(self):
+        import numpy as np
+        df = pd.DataFrame({"vals": np.array([1, 2, 3, 4, 5], dtype=np.int64)})
+        ctx = ProcessingContext(dataset_id="ds_np", sample_data=df, original_size=5)
+        samples = ctx.get_column_samples()
+        for v in samples["vals"]:
+            assert not hasattr(v, "item"), f"Expected native Python type, got {type(v)}"
+
+
+# ── _infer_data_type string-date branch ───────────────────────────────────────
+
+class TestInferDataTypeStringDates:
+    def test_iso_date_strings_classified_as_temporal(self):
+        ctx = _make_ctx()
+        s = pd.Series(["2024-01-15", "2024-02-01", "2024-03-10"] * 5)
+        assert ctx._infer_data_type(s) == "temporal"
+
+    def test_bare_year_strings_not_classified_as_temporal(self):
+        # "2019", "2020", "2021" look like dates but are year labels — should stay categorical
+        ctx = _make_ctx()
+        s = pd.Series(["2019", "2020", "2021", "2022"] * 5)
+        result = ctx._infer_data_type(s)
+        assert result in ("categorical", "text")
+
+    def test_string_dates_with_nulls(self):
+        ctx = _make_ctx()
+        s = pd.Series(["2024-01-01", None, None, "2024-03-01", "2024-02-15"])
+        # Should not crash and should detect temporal
+        result = ctx._infer_data_type(s)
+        assert result == "temporal"
+
+    def test_regular_string_column_stays_categorical(self):
+        ctx = _make_ctx()
+        s = pd.Series(["apple", "banana", "cherry"] * 20)
+        assert ctx._infer_data_type(s) == "categorical"
+
+
+# ── _build_column_metadata sampling fallback ─────────────────────────────────
+
+class TestBuildColumnMetadataSamplingFallback:
+    def test_sample_value_error_falls_back_to_head(self):
+        """Lines 132-134: ValueError during .sample() must fall back to .head()."""
+        import numpy as np
+
+        df = pd.DataFrame({"val": np.arange(10, dtype=np.float64)})
+        ctx = ProcessingContext(dataset_id="ds_samp", sample_data=df, original_size=10)
+
+        original_sample = pd.Series.sample
+
+        def _boom(self, *args, **kwargs):
+            raise ValueError("forced sample error")
+
+        with patch.object(pd.Series, "sample", _boom):
+            ctx._column_metadata = None
+            ctx._build_column_metadata()
+
+        # Fallback to head() should still populate samples
+        samples = ctx._column_metadata["samples"]
+        assert "val" in samples
+        assert len(samples["val"]) > 0
+
+
+# ── _infer_data_type non-object non-standard dtype ───────────────────────────
+
+class TestInferDataTypeNonObjectDtype:
+    def test_categorical_dtype_low_cardinality_returns_categorical(self):
+        """Lines 191-192: non-object dtype (pandas Categorical) with low cardinality → categorical."""
+        ctx = _make_ctx()
+        s = pd.Categorical(["a", "b", "a", "b", "c"] * 4)
+        series = pd.Series(s)
+        # CategoricalDtype is not numeric/datetime/bool/object → falls to final elif
+        result = ctx._infer_data_type(series)
+        assert result == "categorical"
+
+    def test_categorical_dtype_high_cardinality_returns_text(self):
+        """Lines 193-194: non-object dtype with high cardinality → text."""
+        ctx = _make_ctx()
+        # 100 unique values in 100 rows → ratio = 1.0 → not categorical → text
+        s = pd.Categorical([str(i) for i in range(100)])
+        series = pd.Series(s)
+        result = ctx._infer_data_type(series)
+        assert result == "text"

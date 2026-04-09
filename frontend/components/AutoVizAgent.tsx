@@ -47,7 +47,7 @@ export interface Dataset {
 export interface Visualization {
   id: string;
   title: string;
-  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
+  type: 'line' | 'bar' | 'column' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
   dataSource: string;
   position: { x: number; y: number };
   size: { width: number; height: number };
@@ -57,10 +57,12 @@ export interface Visualization {
   reasoning?: string;
 }
 
-export interface ChartRecommendation {
+/** Raw recommendation from the backend API, before client-side processing.
+ * For processed, render-ready recommendations, use ChartRecommendation from @/lib/types. */
+export interface RawRecommendation {
   id: string;
-  type: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
-  chartType?: 'line' | 'bar' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
+  type: 'line' | 'bar' | 'column' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
+  chartType?: 'line' | 'bar' | 'column' | 'pie' | 'scatter' | 'area' | 'heatmap' | 'histogram' | 'box_plot' | 'treemap' | 'sankey';
   name: string;
   confidence: number;
   reasoning: string;
@@ -68,6 +70,51 @@ export interface ChartRecommendation {
   description: string;
   bestFor: string[];
   config?: any;
+}
+
+const PLACEMENT_GAP = 24; // px gap between elements in world coordinates
+
+/**
+ * Find a position near `preferred` that does not overlap any existing canvas element.
+ * Tries a grid of offsets spiraling outward; falls back to a cascading diagonal offset.
+ */
+function findFreePosition(
+  preferred: { x: number; y: number },
+  size: { width: number; height: number },
+  existingElements: Array<{ position: { x: number; y: number }; size: { width: number; height: number } }>
+): { x: number; y: number } {
+  const overlaps = (pos: { x: number; y: number }) =>
+    existingElements.some((el) => {
+      const ax1 = pos.x, ay1 = pos.y, ax2 = pos.x + size.width, ay2 = pos.y + size.height;
+      const bx1 = el.position.x, by1 = el.position.y, bx2 = el.position.x + el.size.width, by2 = el.position.y + el.size.height;
+      return ax1 < bx2 + PLACEMENT_GAP && ax2 > bx1 - PLACEMENT_GAP && ay1 < by2 + PLACEMENT_GAP && ay2 > by1 - PLACEMENT_GAP;
+    });
+
+  if (!overlaps(preferred)) return preferred;
+
+  // Spiral outward in steps matching element dimensions
+  const stepX = size.width + PLACEMENT_GAP;
+  const stepY = size.height + PLACEMENT_GAP;
+  for (let ring = 1; ring <= 8; ring++) {
+    const candidates = [
+      { x: preferred.x + ring * stepX, y: preferred.y },
+      { x: preferred.x - ring * stepX, y: preferred.y },
+      { x: preferred.x, y: preferred.y + ring * stepY },
+      { x: preferred.x, y: preferred.y - ring * stepY },
+      { x: preferred.x + ring * stepX, y: preferred.y + ring * stepY },
+      { x: preferred.x - ring * stepX, y: preferred.y + ring * stepY },
+      { x: preferred.x + ring * stepX, y: preferred.y - ring * stepY },
+      { x: preferred.x - ring * stepX, y: preferred.y - ring * stepY },
+    ];
+    const free = candidates.find((c) => !overlaps(c));
+    if (free) return free;
+  }
+
+  // Last resort: cascade diagonally
+  return {
+    x: preferred.x + existingElements.length * (size.width / 4 + PLACEMENT_GAP),
+    y: preferred.y + existingElements.length * (size.height / 4 + PLACEMENT_GAP),
+  };
 }
 
 /** Return a natural initial size for a canvas element based on type + available metadata.
@@ -81,19 +128,22 @@ function getDefaultSize(
   const { chartType, columns = 0, rows = 0 } = opts;
   switch (type) {
     case 'chart': {
+      // Add ~130px to all heights to account for fixed UI overhead:
+      // header (~52px) + confidence/justification box (~78px) = ~130px.
+      // This ensures the chart rendering area has room for both axes and labels.
       switch (chartType) {
         // No axes — fill the container, square-ish
-        case 'pie':      return { width: 400, height: 400 };
-        case 'treemap':  return { width: 540, height: 440 };
+        case 'pie':      return { width: 400, height: 480 };
+        case 'treemap':  return { width: 540, height: 520 };
         // Two labeled axes — need generous width + height so labels aren't clipped
-        case 'scatter':  return { width: 560, height: 480 }; // symmetric axes
-        case 'heatmap':  return { width: 600, height: 520 }; // many ticks on both axes
-        case 'box_plot': return { width: 580, height: 460 };
-        case 'histogram':return { width: 580, height: 440 };
+        case 'scatter':  return { width: 560, height: 560 }; // symmetric axes
+        case 'heatmap':  return { width: 600, height: 600 }; // many ticks on both axes
+        case 'box_plot': return { width: 580, height: 540 };
+        case 'histogram':return { width: 580, height: 520 };
         // Flow / layout charts — wide
-        case 'sankey':   return { width: 700, height: 440 };
+        case 'sankey':   return { width: 700, height: 520 };
         // Standard x/y charts — wide enough for tick labels + legend
-        default:         return { width: 600, height: 420 }; // bar, line, area
+        default:         return { width: 600, height: 500 }; // bar, line, area
       }
     }
     case 'dataset': {
@@ -120,7 +170,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
   const [selectedVizId, setSelectedVizId] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [recommendations, setRecommendations] = useState<ChartRecommendation[]>([]);
+  const [recommendations, setRecommendations] = useState<RawRecommendation[]>([]);
   
   // Dataset management with React Query — scoped to canvas when canvasId is present
   const { datasets } = useDatasetManager({ canvasId });
@@ -289,11 +339,18 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   // Sync recommendations from store and process them with our new system
   React.useEffect(() => {
     if (storeRecommendations && storeRecommendations.length > 0 && rawData) {
-      const processedRecommendations = RecommendationProcessor.processRecommendations(
-        storeRecommendations,
-        rawData,
-        dataProfile
-      );
+      let processedRecommendations;
+      try {
+        processedRecommendations = RecommendationProcessor.processRecommendations(
+          storeRecommendations,
+          rawData,
+          dataProfile
+        );
+      } catch (err) {
+        console.error('[AutoVizAgent] processRecommendations failed:', err);
+        setRecommendations([]);
+        return;
+      }
 
       const formattedRecommendations = processedRecommendations.map((rec, index) => ({
         id: `rec-${index}`,
@@ -369,9 +426,11 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     if (!alreadyOnCanvas) {
       const center = useCanvasStore.getState().getViewportCenterPosition();
       const dsSize = getDefaultSize('dataset', { columns: dataset.columns, rows: Math.min(dataset.rows, 10) });
+      const dsPreferred = { x: center.x - dsSize.width / 2, y: center.y - dsSize.height / 2 };
+      const dsPosition = findFreePosition(dsPreferred, dsSize, useCanvasStore.getState().canvasElements);
       const newId = addElement({
         type: 'dataset',
-        position: { x: center.x - dsSize.width / 2, y: center.y - dsSize.height / 2 },
+        position: dsPosition,
         size: dsSize,
         data: {
           datasetId: dataset.id,
@@ -393,7 +452,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     dataset: Dataset,
     position: { x: number; y: number },
     type: Visualization['type'] = 'bar',
-    recommendation?: ChartRecommendation
+    recommendation?: RawRecommendation
   ) => {
     // Create visualization for local state tracking
     const chartSize = getDefaultSize('chart', { chartType: type });
@@ -463,17 +522,19 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
 
   // Create visualization from recommendation
   const createVisualizationFromRecommendation = useCallback((
-    recommendation: ChartRecommendation
+    recommendation: RawRecommendation
   ) => {
     if (!selectedDataset) return;
 
-    // Use the viewport-aware positioning from canvas store
     const centerPosition = useCanvasStore.getState().getViewportCenterPosition();
     const sz = getDefaultSize('chart', { chartType: recommendation.type });
+    const preferred = { x: centerPosition.x - sz.width / 2, y: centerPosition.y - sz.height / 2 };
+    const existing = useCanvasStore.getState().canvasElements;
+    const position = findFreePosition(preferred, sz, existing);
 
     createVisualization(
       selectedDataset,
-      { x: centerPosition.x - sz.width / 2, y: centerPosition.y - sz.height / 2 },
+      position,
       recommendation.type,
       recommendation
     );

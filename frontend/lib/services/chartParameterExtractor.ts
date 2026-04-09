@@ -82,6 +82,7 @@ export class ChartParameterExtractor {
     const config: ChartConfig = {
       title: title || this.generateTitle(chartType, datasetAttributes, recommendation),
       data: datasetAttributes.data,
+      chartType,
     };
 
     // Extract required parameters
@@ -107,6 +108,33 @@ export class ChartParameterExtractor {
   }
 
   /**
+   * Map a frontend param name to the corresponding backend data_mapping field.
+   * The backend sends snake_case axis hints inside data_mapping; this bridges them
+   * to the camelCase param names used by ChartParameterExtractor.
+   */
+  private static resolveFromDataMapping(
+    paramName: string,
+    dataMapping: NonNullable<ChartRecommendation['data_mapping']>
+  ): string | undefined {
+    // Columns that map to the "x" position or primary category axis.
+    const xAxisParams = new Set(['xAxis', 'category', 'colField', 'source', 'hierarchyField', 'timeField']);
+    // Columns that map to the "y" position or numeric value axis.
+    // Note: rowField is NOT here — it is a secondary category dimension carried via `color`.
+    const yAxisParams = new Set(['yAxis', 'value', 'weight', 'valueField']);
+    // Secondary categorical dimensions: backend encodes these in the `color` field so they
+    // survive the round-trip without extending the DataMapping schema.
+    // heatmap: color → rowField;  sankey: color → target.
+    const colorAsSecondaryCategory = new Set(['rowField', 'target']);
+
+    if (xAxisParams.has(paramName) && dataMapping.x_axis) return dataMapping.x_axis;
+    if (yAxisParams.has(paramName) && dataMapping.y_axis) return dataMapping.y_axis;
+    if (colorAsSecondaryCategory.has(paramName) && dataMapping.color) return dataMapping.color;
+    if (paramName === 'color' && dataMapping.color) return dataMapping.color;
+    if (paramName === 'size' && dataMapping.size) return dataMapping.size;
+    return undefined;
+  }
+
+  /**
    * Extract a specific parameter from dataset attributes or recommendation
    */
   private static extractParameter(
@@ -114,17 +142,23 @@ export class ChartParameterExtractor {
     datasetAttributes: DatasetAttributes,
     recommendation?: ChartRecommendation
   ): any {
-    // First try to get from the recommendation's data mapping (backend agent recommendation)
+    // 1. Try backend data_mapping hints first (most authoritative — actual column names from AI)
+    if (recommendation?.data_mapping) {
+      const fromMapping = this.resolveFromDataMapping(paramName, recommendation.data_mapping);
+      if (fromMapping) return fromMapping;
+    }
+
+    // 2. Try the recommendation config (client-side or already-processed values)
     if (recommendation?.config) {
       const value = (recommendation.config as any)[paramName];
       if (value) return value;
     }
 
-    // Then try from dataset attributes
+    // 3. Try dataset attributes (client-side re-profiling result)
     const value = (datasetAttributes as any)[paramName];
     if (value) return value;
 
-    // For some parameters, try intelligent mapping
+    // 4. Fall back to intelligent heuristic mapping
     return this.intelligentParameterMapping(paramName, datasetAttributes);
   }
 
@@ -244,11 +278,13 @@ export class ChartParameterExtractor {
       return recommendation.config.title;
     }
 
-    // Generate based on chart type and data
-    const xAxis = datasetAttributes.xAxis;
-    const yAxis = datasetAttributes.yAxis;
-    const category = datasetAttributes.category;
-    const value = datasetAttributes.value;
+    // Generate based on chart type and data.
+    // Prefer data_mapping (actual backend-resolved column names) over datasetAttributes
+    // defaults, which are computed before the recommendation's axis hints are applied.
+    const xAxis = recommendation?.data_mapping?.x_axis || datasetAttributes.xAxis;
+    const yAxis = recommendation?.data_mapping?.y_axis || datasetAttributes.yAxis;
+    const category = recommendation?.data_mapping?.x_axis || datasetAttributes.category;
+    const value = recommendation?.data_mapping?.y_axis || datasetAttributes.value;
 
     switch (chartType) {
       case 'line':
