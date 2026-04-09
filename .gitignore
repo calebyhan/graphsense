@@ -44,6 +44,8 @@ next-env.d.ts
 # Test / coverage artifacts
 .coverage
 .coverage.*
+coverage.json
+coverage.xml
 htmlcov/
 .pytest_cache/
 

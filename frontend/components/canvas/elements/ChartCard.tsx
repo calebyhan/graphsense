@@ -15,17 +15,6 @@ interface ChartCardProps {
 const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
 
-  // Debug logging for ChartCard
-  console.log('ChartCard rendered:', { 
-    chartType, 
-    hasConfig: !!config, 
-    configKeys: config ? Object.keys(config) : [],
-    hasData: !!config?.data,
-    dataLength: config?.data?.length,
-    title,
-    sampleConfig: config
-  });
-
   // Generate intelligent title for chart
   const getChartTitle = () => {
     // Use provided title first
@@ -67,7 +56,7 @@ const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardP
       </div>
 
       {/* Chart */}
-      <div ref={chartRef} className="flex-1 overflow-hidden">
+      <div ref={chartRef} className="flex-1 min-h-0 overflow-hidden">
         {config ? (
           <ChartRenderer config={config} chartType={chartType} />
         ) : (

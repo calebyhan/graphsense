@@ -24,27 +24,37 @@ export class RecommendationProcessor {
     // Build comprehensive dataset attributes
     const datasetAttributes = DatasetAttributeBuilder.buildDatasetAttributes(rawData, dataProfile);
 
-    return agenticRecommendations.map((rec, _index) => {
-      const chartType = this.normalizeChartType(rec.chart_type || rec.type || 'bar');
-      
-      // Extract chart configuration using the new parameter extraction system
-      const config = ChartParameterExtractor.extractChartConfig(
-        chartType,
-        datasetAttributes,
-        rec, // Pass the original recommendation for data mapping hints
-        rec.title || rec.config?.title
-      );
+    const results: ChartRecommendation[] = [];
+    for (const rec of agenticRecommendations) {
+      try {
+        const chartType = this.normalizeChartType(rec.chart_type || rec.type || 'bar');
 
-      // Extract reasoning text
-      const justification = this.extractReasoningText(rec);
+        // Extract chart configuration using the new parameter extraction system.
+        // styling_suggestions.title (set by backend rule-based agents) is the most
+        // authoritative title since it uses the actual resolved column names.
+        const titleHint = rec.styling_suggestions?.title || rec.title || rec.config?.title;
+        const config = ChartParameterExtractor.extractChartConfig(
+          chartType,
+          datasetAttributes,
+          rec, // Pass the original recommendation for data mapping hints
+          titleHint
+        );
 
-      return {
-        chartType: chartType as any,
-        confidence: this.normalizeConfidence(rec.confidence || rec.suitability_score || 0.8),
-        justification,
-        config
-      };
-    });
+        // Extract reasoning text
+        const justification = this.extractReasoningText(rec);
+
+        results.push({
+          chartType: chartType as any,
+          confidence: this.normalizeConfidence(rec.confidence || rec.suitability_score || 0.8),
+          justification,
+          config,
+          data_mapping: rec.data_mapping
+        });
+      } catch (err) {
+        console.error('[RecommendationProcessor] Failed to process recommendation, skipping:', err, rec);
+      }
+    }
+    return results;
   }
 
   /**
@@ -73,7 +83,8 @@ export class RecommendationProcessor {
         compatibility.confidence
       ),
       justification: this.extractReasoningText(recommendation),
-      config: this.optimizeConfig(config, compatibility)
+      config: this.optimizeConfig(config, compatibility),
+      data_mapping: recommendation.data_mapping
     };
   }
 
@@ -90,7 +101,7 @@ export class RecommendationProcessor {
 
     return compatibleTypes.map(item => ({
       chartType: item.chartType as any,
-      confidence: item.compatibility.confidence * 100,
+      confidence: this.normalizeConfidence(item.compatibility.confidence),
       justification: this.generateJustification(item.chartType, datasetAttributes),
       config: ChartParameterExtractor.extractChartConfig(item.chartType, datasetAttributes)
     }));
@@ -102,7 +113,7 @@ export class RecommendationProcessor {
   private static normalizeChartType(chartType: string): ChartType {
     const typeMap: Record<string, ChartType> = {
       'bar': 'bar',
-      'column': 'bar',
+      'column': 'column',
       'line': 'line',
       'scatter': 'scatter',
       'scatterplot': 'scatter',
@@ -118,7 +129,12 @@ export class RecommendationProcessor {
     };
 
     const normalized = chartType.toLowerCase().replace(/[^a-z]/g, '');
-    return typeMap[normalized] || 'bar';
+    const resolved = typeMap[normalized];
+    if (!resolved) {
+      console.warn(`[RecommendationProcessor] Unknown chart type "${chartType}", defaulting to bar`);
+      return 'bar';
+    }
+    return resolved;
   }
 
   /**

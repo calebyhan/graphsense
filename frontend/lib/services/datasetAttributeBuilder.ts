@@ -16,7 +16,13 @@ export class DatasetAttributeBuilder {
     dataProfile?: DataProfile,
     _filename?: string
   ): DatasetAttributes {
-    const columns = dataProfile?.columns || this.inferColumnProfiles(rawData);
+    // dataProfile?.columns can be [] (an empty array, which is truthy in JS) when the
+    // store hasn't populated it yet (the store has a TODO for this). Treat an empty
+    // array the same as "not provided" so we always fall back to inference from rawData.
+    const columns =
+      dataProfile?.columns?.length
+        ? dataProfile.columns
+        : this.inferColumnProfiles(rawData);
     const attributes: DatasetAttributes = {
       data: rawData,
       columns: columns,

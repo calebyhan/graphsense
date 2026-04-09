@@ -56,7 +56,7 @@ class ChartRecommenderAgent(BaseAgent):
 
             # Generate AI-powered recommendations
             ai_recommendations = await self._get_ai_recommendations(
-                profiler_data, context.get_column_types(), correlations
+                profiler_data, context, correlations
             )
             
             # Generate rule-based recommendations as backup
@@ -77,7 +77,7 @@ class ChartRecommenderAgent(BaseAgent):
 
         except Exception as e:
             processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-            self.logger.error(f"Chart recommender processing failed: {e}")
+            self.logger.error(f"Chart recommender processing failed: {e}", exc_info=True)
             return self._create_error_result(str(e), processing_time)
 
     def _generate_intelligent_recommendations(
@@ -102,8 +102,9 @@ class ChartRecommenderAgent(BaseAgent):
         recommendations.extend(self._recommend_for_categorical_numeric(columns, categorical_cols, numeric_cols))
         recommendations.extend(self._recommend_for_temporal_data(columns, temporal_cols, numeric_cols))
         recommendations.extend(self._recommend_for_numeric_relationships(columns, numeric_cols, correlations))
-        recommendations.extend(self._recommend_for_distributions(columns, numeric_cols, patterns))
-        recommendations.extend(self._recommend_for_categorical_analysis(columns, categorical_cols))
+        recommendations.extend(self._recommend_for_distributions(columns, numeric_cols, patterns, categorical_cols))
+        recommendations.extend(self._recommend_for_categorical_analysis(columns, categorical_cols, numeric_cols))
+        recommendations.extend(self._recommend_for_advanced_charts(columns, categorical_cols, numeric_cols))
 
         # Sort by confidence and return top recommendations
         recommendations.sort(key=lambda x: x.confidence, reverse=True)
@@ -185,7 +186,33 @@ class ChartRecommenderAgent(BaseAgent):
                 },
                 suitability_score=0.75
             ))
-        
+
+        # Box plot for grouped distribution comparison (not just when outliers are detected)
+        if unique_count <= 15:
+            recommendations.append(ChartRecommendation(
+                chart_type=ChartType.BOX_PLOT,
+                confidence=0.7,
+                data_mapping=DataMapping(
+                    x_axis=primary_cat,
+                    y_axis=primary_num,
+                ),
+                reasoning=[AgentReasoning(
+                    agent_type=AgentType.RECOMMENDER,
+                    reasoning=f"Box plot compares the distribution of {primary_num} across {primary_cat} groups, revealing median, spread, and outliers",
+                    confidence=0.7,
+                    evidence=[
+                        f"{primary_cat} has {unique_count} groups",
+                        "Box plot reveals per-group median, IQR, and outliers"
+                    ]
+                )],
+                interaction_config=InteractionConfig(zoom_enabled=False, pan_enabled=False, hover_enabled=True),
+                styling_suggestions={
+                    "title": f"{primary_num} Distribution by {primary_cat}",
+                    "color_scheme": "categorical"
+                },
+                suitability_score=0.7
+            ))
+
         return recommendations
 
     def _recommend_for_temporal_data(
@@ -334,10 +361,11 @@ class ChartRecommenderAgent(BaseAgent):
         return recommendations
 
     def _recommend_for_distributions(
-        self, 
-        columns: Dict[str, Any], 
-        numeric_cols: List[str], 
-        patterns: Dict[str, Any]
+        self,
+        columns: Dict[str, Any],
+        numeric_cols: List[str],
+        patterns: Dict[str, Any],
+        categorical_cols: List[str] = None,
     ) -> List[ChartRecommendation]:
         """Recommend charts for distribution analysis"""
         recommendations = []
@@ -372,8 +400,13 @@ class ChartRecommenderAgent(BaseAgent):
         recommendations.append(ChartRecommendation(
             chart_type=ChartType.HISTOGRAM,
             confidence=confidence,
+            # Set both x_axis and y_axis to the numeric column.
+            # The frontend extracts histogram's "value" param from data_mapping.y_axis,
+            # while D3Histogram also falls back to x_axis — setting both ensures
+            # the parameter resolves regardless of which path is taken.
             data_mapping=DataMapping(
-                x_axis=primary_numeric
+                x_axis=primary_numeric,
+                y_axis=primary_numeric
             ),
             reasoning=[AgentReasoning(
                 agent_type=AgentType.RECOMMENDER,
@@ -389,16 +422,22 @@ class ChartRecommenderAgent(BaseAgent):
             suitability_score=confidence
         ))
         
-        # Box plot for outlier analysis if outliers detected
+        # Box plot for outlier analysis if outliers detected.
+        # If a categorical column is available, group by it so the chart is differentiated
+        # from the single-group histogram above. Without an x_axis the frontend heuristic
+        # would pick a categorical column anyway, producing a confusingly grouped box plot
+        # that looks identical to the one already generated in _recommend_for_categorical_numeric.
         outliers = patterns.get("outliers", {}).get(primary_numeric, {})
         if outliers and outliers.get("count", 0) > 0:
             outlier_percentage = outliers.get("percentage", 0)
-            
+            primary_cat = (categorical_cols or [None])[0]
+
             recommendations.append(ChartRecommendation(
                 chart_type=ChartType.BOX_PLOT,
                 confidence=0.75,
                 data_mapping=DataMapping(
-                    y_axis=primary_numeric
+                    x_axis=primary_cat,  # explicit None on numeric-only datasets → single-group render
+                    y_axis=primary_numeric,
                 ),
                 reasoning=[AgentReasoning(
                     agent_type=AgentType.RECOMMENDER,
@@ -419,27 +458,138 @@ class ChartRecommenderAgent(BaseAgent):
         
         return recommendations
 
+    def _recommend_for_advanced_charts(
+        self,
+        columns: Dict[str, Any],
+        categorical_cols: List[str],
+        numeric_cols: List[str],
+    ) -> List[ChartRecommendation]:
+        """Recommend heatmap, treemap, and sankey when data structure supports them"""
+        recommendations = []
+
+        if not categorical_cols or not numeric_cols:
+            return recommendations
+
+        primary_cat = categorical_cols[0]
+        primary_num = numeric_cols[0]
+        cat1_unique = columns.get(primary_cat, {}).get("unique_count", 0)
+
+        # Treemap: categorical + numeric, especially useful when too many categories for a bar chart
+        if cat1_unique > 10:
+            recommendations.append(ChartRecommendation(
+                chart_type=ChartType.TREEMAP,
+                confidence=0.7,
+                data_mapping=DataMapping(
+                    x_axis=primary_cat,
+                    y_axis=primary_num,
+                ),
+                reasoning=[AgentReasoning(
+                    agent_type=AgentType.RECOMMENDER,
+                    reasoning=f"Treemap shows proportional breakdown of {primary_num} across {cat1_unique} {primary_cat} categories — more readable than a bar chart at this cardinality",
+                    confidence=0.7,
+                    evidence=[f"{primary_cat} has {cat1_unique} categories — exceeds ideal bar chart range"]
+                )],
+                interaction_config=InteractionConfig(zoom_enabled=False, pan_enabled=False, hover_enabled=True),
+                styling_suggestions={
+                    "title": f"{primary_num} by {primary_cat}",
+                    "color_scheme": "categorical"
+                },
+                suitability_score=0.7
+            ))
+
+        if len(categorical_cols) < 2:
+            return recommendations
+
+        cat2 = categorical_cols[1]
+        cat2_unique = columns.get(cat2, {}).get("unique_count", 0)
+
+        # Heatmap: 2 categorical columns + 1 numeric, each with reasonable cardinality.
+        # Encoding:  x_axis → colField (cat2),  color → rowField (cat1),  y_axis → valueField (numeric).
+        # resolveFromDataMapping maps: xAxisParams→x_axis, yAxisParams→y_axis, color→rowField/color.
+        if 2 <= cat1_unique <= 30 and 2 <= cat2_unique <= 30:
+            recommendations.append(ChartRecommendation(
+                chart_type=ChartType.HEATMAP,
+                confidence=0.75,
+                data_mapping=DataMapping(
+                    x_axis=cat2,        # → colField
+                    y_axis=primary_num, # → valueField
+                    color=primary_cat,  # → rowField (via color→rowField resolution in frontend)
+                ),
+                reasoning=[AgentReasoning(
+                    agent_type=AgentType.RECOMMENDER,
+                    reasoning=f"Heatmap shows {primary_num} across the {primary_cat} × {cat2} matrix",
+                    confidence=0.75,
+                    evidence=[
+                        f"{primary_cat} has {cat1_unique} categories",
+                        f"{cat2} has {cat2_unique} categories",
+                    ]
+                )],
+                interaction_config=InteractionConfig(zoom_enabled=False, pan_enabled=False, hover_enabled=True),
+                styling_suggestions={
+                    "title": f"{primary_num} Heatmap: {primary_cat} × {cat2}",
+                    "color_scheme": "sequential"
+                },
+                suitability_score=0.75
+            ))
+
+        # Sankey: 2 categorical columns + 1 numeric, each with low-to-moderate cardinality.
+        # Encoding: x_axis → source (cat1),  y_axis → weight (numeric),  color → target (cat2).
+        # resolveFromDataMapping maps color → target via the color→target resolution path.
+        if 2 <= cat1_unique <= 15 and 2 <= cat2_unique <= 15:
+            recommendations.append(ChartRecommendation(
+                chart_type=ChartType.SANKEY,
+                confidence=0.65,
+                data_mapping=DataMapping(
+                    x_axis=primary_cat,  # → source
+                    y_axis=primary_num,  # → weight
+                    color=cat2,          # → target (via color→target resolution in frontend)
+                ),
+                reasoning=[AgentReasoning(
+                    agent_type=AgentType.RECOMMENDER,
+                    reasoning=f"Sankey diagram shows flow of {primary_num} from {primary_cat} to {cat2}",
+                    confidence=0.65,
+                    evidence=[
+                        f"Two categorical columns ({primary_cat}, {cat2}) form source/target nodes",
+                        f"{primary_num} provides flow weight"
+                    ]
+                )],
+                interaction_config=InteractionConfig(zoom_enabled=False, pan_enabled=False, hover_enabled=True),
+                styling_suggestions={
+                    "title": f"Flow: {primary_cat} → {cat2}",
+                    "color_scheme": "categorical"
+                },
+                suitability_score=0.65
+            ))
+
+        return recommendations
+
     def _recommend_for_categorical_analysis(
-        self, 
-        columns: Dict[str, Any], 
-        categorical_cols: List[str]
+        self,
+        columns: Dict[str, Any],
+        categorical_cols: List[str],
+        numeric_cols: List[str] = None
     ) -> List[ChartRecommendation]:
         """Recommend charts for categorical data analysis"""
         recommendations = []
-        
+        numeric_cols = numeric_cols or []
+
         if not categorical_cols:
             return recommendations
-        
+
         primary_categorical = categorical_cols[0]
         cat_info = columns.get(primary_categorical, {})
         unique_count = cat_info.get("unique_count", 0)
-        
+
         # Pie chart for categorical distribution (if reasonable number of categories)
+        # x_axis = category field (slice labels), y_axis = numeric value (slice sizes)
         if 2 <= unique_count <= 8:
+            primary_value = numeric_cols[0] if numeric_cols else None
             recommendations.append(ChartRecommendation(
                 chart_type=ChartType.PIE,
                 confidence=0.7,
                 data_mapping=DataMapping(
+                    x_axis=primary_categorical,
+                    y_axis=primary_value,
                     color=primary_categorical
                 ),
                 reasoning=[AgentReasoning(
@@ -464,16 +614,62 @@ class ChartRecommenderAgent(BaseAgent):
     async def _get_ai_recommendations(
         self,
         profiler_data: Dict[str, Any],
-        column_types: Dict[str, str],
+        context: ProcessingContext,
         correlations: List[Dict[str, Any]]
     ) -> List[ChartRecommendation]:
         """Get AI-powered chart recommendations"""
         try:
             gemini_service = get_gemini_service()
-            ai_recs = await gemini_service.generate_chart_recommendations(
-                profiler_data, column_types, correlations
-            )
-            
+
+            # Build enriched dataset context for the prompt
+            column_types = context.get_column_types()
+            column_samples = context.get_column_samples()
+            stat_columns = profiler_data.get("columns", {})
+
+            columns_for_prompt = []
+            for col_name, col_type in column_types.items():
+                entry: Dict[str, Any] = {
+                    "name": col_name,
+                    "type": col_type,
+                    "sample_values": column_samples.get(col_name, []),
+                    "unique_count": stat_columns.get(col_name, {}).get("unique_count", 0),
+                    "null_pct": round(stat_columns.get(col_name, {}).get("null_percentage", 0), 2),
+                }
+                if col_type == "numeric":
+                    # Stats are stored flat in the column dict by DataProfilerAgent
+                    # (e.g. col_dict["mean"], col_dict["min"]) — not under a "numeric_stats" sub-key.
+                    col_stats = stat_columns.get(col_name, {})
+                    if col_stats.get("analysis_type") == "numeric" or col_stats.get("mean") is not None:
+                        entry["min"] = col_stats.get("min")
+                        entry["max"] = col_stats.get("max")
+                        entry["mean"] = round(col_stats["mean"], 4) if col_stats.get("mean") is not None else None
+                        entry["std"] = round(col_stats["std"], 4) if col_stats.get("std") is not None else None
+                columns_for_prompt.append(entry)
+
+            # Only pass genuinely strong correlations (|r| > 0.5) to the AI.
+            # All correlations in the cache have |r| > 0.3 (the profiler's threshold),
+            # but labelling weak ones as "strong" misleads the model.
+            strong_corrs = [
+                {"col1": c["column1"], "col2": c["column2"], "r": round(c.get("correlation", 0), 3),
+                 "strength": c.get("strength", "moderate")}
+                for c in correlations
+                if abs(c.get("correlation", 0)) > 0.5
+            ]
+            dataset_context = {
+                "row_count": profiler_data.get("row_count", 0),
+                "column_count": profiler_data.get("column_count", 0),
+                "columns": columns_for_prompt,
+                "strong_correlations": strong_corrs,
+            }
+
+            ai_recs = await gemini_service.generate_chart_recommendations(dataset_context)
+
+            if ai_recs and ai_recs[0].get("_source") == "fallback":
+                self.logger.warning(
+                    "AI service returned static fallback recommendations (not Gemini output). "
+                    "Charts will be rule-based only."
+                )
+
             # Convert AI recommendations to ChartRecommendation objects
             recommendations = []
             for ai_rec in ai_recs:
@@ -503,14 +699,28 @@ class ChartRecommenderAgent(BaseAgent):
                     )
                     recommendations.append(recommendation)
                 except Exception as e:
-                    self.logger.warning(f"Failed to convert AI recommendation: {e}")
+                    self.logger.warning(
+                        f"Failed to convert AI recommendation "
+                        f"(chart_type={ai_rec.get('chart_type')!r}, "
+                        f"x={ai_rec.get('x_axis')!r}, y={ai_rec.get('y_axis')!r}): {e}"
+                    )
                     continue
-            
-            self.logger.info(f"Generated {len(recommendations)} AI recommendations")
+
+            if not recommendations:
+                self.logger.warning(
+                    "AI returned %d raw recs but 0 converted successfully "
+                    "(check chart_type enum values in the response above)",
+                    len(ai_recs),
+                )
+            else:
+                self.logger.info(f"Generated {len(recommendations)} AI recommendations")
             return recommendations
-            
+
         except Exception as e:
-            self.logger.warning(f"AI recommendations failed: {e}")
+            self.logger.error(
+                f"AI recommendations failed, falling back to rule-based only: {e}",
+                exc_info=True,
+            )
             return []
 
     def _get_interaction_config(self, chart_type: ChartType) -> InteractionConfig:
@@ -531,15 +741,15 @@ class ChartRecommenderAgent(BaseAgent):
         
         # If AI recommendations are available, prioritize them
         if ai_recommendations:
-            # Boost AI recommendation confidence slightly
-            for rec in ai_recommendations:
-                rec.confidence = min(1.0, rec.confidence + 0.1)
-            
-            # Add best rule-based recommendations that don't overlap
-            ai_chart_types = {rec.chart_type for rec in ai_recommendations}
+            # Dedup by (chart_type, x_axis, y_axis) so two bar charts for different
+            # column pairs are both kept, but exact duplicates are dropped.
+            ai_keys = {
+                (rec.chart_type, rec.data_mapping.x_axis, rec.data_mapping.y_axis)
+                for rec in ai_recommendations
+            }
             unique_rule_recs = [
-                rec for rec in rule_recommendations 
-                if rec.chart_type not in ai_chart_types
+                rec for rec in rule_recommendations
+                if (rec.chart_type, rec.data_mapping.x_axis, rec.data_mapping.y_axis) not in ai_keys
             ]
             
             # Combine and sort by confidence

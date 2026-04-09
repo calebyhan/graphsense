@@ -73,14 +73,27 @@ class ValidationAgent(BaseAgent):
 
             # Get AI validation insights
             ai_validations = await self._get_ai_validations(
-                [rec.model_dump() for rec in recommendations], 
+                [rec.model_dump() for rec in recommendations],
                 {"profiler_data": profiler_data, "correlations": correlations}
             )
-            
+
+            # Match validations by position: we sent slim_recs in order and expect the AI
+            # to return validations in the same order.  The AI response schema only includes
+            # chart_type (not x_axis/y_axis), so a key-based lookup always misses for
+            # duplicate chart types (e.g. two bar charts) — index matching is more reliable.
+            def _ai_validation_at(idx: int) -> dict | None:
+                if idx < len(ai_validations):
+                    return ai_validations[idx]
+                # Fallback: match by chart_type only if the index is out of range
+                return next(
+                    (v for v in ai_validations if v.get("chart_type") == recommendations[idx].chart_type.value),
+                    None,
+                )
+
             # Validate each recommendation with AI insights
             validated_recommendations = []
             for i, rec in enumerate(recommendations):
-                ai_validation = ai_validations[i] if i < len(ai_validations) else None
+                ai_validation = _ai_validation_at(i)
                 validated_rec = self._validate_recommendation(
                     rec, context, profiler_data, correlations, patterns, ai_validation
                 )
@@ -101,7 +114,7 @@ class ValidationAgent(BaseAgent):
 
         except Exception as e:
             processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
-            self.logger.error(f"Validation processing failed: {e}")
+            self.logger.error(f"Validation processing failed: {e}", exc_info=True)
             return self._create_error_result(str(e), processing_time)
 
 
@@ -138,7 +151,7 @@ class ValidationAgent(BaseAgent):
             data_appropriateness = ai_scores.get("data_appropriateness", 0.8)
             visual_clarity = ai_scores.get("visual_clarity", 0.7)
             accessibility = ai_scores.get("accessibility", 0.6)
-            interactivity = 0.5  # Keep default for interactivity
+            interactivity = ai_scores.get("interactivity", 0.5)
         else:
             # Default validation scoring
             data_appropriateness = 0.8
@@ -211,7 +224,7 @@ class ValidationAgent(BaseAgent):
             self.logger.info(f"Generated AI validations for {len(recommendations)} recommendations")
             return validations
         except Exception as e:
-            self.logger.warning(f"AI validation failed: {e}")
+            self.logger.error(f"AI validation failed: {e}", exc_info=True)
             return []
 
     def get_fallback_result(self, context: ProcessingContext, error: str = None) -> AgentResult:

@@ -24,11 +24,20 @@ export interface Pattern {
   columns: string[];
 }
 
+/** Backend-supplied axis hints from ValidatedRecommendation.data_mapping */
+export interface DataMapping {
+  x_axis?: string;
+  y_axis?: string;
+  color?: string;
+  size?: string;
+}
+
 export interface ChartRecommendation {
-  chartType: 'line' | 'bar' | 'scatter' | 'pie' | 'histogram' | 'box_plot' | 'heatmap' | 'area' | 'treemap' | 'sankey';
+  chartType: 'line' | 'bar' | 'column' | 'scatter' | 'pie' | 'histogram' | 'box_plot' | 'heatmap' | 'area' | 'treemap' | 'sankey';
   confidence: number;
   justification: string;
   config: ChartConfig;
+  data_mapping?: DataMapping;
 }
 
 // Comprehensive dataset object with all possible chart attributes
@@ -91,6 +100,8 @@ export interface DatasetAttributes {
 export interface ChartConfig {
   title: string;
   data: any[];
+  /** Identifies which chart type this config is for, making the object self-describing. */
+  chartType?: 'line' | 'bar' | 'column' | 'scatter' | 'pie' | 'histogram' | 'box_plot' | 'heatmap' | 'area' | 'treemap' | 'sankey';
   
   // Core mappings
   xAxis?: string;

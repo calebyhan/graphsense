@@ -252,6 +252,21 @@ def test_combine_recommendations_ai_prioritized(agent):
     assert ChartType.BAR in chart_types
 
 
+def test_combine_recommendations_dedup_by_triplet(agent):
+    # Two bar charts with different column pairs: only the exact duplicate should be dropped.
+    ai_recs = [_make_rec(ChartType.BAR, 0.8, x="dept", y="salary")]
+    rule_recs = [
+        _make_rec(ChartType.BAR, 0.7, x="dept", y="salary"),   # exact duplicate → dropped
+        _make_rec(ChartType.BAR, 0.7, x="dept", y="age"),       # different y_axis → kept
+    ]
+    combined = agent._combine_recommendations(ai_recs, rule_recs)
+    bar_recs = [r for r in combined if r.chart_type == ChartType.BAR]
+    # Should have 2: the AI one and the rule one with a different column pair
+    assert len(bar_recs) == 2
+    y_axes = {r.data_mapping.y_axis for r in bar_recs}
+    assert y_axes == {"salary", "age"}
+
+
 def test_combine_recommendations_no_ai(agent):
     rule_recs = [_make_rec(ChartType.BAR, 0.8)]
     combined = agent._combine_recommendations([], rule_recs)
@@ -266,34 +281,57 @@ def test_combine_recommendations_sorted_by_confidence(agent):
 
 # ── _get_ai_recommendations ───────────────────────────────────────────────────
 
-async def test_get_ai_recommendations_success(agent):
+async def test_get_ai_recommendations_success(agent, ctx_cat_num):
+    _populate_cache(ctx_cat_num, agent)
+    profiler_data = ctx_cat_num.get_cached_computation("statistical_summary")
     mock_service = MagicMock()
     mock_service.generate_chart_recommendations = AsyncMock(return_value=[
-        {"chart_type": "bar", "confidence": 0.85, "x_axis": "a", "y_axis": "b",
+        {"chart_type": "bar", "confidence": 0.85, "x_axis": "dept", "y_axis": "salary",
          "reasoning": "good chart", "best_for": ["comparisons"]}
     ])
     with patch("app.agents.chart_recommender_agent.get_gemini_service", return_value=mock_service):
-        recs = await agent._get_ai_recommendations({}, {}, [])
+        recs = await agent._get_ai_recommendations(profiler_data, ctx_cat_num, [])
     assert len(recs) == 1
     assert recs[0].chart_type == ChartType.BAR
 
 
-async def test_get_ai_recommendations_invalid_chart_type_skipped(agent):
+async def test_get_ai_recommendations_invalid_chart_type_skipped(agent, ctx_cat_num):
+    _populate_cache(ctx_cat_num, agent)
+    profiler_data = ctx_cat_num.get_cached_computation("statistical_summary")
     mock_service = MagicMock()
     mock_service.generate_chart_recommendations = AsyncMock(return_value=[
         {"chart_type": "invalid_type", "confidence": 0.7}
     ])
     with patch("app.agents.chart_recommender_agent.get_gemini_service", return_value=mock_service):
-        recs = await agent._get_ai_recommendations({}, {}, [])
+        recs = await agent._get_ai_recommendations(profiler_data, ctx_cat_num, [])
     assert recs == []
 
 
-async def test_get_ai_recommendations_failure(agent):
+async def test_get_ai_recommendations_failure(agent, ctx_cat_num):
+    _populate_cache(ctx_cat_num, agent)
+    profiler_data = ctx_cat_num.get_cached_computation("statistical_summary")
     mock_service = MagicMock()
     mock_service.generate_chart_recommendations = AsyncMock(side_effect=Exception("AI down"))
     with patch("app.agents.chart_recommender_agent.get_gemini_service", return_value=mock_service):
-        recs = await agent._get_ai_recommendations({}, {}, [])
+        recs = await agent._get_ai_recommendations(profiler_data, ctx_cat_num, [])
     assert recs == []
+
+
+async def test_get_ai_recommendations_fallback_source_logs_warning(agent, ctx_cat_num):
+    """Line 668: when the first rec has _source=='fallback', a warning is logged."""
+    _populate_cache(ctx_cat_num, agent)
+    profiler_data = ctx_cat_num.get_cached_computation("statistical_summary")
+    mock_service = MagicMock()
+    # Return a fallback-tagged rec (as returned by gemini_service when AI fails)
+    mock_service.generate_chart_recommendations = AsyncMock(return_value=[
+        {"_source": "fallback", "chart_type": "bar", "confidence": 0.5,
+         "x_axis": "dept", "y_axis": "salary", "reasoning": "fallback", "best_for": []}
+    ])
+    with patch("app.agents.chart_recommender_agent.get_gemini_service", return_value=mock_service):
+        with patch.object(agent, "logger") as mock_logger:
+            await agent._get_ai_recommendations(profiler_data, ctx_cat_num, [])
+    mock_logger.warning.assert_called_once()
+    assert "fallback" in mock_logger.warning.call_args[0][0].lower()
 
 
 # ── process() ────────────────────────────────────────────────────────────────
@@ -365,3 +403,71 @@ def test_generate_intelligent_recommendations(agent, ctx_cat_num):
     recs = agent._generate_intelligent_recommendations(ctx_cat_num, summary, correlations, patterns)
     assert len(recs) <= 5
     assert all(isinstance(r, ChartRecommendation) for r in recs)
+
+
+# ── _recommend_for_advanced_charts ───────────────────────────────────────────
+
+def test_advanced_charts_no_cols(agent):
+    assert agent._recommend_for_advanced_charts({}, [], ["salary"]) == []
+    assert agent._recommend_for_advanced_charts({}, ["dept"], []) == []
+
+
+def test_advanced_charts_single_categorical(agent):
+    # Only one categorical column → no heatmap or sankey (requires 2 categoricals)
+    columns = {"dept": {"unique_count": 5}}
+    recs = agent._recommend_for_advanced_charts(columns, ["dept"], ["salary"])
+    chart_types = [r.chart_type for r in recs]
+    assert ChartType.HEATMAP not in chart_types
+    assert ChartType.SANKEY not in chart_types
+
+
+def test_advanced_charts_treemap_threshold(agent):
+    # cat1_unique <= 10 → no treemap; > 10 → treemap
+    columns = {"cat": {"unique_count": 10}}
+    recs_no_tree = agent._recommend_for_advanced_charts(columns, ["cat"], ["val"])
+    assert all(r.chart_type != ChartType.TREEMAP for r in recs_no_tree)
+
+    columns = {"cat": {"unique_count": 11}}
+    recs_with_tree = agent._recommend_for_advanced_charts(columns, ["cat"], ["val"])
+    assert any(r.chart_type == ChartType.TREEMAP for r in recs_with_tree)
+
+
+def test_advanced_charts_heatmap_cardinality_bounds(agent):
+    # cat1=5, cat2=5 → heatmap (both in 2..30)
+    columns = {"cat1": {"unique_count": 5}, "cat2": {"unique_count": 5}}
+    recs = agent._recommend_for_advanced_charts(columns, ["cat1", "cat2"], ["val"])
+    assert any(r.chart_type == ChartType.HEATMAP for r in recs)
+
+    # cat1=35 → exceeds heatmap bound → no heatmap
+    columns_high = {"cat1": {"unique_count": 35}, "cat2": {"unique_count": 5}}
+    recs_high = agent._recommend_for_advanced_charts(columns_high, ["cat1", "cat2"], ["val"])
+    assert all(r.chart_type != ChartType.HEATMAP for r in recs_high)
+
+
+def test_advanced_charts_sankey_threshold(agent):
+    # cat1=12, cat2=8 → both within sankey bound (≤15) → sankey produced
+    columns = {"cat1": {"unique_count": 12}, "cat2": {"unique_count": 8}}
+    recs = agent._recommend_for_advanced_charts(columns, ["cat1", "cat2"], ["val"])
+    assert any(r.chart_type == ChartType.SANKEY for r in recs)
+
+    # cat1=16, cat2=8 → cat1 exceeds sankey bound → no sankey
+    columns_over = {"cat1": {"unique_count": 16}, "cat2": {"unique_count": 8}}
+    recs_over = agent._recommend_for_advanced_charts(columns_over, ["cat1", "cat2"], ["val"])
+    assert all(r.chart_type != ChartType.SANKEY for r in recs_over)
+
+
+def test_advanced_charts_heatmap_color_carries_row_field(agent):
+    # The frontend resolves data_mapping.color → rowField for heatmaps.
+    # Verify the backend sets color = primary_cat (the row dimension).
+    columns = {"cat1": {"unique_count": 5}, "cat2": {"unique_count": 5}}
+    recs = agent._recommend_for_advanced_charts(columns, ["cat1", "cat2"], ["val"])
+    heatmap = next(r for r in recs if r.chart_type == ChartType.HEATMAP)
+    assert heatmap.data_mapping.color == "cat1"   # primary_cat → rowField via frontend
+
+
+def test_advanced_charts_sankey_color_carries_target(agent):
+    # The frontend resolves data_mapping.color → target for sankeys.
+    columns = {"cat1": {"unique_count": 5}, "cat2": {"unique_count": 5}}
+    recs = agent._recommend_for_advanced_charts(columns, ["cat1", "cat2"], ["val"])
+    sankey = next(r for r in recs if r.chart_type == ChartType.SANKEY)
+    assert sankey.data_mapping.color == "cat2"    # cat2 → target via frontend

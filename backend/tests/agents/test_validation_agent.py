@@ -228,6 +228,65 @@ async def test_process_with_ai_validation_scores(agent):
     assert result.success is True
 
 
+async def test_process_duplicate_chart_types_receive_distinct_scores(agent):
+    """Regression: two bar charts with different columns must get different AI scores.
+
+    Before the position-based matching fix, both bars would receive the first
+    validation's scores because the key-based lookup matched on chart_type only.
+    """
+    rec_a = _make_rec(ChartType.BAR, 0.8, x="dept", y="salary")
+    rec_b = _make_rec(ChartType.BAR, 0.6, x="region", y="revenue")
+    ctx = _make_context_with_recs(rec_a, rec_b)
+
+    # AI returns two different validations in the same order
+    ai_validations = [
+        {"chart_type": "bar", "scores": {"data_appropriateness": 0.95, "visual_clarity": 0.9, "accessibility": 0.8, "interactivity": 0.7}},
+        {"chart_type": "bar", "scores": {"data_appropriateness": 0.50, "visual_clarity": 0.5, "accessibility": 0.5, "interactivity": 0.5}},
+    ]
+    mock_service = MagicMock()
+    mock_service.validate_chart_recommendations = AsyncMock(return_value=ai_validations)
+    with patch("app.agents.validation_agent.get_gemini_service", return_value=mock_service):
+        result = await agent.process(ctx)
+
+    assert result.success is True
+    validated = result.data["validated_recommendations"]
+    assert len(validated) == 2
+
+    # Extract data_appropriateness scores for each recommendation
+    scores = {
+        v["data_mapping"]["x_axis"]: v["validation_result"]["quality_metrics"]["data_appropriateness"]
+        for v in validated
+    }
+    # dept→salary bar got score 0.95, region→revenue bar got 0.50 (not both 0.95)
+    assert scores["dept"] != scores["region"], (
+        "Duplicate chart types must receive distinct AI scores via position-based matching"
+    )
+    assert scores["dept"] == pytest.approx(0.95)
+    assert scores["region"] == pytest.approx(0.50)
+
+
+async def test_process_fewer_ai_validations_than_recs_uses_fallback(agent):
+    """AI returning fewer validations than recommendations should not crash."""
+    recs = [
+        _make_rec(ChartType.BAR, 0.8),
+        _make_rec(ChartType.LINE, 0.7),
+        _make_rec(ChartType.SCATTER, 0.6),
+    ]
+    ctx = _make_context_with_recs(*recs)
+    # Only one validation returned for three recommendations
+    ai_validations = [
+        {"chart_type": "bar", "scores": {"data_appropriateness": 0.9, "visual_clarity": 0.9, "accessibility": 0.9, "interactivity": 0.9}},
+    ]
+    mock_service = MagicMock()
+    mock_service.validate_chart_recommendations = AsyncMock(return_value=ai_validations)
+    with patch("app.agents.validation_agent.get_gemini_service", return_value=mock_service):
+        result = await agent.process(ctx)
+
+    assert result.success is True
+    validated = result.data["validated_recommendations"]
+    assert len(validated) == 3
+
+
 # ── get_fallback_result ───────────────────────────────────────────────────────
 
 def test_get_fallback_result_with_recommendations(agent):
