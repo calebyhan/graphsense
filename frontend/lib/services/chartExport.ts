@@ -1,12 +1,24 @@
 /**
  * Chart Export Service
- * Handles exporting charts to PNG, SVG, and PDF formats
+ * Handles exporting charts to PNG, SVG, and PDF formats, and the full canvas.
+ *
+ * Uses html-to-image instead of html2canvas because html2canvas 1.4.1 cannot
+ * parse oklch() CSS colors (used by Tailwind v4). html-to-image delegates
+ * rendering to the browser's native engine via SVG foreignObject, which supports
+ * all modern CSS including oklch.
  */
 
-import html2canvas from 'html2canvas';
+import * as htmlToImage from 'html-to-image';
 import { jsPDF } from 'jspdf';
+import { flushSync } from 'react-dom';
+import { useCanvasStore } from '@/store/useCanvasStore';
 
 export type ExportFormat = 'png' | 'svg' | 'pdf';
+
+interface CanvasElementBounds {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+}
 
 export interface ExportOptions {
   filename?: string;
@@ -27,8 +39,6 @@ export class ChartExportService {
   ): Promise<void> {
     const {
       filename = `chart_${Date.now()}`,
-      width = 800,
-      height = 600,
       quality = 1.0,
       backgroundColor = '#ffffff'
     } = options;
@@ -36,13 +46,13 @@ export class ChartExportService {
     try {
       switch (format) {
         case 'png':
-          await this.exportToPNG(element, filename, { width, height, quality, backgroundColor });
+          await this.exportToPNG(element, filename, { quality, backgroundColor });
           break;
         case 'svg':
           await this.exportToSVG(element, filename);
           break;
         case 'pdf':
-          await this.exportToPDF(element, filename, { width, height, backgroundColor });
+          await this.exportToPDF(element, filename, { backgroundColor });
           break;
         default:
           throw new Error(`Unsupported export format: ${format}`);
@@ -54,29 +64,117 @@ export class ChartExportService {
   }
 
   /**
+   * Capture a canvas element by:
+   * 1. Directly manipulating the CSS transform on the canvas content div (bypassing
+   *    React's render cycle to guarantee the transform is applied before capture).
+   * 2. Capturing the full canvas root with html-to-image (same approach as exportFullCanvas).
+   * 3. Cropping the result to the element's on-screen bounding box via Canvas 2D.
+   *
+   * This avoids the html-to-image viewport-clipping issue that occurs when capturing
+   * elements nested inside CSS-transformed ancestors.
+   */
+  private static async captureElement(
+    element: HTMLElement,
+    backgroundColor: string,
+    pixelRatio = 2
+  ): Promise<string> {
+    const store = useCanvasStore.getState();
+
+    // Find the CanvasElement wrapper to get world-space position from the store
+    const wrapper = element.closest('[data-element-id]') as HTMLElement | null;
+    const elementId = wrapper?.getAttribute('data-element-id');
+    const canvasEl = elementId ? store.canvasElements.find(e => e.id === elementId) : null;
+
+    const canvasRoot = document.querySelector<HTMLElement>('[data-canvas-root]');
+    const canvasContent = document.querySelector<HTMLElement>('[data-canvas-content]');
+
+    if (canvasEl && canvasRoot && canvasContent) {
+      const { zoom } = store.viewport;
+      const cW = canvasRoot.clientWidth;
+      const cH = canvasRoot.clientHeight;
+      const worldCx = canvasEl.position.x + canvasEl.size.width / 2;
+      const worldCy = canvasEl.position.y + canvasEl.size.height / 2;
+
+      // Directly set the CSS transform — this bypasses React's render cycle so
+      // the DOM is guaranteed to reflect the new transform before we capture.
+      const savedTransform = canvasContent.style.transform;
+      canvasContent.style.transform =
+        `translate(${cW / 2}px, ${cH / 2}px) translate(${-worldCx * zoom}px, ${-worldCy * zoom}px) scale(${zoom})`;
+
+      // Two rAFs ensure the browser has flushed both style recalculation and layout
+      // before we call getBoundingClientRect() and capture.
+      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+      try {
+        // Element screen bounds are valid now that the transform is applied.
+        const elemRect = element.getBoundingClientRect();
+        const rootRect = canvasRoot.getBoundingClientRect();
+
+        // Clamp to canvas root bounds so we don't crop outside the captured area.
+        const srcLeft = Math.max(0, elemRect.left - rootRect.left);
+        const srcTop  = Math.max(0, elemRect.top  - rootRect.top);
+        const srcRight  = Math.min(rootRect.width,  elemRect.right  - rootRect.left);
+        const srcBottom = Math.min(rootRect.height, elemRect.bottom - rootRect.top);
+
+        // Capture the full canvas root (no CSS-transform ancestry issues).
+        const fullDataUrl = await htmlToImage.toPng(canvasRoot, {
+          quality: 1.0,
+          backgroundColor,
+          pixelRatio,
+          filter: (el) => {
+            const cl = el.classList;
+            if (!cl) return true;
+            return !cl.contains('export-ignore') &&
+                   !cl.contains('canvas-export-ignore') &&
+                   !cl.contains('canvas-grid');
+          },
+        });
+
+        // Load the full capture and crop to the element area.
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = fullDataUrl;
+        });
+
+        const cropX = srcLeft  * pixelRatio;
+        const cropY = srcTop   * pixelRatio;
+        const cropW = (srcRight  - srcLeft) * pixelRatio;
+        const cropH = (srcBottom - srcTop)  * pixelRatio;
+
+        const offscreen = document.createElement('canvas');
+        offscreen.width  = cropW;
+        offscreen.height = cropH;
+        offscreen.getContext('2d')!.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+        return offscreen.toDataURL('image/png');
+      } finally {
+        canvasContent.style.transform = savedTransform;
+      }
+    }
+
+    // Fallback (element not on canvas): direct capture without transform adjustment.
+    return await htmlToImage.toPng(element, {
+      quality: 1.0,
+      backgroundColor,
+      pixelRatio,
+      width: element.offsetWidth,
+      height: element.offsetHeight,
+      filter: (el) => !el.classList?.contains('export-ignore'),
+    });
+  }
+
+  /**
    * Export chart to PNG format
    */
   private static async exportToPNG(
     element: HTMLElement,
     filename: string,
-    options: { width: number; height: number; quality: number; backgroundColor: string }
+    options: { quality: number; backgroundColor: string }
   ): Promise<void> {
-    const canvas = await html2canvas(element, {
-      width: options.width,
-      height: options.height,
-      scale: options.quality,
-      backgroundColor: options.backgroundColor,
-      useCORS: true,
-      allowTaint: true,
-      logging: false
-    });
-
-    // Convert to blob and download
-    canvas.toBlob((blob) => {
-      if (blob) {
-        this.downloadBlob(blob, `${filename}.png`);
-      }
-    }, 'image/png', options.quality);
+    const dataUrl = await this.captureElement(element, options.backgroundColor, 2);
+    this.downloadDataUrl(dataUrl, `${filename}.png`);
   }
 
   /**
@@ -113,28 +211,34 @@ export class ChartExportService {
   private static async exportToPDF(
     element: HTMLElement,
     filename: string,
-    options: { width: number; height: number; backgroundColor: string }
+    options: { backgroundColor: string }
   ): Promise<void> {
-    const canvas = await html2canvas(element, {
-      width: options.width,
-      height: options.height,
-      scale: 2, // Higher scale for better quality in PDF
-      backgroundColor: options.backgroundColor,
-      useCORS: true,
-      allowTaint: true,
-      logging: false
-    });
+    // Use offsetWidth/offsetHeight (natural layout dims, unaffected by ancestor zoom)
+    // so PDF page size doesn't vary with current canvas zoom level.
+    const width  = element.offsetWidth;
+    const height = element.offsetHeight;
+    const dataUrl = await this.captureElement(element, options.backgroundColor, 2);
 
-    // Create PDF
-    const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({
-      orientation: options.width > options.height ? 'landscape' : 'portrait',
+      orientation: width > height ? 'landscape' : 'portrait',
       unit: 'px',
-      format: [options.width, options.height]
+      format: [width, height],
     });
 
-    pdf.addImage(imgData, 'PNG', 0, 0, options.width, options.height);
+    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
     pdf.save(`${filename}.pdf`);
+  }
+
+  /**
+   * Download a data URL as a file
+   */
+  private static downloadDataUrl(dataUrl: string, filename: string): void {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   /**
@@ -169,6 +273,87 @@ export class ChartExportService {
     };
 
     return dimensionsMap[chartType] || { width: 800, height: 600 };
+  }
+
+  /**
+   * Export the full canvas (all elements) to PNG or PDF.
+   *
+   * Strategy: temporarily adjust the viewport so all elements are rendered
+   * flush to the top-left of the container, capture with html-to-image cropped
+   * to the content area, then restore the original viewport.
+   */
+  static async exportFullCanvas(
+    canvasContainer: HTMLElement,
+    elements: CanvasElementBounds[],
+    currentViewport: { x: number; y: number; zoom: number },
+    onViewportUpdate: (vp: { x: number; y: number; zoom: number }) => void,
+    format: 'png' | 'pdf',
+    options: ExportOptions = {}
+  ): Promise<void> {
+    if (elements.length === 0) {
+      throw new Error('No elements to export');
+    }
+
+    const { filename = `canvas_${Date.now()}`, backgroundColor = '#ffffff' } = options;
+    const PADDING = 40; // world-space padding around content
+    const EXPORT_ZOOM = 1.0;
+
+    // 1. Calculate bounding box in world coordinates
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of elements) {
+      minX = Math.min(minX, el.position.x);
+      minY = Math.min(minY, el.position.y);
+      maxX = Math.max(maxX, el.position.x + el.size.width);
+      maxY = Math.max(maxY, el.position.y + el.size.height);
+    }
+
+    const cW = canvasContainer.clientWidth;
+    const cH = canvasContainer.clientHeight;
+
+    // 2. Compute viewport so (minX - PADDING) maps to screen x=0
+    //    screenX = worldX * zoom + vx + cW/2  →  0 = (minX - PADDING)*zoom + vx + cW/2
+    const exportVx = -(minX - PADDING) * EXPORT_ZOOM - cW / 2;
+    const exportVy = -(minY - PADDING) * EXPORT_ZOOM - cH / 2;
+
+    const contentW = Math.ceil((maxX - minX + 2 * PADDING) * EXPORT_ZOOM);
+    const contentH = Math.ceil((maxY - minY + 2 * PADDING) * EXPORT_ZOOM);
+
+    try {
+      // 3. Apply export viewport — flushSync forces React to complete the full
+      //    render cycle synchronously (store write → InfiniteCanvas re-render →
+      //    useEffect → setLocalViewport → DOM update) before we return, so a
+      //    single rAF is sufficient to guarantee the browser has painted the
+      //    new transform. Without flushSync, two rAFs can still race against
+      //    the second React render triggered by setLocalViewport inside the effect.
+      flushSync(() => onViewportUpdate({ x: exportVx, y: exportVy, zoom: EXPORT_ZOOM }));
+
+      // 4. One rAF to let the browser finalize layout and compositing
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const dataUrl = await htmlToImage.toPng(canvasContainer, {
+        quality: 1.0,
+        backgroundColor,
+        pixelRatio: 2,
+        width: contentW,
+        height: contentH,
+        filter: (el) => !el.classList?.contains('canvas-export-ignore'),
+      });
+
+      if (format === 'png') {
+        this.downloadDataUrl(dataUrl, `${filename}.png`);
+      } else {
+        const pdf = new jsPDF({
+          orientation: contentW > contentH ? 'landscape' : 'portrait',
+          unit: 'px',
+          format: [contentW, contentH],
+        });
+        pdf.addImage(dataUrl, 'PNG', 0, 0, contentW, contentH);
+        pdf.save(`${filename}.pdf`);
+      }
+    } finally {
+      // 5. Always restore original viewport synchronously so the canvas
+      //    snaps back without a visible deferred-render flash.
+      flushSync(() => onViewportUpdate(currentViewport));
+    }
   }
 
   /**

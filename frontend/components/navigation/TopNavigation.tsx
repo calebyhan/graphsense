@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, Share2, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Download, History, Edit3, Bell, ChevronDown, Sun, Moon, Share2, Check, FileImage, FileText } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,8 @@ interface TopNavigationProps {
   isOwner?: boolean;
   saveState?: SaveState;
   lastSaved?: Date | null;
+  onExportCanvas?: (format: 'png' | 'pdf') => void;
+  isExporting?: boolean;
 }
 
 function SaveIndicator({ saveState, lastSaved }: { saveState: SaveState; lastSaved: Date | null }) {
@@ -54,11 +56,24 @@ function SaveIndicator({ saveState, lastSaved }: { saveState: SaveState; lastSav
   return null;
 }
 
-export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false, canvasId, isOwner, saveState = 'idle', lastSaved = null }: TopNavigationProps) {
+export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = false, canvasId, isOwner, saveState = 'idle', lastSaved = null, onExportCanvas, isExporting = false }: TopNavigationProps) {
   const [projectName, setProjectName] = useState('GraphSense');
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(projectName);
   const [shareOpen, setShareOpen] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showExportMenu]);
 
   const handleNameSubmit = () => {
     setProjectName(tempName);
@@ -162,16 +177,52 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
         </Button>
 
         {/* Export Options */}
-        <div className="relative">
-          <Button
-            variant="outline"
-            className="hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export
-            <ChevronDown className="w-3 h-3 ml-1" />
-          </Button>
-        </div>
+        {onExportCanvas && (
+          <div className="relative" ref={exportMenuRef}>
+            <Button
+              variant="outline"
+              disabled={isExporting}
+              onClick={() => setShowExportMenu(v => !v)}
+              className="hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 transition-all duration-300 cursor-pointer"
+            >
+              {isExporting ? (
+                <span className="w-4 h-4 mr-2 border-2 border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              Export
+              <ChevronDown className="w-3 h-3 ml-1" />
+            </Button>
+
+            {showExportMenu && !isExporting && (
+              <div className="absolute right-0 top-full mt-1.5 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[9999] p-1.5 canvas-export-ignore">
+                <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-2 pt-1">
+                  Export Canvas
+                </div>
+                <button
+                  onClick={() => { setShowExportMenu(false); onExportCanvas('png'); }}
+                  className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
+                >
+                  <FileImage className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">PNG Image</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">High-quality raster</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setShowExportMenu(false); onExportCanvas('pdf'); }}
+                  className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
+                >
+                  <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <div>
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">PDF Document</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">Portable document</div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Share button — owners only */}
         {isOwner && canvasId && (

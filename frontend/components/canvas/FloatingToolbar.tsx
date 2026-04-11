@@ -16,6 +16,9 @@ import {
   ZoomOut,
   Maximize,
   Crosshair,
+  Download,
+  FileImage,
+  FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -26,6 +29,8 @@ interface FloatingToolbarProps {
   onAddVisualization?: () => void;
   onDeleteSelected?: () => void;
   hasSelection?: boolean;
+  onExportCanvas?: (format: 'png' | 'pdf') => void;
+  isExporting?: boolean;
 }
 
 const tools = [
@@ -42,10 +47,13 @@ const tools = [
 export default function FloatingToolbar({
   onAddVisualization: _onAddVisualization,
   onDeleteSelected,
-  hasSelection = false
+  hasSelection = false,
+  onExportCanvas,
+  isExporting = false,
 }: FloatingToolbarProps) {
   const { selectedTool, setSelectedTool, selectedElements, viewport, updateViewport, resetViewport } = useCanvasStore();
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [showExportOptions, setShowExportOptions] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const toolbarRef = React.useRef<HTMLDivElement>(null);
@@ -217,6 +225,65 @@ export default function FloatingToolbar({
               <Crosshair className="w-5 h-5" />
             </Button>
           </div>
+
+          {/* Export Canvas */}
+          {onExportCanvas && (
+            <>
+              <div className="w-px h-8 bg-gray-300 dark:bg-gray-600" />
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowExportOptions(!showExportOptions)}
+                  disabled={isExporting}
+                  className="h-10 w-10 p-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+                  title="Export Canvas"
+                >
+                  {isExporting ? (
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Download className="w-5 h-5" />
+                  )}
+                </Button>
+
+                {showExportOptions && !isExporting && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-[9998]"
+                      onClick={() => setShowExportOptions(false)}
+                    />
+                    <div className="absolute bottom-full mb-2 right-0 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[9999] canvas-export-ignore">
+                      <div className="p-2">
+                        <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-2">
+                          Export Canvas
+                        </div>
+                        <button
+                          onClick={() => { setShowExportOptions(false); onExportCanvas('png'); }}
+                          className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
+                        >
+                          <FileImage className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">PNG Image</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">High-quality raster</div>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => { setShowExportOptions(false); onExportCanvas('pdf'); }}
+                          className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
+                        >
+                          <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">PDF Document</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Portable document</div>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Delete Selected */}
           {(hasSelection || selectedElements.length > 0) && (
