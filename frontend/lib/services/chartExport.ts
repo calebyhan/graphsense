@@ -22,8 +22,6 @@ interface CanvasElementBounds {
 
 export interface ExportOptions {
   filename?: string;
-  width?: number;
-  height?: number;
   quality?: number;
   backgroundColor?: string;
 }
@@ -327,15 +325,21 @@ export class ChartExportService {
       //    the second React render triggered by setLocalViewport inside the effect.
       flushSync(() => onViewportUpdate({ x: exportVx, y: exportVy, zoom: EXPORT_ZOOM }));
 
-      // 4. One rAF to let the browser finalize layout and compositing
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      // 4. Two rAFs: the first lets useEffect-driven state updates (e.g. setLocalViewport
+      //    in InfiniteCanvas) commit their second render; the second ensures the browser
+      //    has painted that render before we capture.
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
       const dataUrl = await htmlToImage.toPng(canvasContainer, {
         quality: 1.0,
         backgroundColor,
         pixelRatio: 2,
         width: contentW,
         height: contentH,
-        filter: (el) => !el.classList?.contains('canvas-export-ignore'),
+        filter: (el) => {
+          const cl = el.classList;
+          if (!cl) return true;
+          return !cl.contains('canvas-export-ignore') && !cl.contains('export-ignore');
+        },
       });
 
       if (format === 'png') {

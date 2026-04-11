@@ -40,12 +40,10 @@ export default function ExportButton({
     setShowOptions(false);
 
     try {
-      const dimensions = ChartExportService.getRecommendedDimensions(chartType);
       const exportFilename = filename || `${chartType}_chart_${new Date().toISOString().split('T')[0]}`;
 
       await ChartExportService.exportChart(elementRef.current, format, {
         filename: exportFilename,
-        ...dimensions,
         quality: 1.0,
         backgroundColor: '#ffffff'
       });
