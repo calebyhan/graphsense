@@ -136,10 +136,14 @@ export class ChartExportService {
           img.src = fullDataUrl;
         });
 
-        const cropX = srcLeft  * pixelRatio;
-        const cropY = srcTop   * pixelRatio;
-        const cropW = (srcRight  - srcLeft) * pixelRatio;
-        const cropH = (srcBottom - srcTop)  * pixelRatio;
+        // Floor the origin and ceil the far edge so sub-pixel BoundingClientRect
+        // values don't truncate the canvas dimensions or leave hairline gaps.
+        const rawX = srcLeft  * pixelRatio;
+        const rawY = srcTop   * pixelRatio;
+        const cropX = Math.floor(rawX);
+        const cropY = Math.floor(rawY);
+        const cropW = Math.max(1, Math.ceil(srcRight  * pixelRatio) - cropX);
+        const cropH = Math.max(1, Math.ceil(srcBottom * pixelRatio) - cropY);
 
         const offscreen = document.createElement('canvas');
         offscreen.width  = cropW;
