@@ -733,6 +733,7 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
   return (
     <div
       ref={canvasRef}
+      data-canvas-root
       className="relative w-full h-full overflow-hidden bg-gray-50 dark:bg-gray-900 canvas-optimized"
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -774,6 +775,7 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
 
       {/* Content */}
       <div
+        data-canvas-content
         className="absolute canvas-optimized"
         style={{
           transform: `translate(${canvasRef.current ? canvasRef.current.clientWidth / 2 : 0}px, ${canvasRef.current ? canvasRef.current.clientHeight / 2 : 0}px) translate(${localViewport.x}px, ${localViewport.y}px) scale(${localViewport.zoom})`,

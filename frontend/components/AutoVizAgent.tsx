@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import InfiniteCanvas from '@/components/canvas/InfiniteCanvas';
 import FloatingToolbar from '@/components/canvas/FloatingToolbar';
 import { DataPanel } from '@/components/panels/DataPanel';
@@ -24,6 +25,7 @@ import ConnectionLines from '@/components/canvas/ConnectionLines';
 import ContextMenu, { ContextMenuState } from '@/components/canvas/ContextMenu';
 import { canvasAPI } from '@/lib/api/backendClient';
 import { useAuth } from '@/hooks/useAuth';
+import { ChartExportService } from '@/lib/services/chartExport';
 
 export interface Dataset {
   id: string;
@@ -208,6 +210,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false });
+  const [isExporting, setIsExporting] = useState(false);
+  const exportCanvasContainerRef = useRef<HTMLDivElement>(null);
 
   // Reset autosave state when canvasId changes (e.g. navigation without full remount)
   useEffect(() => {
@@ -603,6 +607,44 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
 
   const handleFitToScreen = useCallback(() => useCanvasStore.getState().fitToScreen(), []);
 
+  const handleExportElement = useCallback(async (elementId: string) => {
+    const node = document.querySelector<HTMLElement>(`[data-element-id="${elementId}"]`);
+    if (!node) return;
+    // Prefer the chart-card inside the element (skips the CanvasElement UI header).
+    // Fall back to the full element node for non-chart element types.
+    const target = node.querySelector<HTMLElement>('.chart-card') ?? node;
+    try {
+      await ChartExportService.exportChart(target, 'png', {
+        filename: `element_${new Date().toISOString().split('T')[0]}`,
+        backgroundColor: '#ffffff',
+      });
+    } catch (err) {
+      console.error('[AutoVizAgent] Element export failed:', err);
+    }
+  }, []);
+
+  const handleExportCanvas = useCallback(async (format: 'png' | 'pdf') => {
+    if (!exportCanvasContainerRef.current || canvasElements.length === 0) return;
+    // Flush the spinner render synchronously before exportFullCanvas sets the imperative
+    // transform. Without this, React's pending re-render from setIsExporting(true) could
+    // fire during the two rAFs inside exportFullCanvas and reset the transform via DOM
+    // reconciliation, causing the export to capture the current viewport instead of the
+    // computed export bounds.
+    flushSync(() => setIsExporting(true));
+    try {
+      await ChartExportService.exportFullCanvas(
+        exportCanvasContainerRef.current,
+        canvasElements,
+        format,
+        { filename: `canvas_${new Date().toISOString().split('T')[0]}` }
+      );
+    } catch (err) {
+      console.error('[AutoVizAgent] Canvas export failed:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [canvasElements]);
+
   // Duplicate an element with a +20px offset
   const handleDuplicateElement = useCallback((id: string) => {
     if (readOnly) return;
@@ -711,6 +753,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         isOwner={isOwner}
         saveState={saveState}
         lastSaved={lastSaved}
+        onExportCanvas={canvasElements.length > 0 ? handleExportCanvas : undefined}
+        isExporting={isExporting}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -724,7 +768,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
         </div>
 
         {/* Canvas Area - Center */}
-        <div className="flex-1 relative overflow-hidden">
+        <div ref={exportCanvasContainerRef} className="flex-1 relative overflow-hidden">
           <InfiniteCanvas
             onCursorMove={emitCursor}
             minZoom={minZoom}
@@ -873,6 +917,7 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
               hasClipboard={hasClipboard}
               onPlaceElement={handleContextMenuPlace}
               onFitToScreen={handleFitToScreen}
+              onExportElement={handleExportElement}
             />
           )}
 
@@ -882,6 +927,8 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
               onAddVisualization={handleAutoViz}
               onDeleteSelected={handleDeleteSelected}
               hasSelection={selectedVizId !== null}
+              onExportCanvas={canvasElements.length > 0 ? handleExportCanvas : undefined}
+              isExporting={isExporting}
             />
           )}
 

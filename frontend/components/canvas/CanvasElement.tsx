@@ -276,6 +276,7 @@ export default function CanvasElement({ element, children, isSelected, onSelect,
         willChange: isDragging || isResizing ? 'transform' : 'auto',
         transform: isDragging || isResizing ? 'translateZ(0)' : 'none',
       }}
+      data-element-id={element.id}
       onMouseDown={handleMouseDown}
       onContextMenu={onContextMenu ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(e, element.id); } : undefined}
     >

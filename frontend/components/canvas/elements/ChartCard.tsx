@@ -37,7 +37,7 @@ const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardP
   };
 
   return (
-    <div className="chart-card h-full flex flex-col">
+    <div ref={chartRef} className="chart-card h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -47,16 +47,18 @@ const ChartCard = memo(({ config, chartType, recommendation, title }: ChartCardP
           </span>
         </div>
 
-        <ExportButton
-          elementRef={chartRef}
-          chartType={chartType}
-          filename={getChartTitle().toLowerCase().replace(/\s+/g, '-')}
-          className="scale-75"
-        />
+        <div className="export-ignore">
+          <ExportButton
+            elementRef={chartRef}
+            chartType={chartType}
+            filename={getChartTitle().toLowerCase().replace(/\s+/g, '-')}
+            className="scale-75"
+          />
+        </div>
       </div>
 
       {/* Chart */}
-      <div ref={chartRef} className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {config ? (
           <ChartRenderer config={config} chartType={chartType} />
         ) : (
