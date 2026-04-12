@@ -75,6 +75,10 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showExportMenu]);
 
+  useEffect(() => {
+    if (isExporting) setShowExportMenu(false);
+  }, [isExporting]);
+
   const handleNameSubmit = () => {
     setProjectName(tempName);
     setIsEditing(false);

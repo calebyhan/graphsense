@@ -148,7 +148,9 @@ export class ChartExportService {
         const offscreen = document.createElement('canvas');
         offscreen.width  = cropW;
         offscreen.height = cropH;
-        offscreen.getContext('2d')!.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+        const ctx = offscreen.getContext('2d');
+        if (!ctx) throw new Error('Failed to acquire 2D canvas context for image cropping');
+        ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
         return offscreen.toDataURL('image/png');
       } finally {
@@ -236,15 +238,24 @@ export class ChartExportService {
   }
 
   /**
+   * Convert a data URL to a Blob. Using a Blob + object URL for downloads avoids
+   * holding the full base64 string in href, which is more memory-efficient for large exports.
+   */
+  private static dataUrlToBlob(dataUrl: string): Blob {
+    const [header, data] = dataUrl.split(',', 2);
+    if (!header || data === undefined) throw new Error('Invalid data URL');
+    const mimeType = header.match(/^data:([^;]+)/)?.[1] ?? 'application/octet-stream';
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mimeType });
+  }
+
+  /**
    * Download a data URL as a file
    */
   private static downloadDataUrl(dataUrl: string, filename: string): void {
-    const link = document.createElement('a');
-    link.href = dataUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    this.downloadBlob(this.dataUrlToBlob(dataUrl), filename);
   }
 
   /**

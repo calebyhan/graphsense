@@ -55,6 +55,10 @@ export default function FloatingToolbar({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [showExportOptions, setShowExportOptions] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+
+  React.useEffect(() => {
+    if (isExporting) setShowExportOptions(false);
+  }, [isExporting]);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const toolbarRef = React.useRef<HTMLDivElement>(null);
 
