@@ -49,7 +49,7 @@ export class ChartExportService {
           await this.exportToSVG(element, filename);
           break;
         case 'pdf':
-          await this.exportToPDF(element, filename, { backgroundColor });
+          await this.exportToPDF(element, filename, { quality, backgroundColor });
           break;
         default:
           throw new Error(`Unsupported export format: ${format}`);
@@ -216,13 +216,14 @@ export class ChartExportService {
   private static async exportToPDF(
     element: HTMLElement,
     filename: string,
-    options: { backgroundColor: string }
+    options: { quality?: number; backgroundColor: string }
   ): Promise<void> {
     // Use offsetWidth/offsetHeight (natural layout dims, unaffected by ancestor zoom)
     // so PDF page size doesn't vary with current canvas zoom level.
     const width  = element.offsetWidth;
     const height = element.offsetHeight;
-    const dataUrl = await this.captureElement(element, options.backgroundColor, 2);
+    const pixelRatio = Math.max(1, Math.min(4, (options.quality ?? 1.0) * 2));
+    const dataUrl = await this.captureElement(element, options.backgroundColor, pixelRatio);
 
     const pdf = new jsPDF({
       orientation: width > height ? 'landscape' : 'portrait',
@@ -278,7 +279,8 @@ export class ChartExportService {
       throw new Error('No elements to export');
     }
 
-    const { filename = `canvas_${Date.now()}`, backgroundColor = '#ffffff' } = options;
+    const { filename = `canvas_${Date.now()}`, quality = 1.0, backgroundColor = '#ffffff' } = options;
+    const pixelRatio = Math.max(1, Math.min(4, quality * 2));
     const PADDING = 40; // world-space padding around content
     const EXPORT_ZOOM = 1.0;
 
@@ -299,11 +301,11 @@ export class ChartExportService {
     const canvasContent = canvasContainer.querySelector<HTMLElement>('[data-canvas-content]');
     if (!canvasRoot || !canvasContent) throw new Error('Canvas DOM nodes not found');
 
-    // 3. Compute export viewport: screenX = worldX*zoom + vx + cW/2  →  vx so minX-PADDING maps to 0
-    const cW = canvasRoot.clientWidth;
-    const cH = canvasRoot.clientHeight;
-    const exportVx = -(minX - PADDING) * EXPORT_ZOOM - cW / 2;
-    const exportVy = -(minY - PADDING) * EXPORT_ZOOM - cH / 2;
+    // 3. Compute export viewport using export dimensions (contentW/contentH), not the screen
+    //    viewport (cW/cH). html-to-image captures contentW×contentH, so the transform's
+    //    center-translate must use the same dimensions or the world→screen mapping is off.
+    const exportVx = -(minX - PADDING) * EXPORT_ZOOM - contentW / 2;
+    const exportVy = -(minY - PADDING) * EXPORT_ZOOM - contentH / 2;
 
     const savedTransform = canvasContent.style.transform;
 
@@ -311,7 +313,7 @@ export class ChartExportService {
       // 4. Apply export transform imperatively — matches InfiniteCanvas's format exactly,
       //    bypassing React so the DOM is guaranteed to reflect the transform before capture.
       canvasContent.style.transform =
-        `translate(${cW / 2}px, ${cH / 2}px) translate(${exportVx}px, ${exportVy}px) scale(${EXPORT_ZOOM})`;
+        `translate(${contentW / 2}px, ${contentH / 2}px) translate(${exportVx}px, ${exportVy}px) scale(${EXPORT_ZOOM})`;
 
       // 5. Two rAFs to let layout recalculation and compositing flush before capture
       await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -319,7 +321,7 @@ export class ChartExportService {
       const dataUrl = await htmlToImage.toPng(canvasRoot, {
         quality: 1.0,
         backgroundColor,
-        pixelRatio: 2,
+        pixelRatio,
         width: contentW,
         height: contentH,
         filter: (el) => {
