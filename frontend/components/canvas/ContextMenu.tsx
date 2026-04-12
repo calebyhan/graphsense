@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import {
   MousePointer,
   Hand,
@@ -40,6 +41,7 @@ interface ContextMenuProps {
   hasClipboard: boolean;
   onPlaceElement: (tool: ToolType, canvasX: number, canvasY: number) => void;
   onFitToScreen: () => void;
+  onExportElement?: (elementId: string) => void;
 }
 
 interface MenuItemProps {
@@ -98,6 +100,7 @@ export default function ContextMenu({
   hasClipboard,
   onPlaceElement,
   onFitToScreen,
+  onExportElement,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const { setSelectedTool, resetViewport, bringForward, sendBackward, bringToFront, sendToBack } = useCanvasStore();
@@ -196,8 +199,8 @@ export default function ContextMenu({
           <MenuItem
             icon={<Download className="w-4 h-4" />}
             label="Export as PNG"
-            disabled
-            onClick={onClose}
+            disabled={!onExportElement}
+            onClick={() => { flushSync(() => onClose()); onExportElement?.(state.elementId!); }}
           />
           <Separator />
           <MenuItem
