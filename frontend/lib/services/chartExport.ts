@@ -82,8 +82,8 @@ export class ChartExportService {
     const elementId = wrapper?.getAttribute('data-element-id');
     const canvasEl = elementId ? store.canvasElements.find(e => e.id === elementId) : null;
 
-    const canvasRoot = document.querySelector<HTMLElement>('[data-canvas-root]');
-    const canvasContent = document.querySelector<HTMLElement>('[data-canvas-content]');
+    const canvasRoot = element.closest<HTMLElement>('[data-canvas-root]');
+    const canvasContent = canvasRoot?.querySelector<HTMLElement>('[data-canvas-content]');
 
     if (canvasEl && canvasRoot && canvasContent) {
       // Fixed zoom=1 so export quality is independent of the current viewport zoom.
