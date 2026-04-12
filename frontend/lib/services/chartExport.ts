@@ -10,7 +10,6 @@
 
 import * as htmlToImage from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { flushSync } from 'react-dom';
 import { useCanvasStore } from '@/store/useCanvasStore';
 
 export type ExportFormat = 'png' | 'svg' | 'pdf';
@@ -87,17 +86,18 @@ export class ChartExportService {
     const canvasContent = document.querySelector<HTMLElement>('[data-canvas-content]');
 
     if (canvasEl && canvasRoot && canvasContent) {
-      const { zoom } = store.viewport;
+      // Fixed zoom=1 so export quality is independent of the current viewport zoom.
+      const CAPTURE_ZOOM = 1.0;
       const cW = canvasRoot.clientWidth;
       const cH = canvasRoot.clientHeight;
       const worldCx = canvasEl.position.x + canvasEl.size.width / 2;
       const worldCy = canvasEl.position.y + canvasEl.size.height / 2;
 
-      // Directly set the CSS transform — this bypasses React's render cycle so
-      // the DOM is guaranteed to reflect the new transform before we capture.
+      // Directly set the CSS transform — matches InfiniteCanvas's format exactly,
+      // bypassing the React render cycle so the DOM update is guaranteed before capture.
       const savedTransform = canvasContent.style.transform;
       canvasContent.style.transform =
-        `translate(${cW / 2}px, ${cH / 2}px) translate(${-worldCx * zoom}px, ${-worldCy * zoom}px) scale(${zoom})`;
+        `translate(${cW / 2}px, ${cH / 2}px) translate(${-worldCx * CAPTURE_ZOOM}px, ${-worldCy * CAPTURE_ZOOM}px) scale(${CAPTURE_ZOOM})`;
 
       // Two rAFs ensure the browser has flushed both style recalculation and layout
       // before we call getBoundingClientRect() and capture.
@@ -175,7 +175,10 @@ export class ChartExportService {
     filename: string,
     options: { quality: number; backgroundColor: string }
   ): Promise<void> {
-    const dataUrl = await this.captureElement(element, options.backgroundColor, 2);
+    // Map quality (0–2) to pixelRatio (1–4) so the option has a real effect on sharpness.
+    // Default quality=1.0 → pixelRatio=2 (same as the previous hardcoded value).
+    const pixelRatio = Math.max(1, Math.min(4, options.quality * 2));
+    const dataUrl = await this.captureElement(element, options.backgroundColor, pixelRatio);
     this.downloadDataUrl(dataUrl, `${filename}.png`);
   }
 
@@ -258,37 +261,16 @@ export class ChartExportService {
   }
 
   /**
-   * Get recommended export dimensions based on chart type
-   */
-  static getRecommendedDimensions(chartType: string): { width: number; height: number } {
-    const dimensionsMap: Record<string, { width: number; height: number }> = {
-      bar: { width: 800, height: 600 },
-      line: { width: 1000, height: 600 },
-      scatter: { width: 800, height: 600 },
-      pie: { width: 600, height: 600 },
-      histogram: { width: 800, height: 600 },
-      box_plot: { width: 800, height: 600 },
-      heatmap: { width: 800, height: 800 },
-      area: { width: 1000, height: 600 },
-      treemap: { width: 800, height: 600 },
-      sankey: { width: 1000, height: 700 }
-    };
-
-    return dimensionsMap[chartType] || { width: 800, height: 600 };
-  }
-
-  /**
    * Export the full canvas (all elements) to PNG or PDF.
    *
-   * Strategy: temporarily adjust the viewport so all elements are rendered
-   * flush to the top-left of the container, capture with html-to-image cropped
-   * to the content area, then restore the original viewport.
+   * Strategy: imperatively set the CSS transform on [data-canvas-content] to position
+   * all elements flush to the top-left, capture [data-canvas-root] with html-to-image,
+   * then restore the original transform. This bypasses the React render cycle entirely,
+   * avoiding the flushSync + useEffect race where the DOM transform could lag behind.
    */
   static async exportFullCanvas(
     canvasContainer: HTMLElement,
     elements: CanvasElementBounds[],
-    currentViewport: { x: number; y: number; zoom: number },
-    onViewportUpdate: (vp: { x: number; y: number; zoom: number }) => void,
     format: 'png' | 'pdf',
     options: ExportOptions = {}
   ): Promise<void> {
@@ -309,31 +291,32 @@ export class ChartExportService {
       maxY = Math.max(maxY, el.position.y + el.size.height);
     }
 
-    const cW = canvasContainer.clientWidth;
-    const cH = canvasContainer.clientHeight;
-
-    // 2. Compute viewport so (minX - PADDING) maps to screen x=0
-    //    screenX = worldX * zoom + vx + cW/2  →  0 = (minX - PADDING)*zoom + vx + cW/2
-    const exportVx = -(minX - PADDING) * EXPORT_ZOOM - cW / 2;
-    const exportVy = -(minY - PADDING) * EXPORT_ZOOM - cH / 2;
-
     const contentW = Math.ceil((maxX - minX + 2 * PADDING) * EXPORT_ZOOM);
     const contentH = Math.ceil((maxY - minY + 2 * PADDING) * EXPORT_ZOOM);
 
-    try {
-      // 3. Apply export viewport — flushSync forces React to complete the full
-      //    render cycle synchronously (store write → InfiniteCanvas re-render →
-      //    useEffect → setLocalViewport → DOM update) before we return, so a
-      //    single rAF is sufficient to guarantee the browser has painted the
-      //    new transform. Without flushSync, two rAFs can still race against
-      //    the second React render triggered by setLocalViewport inside the effect.
-      flushSync(() => onViewportUpdate({ x: exportVx, y: exportVy, zoom: EXPORT_ZOOM }));
+    // 2. Find DOM nodes — canvasRoot is the capture target; canvasContent holds the transform
+    const canvasRoot    = canvasContainer.querySelector<HTMLElement>('[data-canvas-root]');
+    const canvasContent = canvasContainer.querySelector<HTMLElement>('[data-canvas-content]');
+    if (!canvasRoot || !canvasContent) throw new Error('Canvas DOM nodes not found');
 
-      // 4. Two rAFs: the first lets useEffect-driven state updates (e.g. setLocalViewport
-      //    in InfiniteCanvas) commit their second render; the second ensures the browser
-      //    has painted that render before we capture.
-      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-      const dataUrl = await htmlToImage.toPng(canvasContainer, {
+    // 3. Compute export viewport: screenX = worldX*zoom + vx + cW/2  →  vx so minX-PADDING maps to 0
+    const cW = canvasRoot.clientWidth;
+    const cH = canvasRoot.clientHeight;
+    const exportVx = -(minX - PADDING) * EXPORT_ZOOM - cW / 2;
+    const exportVy = -(minY - PADDING) * EXPORT_ZOOM - cH / 2;
+
+    const savedTransform = canvasContent.style.transform;
+
+    try {
+      // 4. Apply export transform imperatively — matches InfiniteCanvas's format exactly,
+      //    bypassing React so the DOM is guaranteed to reflect the transform before capture.
+      canvasContent.style.transform =
+        `translate(${cW / 2}px, ${cH / 2}px) translate(${exportVx}px, ${exportVy}px) scale(${EXPORT_ZOOM})`;
+
+      // 5. Two rAFs to let layout recalculation and compositing flush before capture
+      await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+      const dataUrl = await htmlToImage.toPng(canvasRoot, {
         quality: 1.0,
         backgroundColor,
         pixelRatio: 2,
@@ -342,7 +325,9 @@ export class ChartExportService {
         filter: (el) => {
           const cl = el.classList;
           if (!cl) return true;
-          return !cl.contains('canvas-export-ignore') && !cl.contains('export-ignore');
+          return !cl.contains('canvas-export-ignore') &&
+                 !cl.contains('export-ignore') &&
+                 !cl.contains('canvas-grid');
         },
       });
 
@@ -358,9 +343,8 @@ export class ChartExportService {
         pdf.save(`${filename}.pdf`);
       }
     } finally {
-      // 5. Always restore original viewport synchronously so the canvas
-      //    snaps back without a visible deferred-render flash.
-      flushSync(() => onViewportUpdate(currentViewport));
+      // 6. Always restore original transform so the canvas snaps back immediately
+      canvasContent.style.transform = savedTransform;
     }
   }
 

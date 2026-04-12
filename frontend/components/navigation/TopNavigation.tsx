@@ -200,6 +200,7 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
                   Export Canvas
                 </div>
                 <button
+                  type="button"
                   onClick={() => { setShowExportMenu(false); onExportCanvas('png'); }}
                   className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
                 >
@@ -210,6 +211,7 @@ export function TopNavigation({ isDarkMode, onToggleDarkMode, isTransitioning = 
                   </div>
                 </button>
                 <button
+                  type="button"
                   onClick={() => { setShowExportMenu(false); onExportCanvas('pdf'); }}
                   className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
                 >

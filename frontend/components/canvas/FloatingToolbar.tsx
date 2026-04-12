@@ -249,7 +249,7 @@ export default function FloatingToolbar({
                 {showExportOptions && !isExporting && (
                   <>
                     <div
-                      className="fixed inset-0 z-[9998]"
+                      className="fixed inset-0 z-[9998] canvas-export-ignore"
                       onClick={() => setShowExportOptions(false)}
                     />
                     <div className="absolute bottom-full mb-2 right-0 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[9999] canvas-export-ignore">
@@ -258,6 +258,7 @@ export default function FloatingToolbar({
                           Export Canvas
                         </div>
                         <button
+                          type="button"
                           onClick={() => { setShowExportOptions(false); onExportCanvas('png'); }}
                           className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
                         >
@@ -268,6 +269,7 @@ export default function FloatingToolbar({
                           </div>
                         </button>
                         <button
+                          type="button"
                           onClick={() => { setShowExportOptions(false); onExportCanvas('pdf'); }}
                           className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700 rounded-md transition-colors"
                         >

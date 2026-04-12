@@ -626,12 +626,9 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
     if (!exportCanvasContainerRef.current || canvasElements.length === 0) return;
     setIsExporting(true);
     try {
-      const savedViewport = useCanvasStore.getState().viewport;
       await ChartExportService.exportFullCanvas(
         exportCanvasContainerRef.current,
         canvasElements,
-        savedViewport,
-        (vp) => useCanvasStore.getState().updateViewport(vp),
         format,
         { filename: `canvas_${new Date().toISOString().split('T')[0]}` }
       );
