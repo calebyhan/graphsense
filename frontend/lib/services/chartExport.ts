@@ -188,8 +188,9 @@ export class ChartExportService {
    * Export chart to SVG format
    */
   private static async exportToSVG(element: HTMLElement, filename: string): Promise<void> {
-    // Find SVG element within the chart
-    const svgElement = element.querySelector('svg');
+    // Find the chart SVG — skip Lucide icon SVGs (they carry the .lucide class) so
+    // we don't accidentally export the header icon instead of the Recharts SVG.
+    const svgElement = element.querySelector<SVGElement>('svg:not(.lucide)');
 
     if (!svgElement) {
       throw new Error('No SVG element found in the chart');

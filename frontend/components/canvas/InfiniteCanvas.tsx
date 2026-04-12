@@ -802,11 +802,13 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
       )}
 
       {/* Collaborator cursors — rendered outside canvas transform (screen-space) */}
-      <CollaboratorCursors />
+      <div className="canvas-export-ignore">
+        <CollaboratorCursors />
+      </div>
 
       {/* Zoom Indicator */}
       {isZooming && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 glass-effect px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 pointer-events-none">
+        <div className="canvas-export-ignore absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 glass-effect px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 pointer-events-none">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
             <span className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -818,7 +820,7 @@ export default function InfiniteCanvas({ children, onCanvasClick, onContextMenu,
 
       {/* Zoom bounds feedback */}
       {(localViewport.zoom <= minZoom * 1.05 || localViewport.zoom >= 4.99) && (
-        <div className="absolute top-4 right-4 glass-effect px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
+        <div className="canvas-export-ignore absolute top-4 right-4 glass-effect px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
           <span className="text-sm text-amber-800 dark:text-amber-200">
             {localViewport.zoom <= minZoom * 1.05 ? 'Minimum zoom reached' : 'Maximum zoom reached'}
           </span>
