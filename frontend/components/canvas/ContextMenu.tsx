@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import {
   MousePointer,
   Hand,
@@ -199,7 +200,7 @@ export default function ContextMenu({
             icon={<Download className="w-4 h-4" />}
             label="Export as PNG"
             disabled={!onExportElement}
-            onClick={() => { onExportElement?.(state.elementId!); onClose(); }}
+            onClick={() => { flushSync(() => onClose()); onExportElement?.(state.elementId!); }}
           />
           <Separator />
           <MenuItem
