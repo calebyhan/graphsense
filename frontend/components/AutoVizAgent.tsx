@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import InfiniteCanvas from '@/components/canvas/InfiniteCanvas';
 import FloatingToolbar from '@/components/canvas/FloatingToolbar';
 import { DataPanel } from '@/components/panels/DataPanel';
@@ -624,7 +625,12 @@ export default function AutoVizAgent({ readOnly = false, emitCursor, canvasId, i
 
   const handleExportCanvas = useCallback(async (format: 'png' | 'pdf') => {
     if (!exportCanvasContainerRef.current || canvasElements.length === 0) return;
-    setIsExporting(true);
+    // Flush the spinner render synchronously before exportFullCanvas sets the imperative
+    // transform. Without this, React's pending re-render from setIsExporting(true) could
+    // fire during the two rAFs inside exportFullCanvas and reset the transform via DOM
+    // reconciliation, causing the export to capture the current viewport instead of the
+    // computed export bounds.
+    flushSync(() => setIsExporting(true));
     try {
       await ChartExportService.exportFullCanvas(
         exportCanvasContainerRef.current,
