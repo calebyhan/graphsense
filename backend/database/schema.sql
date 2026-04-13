@@ -527,3 +527,42 @@ CREATE POLICY "canvas_elements_service_role" ON canvas_elements
 
 -- Enable Realtime on canvas_datasets so clients receive live dataset-linked events
 ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets;
+
+-- ============================================================
+-- unlink_dataset_from_canvas: atomic unlink + conditional delete
+-- ============================================================
+-- Removes a dataset from a specific canvas, then hard-deletes the datasets row
+-- if no other canvases still reference it.  Both operations happen inside a
+-- single PL/pgSQL transaction, eliminating the TOCTOU race that exists when
+-- the two steps are performed as separate round-trips from the client.
+--
+-- SECURITY DEFINER is required so that:
+--   1. The canvas_datasets DELETE can check canvas edit-access via the RLS helper.
+--   2. The datasets DELETE is not blocked by the RLS policy "Users can delete
+--      their own datasets" when the remover is a collaborator rather than the
+--      dataset owner — the cleanup is safe because no canvas references remain.
+DROP FUNCTION IF EXISTS unlink_dataset_from_canvas(UUID, UUID);
+CREATE OR REPLACE FUNCTION unlink_dataset_from_canvas(
+  p_dataset_id UUID,
+  p_canvas_id  UUID
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Step 1: remove the specific canvas link.
+  DELETE FROM canvas_datasets
+  WHERE dataset_id = p_dataset_id
+    AND canvas_id  = p_canvas_id;
+
+  -- Step 2: delete the dataset row only when no other canvas still references it.
+  -- The NOT EXISTS subquery and the DELETE are evaluated atomically within this
+  -- transaction, preventing a concurrent linkDatasetToCanvas from racing past the
+  -- check before the delete fires.
+  DELETE FROM datasets
+  WHERE id = p_dataset_id
+    AND NOT EXISTS (
+      SELECT 1 FROM canvas_datasets WHERE dataset_id = p_dataset_id
+    );
+END;
+$$;
