@@ -374,15 +374,18 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       }
 
       const userId = user?.id || null;
+      const dataSize = new Blob([JSON.stringify(rawData)]).size;
 
-      // Canvas-scoped dedup: if a completed dataset with this filename is already linked
+      // Canvas-scoped dedup: if this exact completed dataset is already linked
       // to the current canvas, return it rather than re-running analysis and creating a
       // duplicate datasets row. Requiring 'completed' prevents returning a broken import
       // (failed/pending) when the user re-uploads to fix a previous failure.
       if (canvasId && filename) {
         const canvasDatasets = await DatasetService.getCanvasDatasets(canvasId);
         const existing = canvasDatasets.find(
-          d => d.filename === filename && d.processing_status === 'completed'
+          d => d.filename === filename &&
+               d.file_size === dataSize &&
+               d.processing_status === 'completed'
         );
         if (existing) {
           const metadata = (existing.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
@@ -404,7 +407,6 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
 
       // Analyze the data
       const dataAnalysis = analyzeData(rawData);
-      const dataSize = new Blob([JSON.stringify(rawData)]).size;
 
       // Create dataset with completed status since we have all the data
       const dbDataset = await DatasetService.createDataset({
