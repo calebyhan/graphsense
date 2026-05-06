@@ -359,27 +359,6 @@ export class DatasetService {
   }
 
   /**
-   * Count how many canvases currently reference a dataset.
-   */
-  static async getCanvasLinksCount(datasetId: string): Promise<number> {
-    const { count, error } = await (supabase
-      .from('canvas_datasets' as any)
-      .select('*', { count: 'exact', head: true })
-      .eq('dataset_id', datasetId)) as unknown as { count: number | null; error: { message: string } | null };
-
-    if (error) {
-      console.error('Failed to count canvas links for dataset:', error);
-      throw toPostgrestError(error);
-    }
-    // Treat a null count as an indeterminate result — do not fall back to 0, which
-    // would cause removeDatasetFromCanvas to hard-delete a potentially referenced dataset.
-    if (count === null) {
-      throw new Error(`getCanvasLinksCount: Supabase returned null count for dataset ${datasetId} — aborting to prevent data loss`);
-    }
-    return count;
-  }
-
-  /**
    * Remove a dataset from a canvas. If no other canvases reference the datasets row,
    * hard-deletes it too. The unlink and conditional delete are performed atomically
    * inside a single Postgres transaction via the unlink_dataset_from_canvas RPC,

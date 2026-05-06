@@ -381,27 +381,31 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       // duplicate datasets row. Requiring 'completed' prevents returning a broken import
       // (failed/pending) when the user re-uploads to fix a previous failure.
       if (canvasId && filename) {
-        const canvasDatasets = await DatasetService.getCanvasDatasets(canvasId);
-        const existing = canvasDatasets.find(
-          d => d.filename === filename &&
-               d.file_size === dataSize &&
-               d.processing_status === 'completed'
-        );
-        if (existing) {
-          const metadata = (existing.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
-          return {
-            id: existing.id,
-            name: filename.replace(/\.[^/.]+$/, ''),
-            type: 'csv',
-            columns: metadata.columns ?? 0,
-            rows: metadata.rows ?? 0,
-            size: formatFileSize(existing.file_size),
-            lastModified: formatDate(existing.updated_at),
-            dataTypes: metadata.dataTypes ?? { numerical: 0, categorical: 0, temporal: 0, geographic: 0 },
-            preview: metadata.preview ?? [],
-            data: Array.isArray(metadata.sample_data) ? metadata.sample_data : [],
-            processingStatus: existing.processing_status as ProcessingStatus,
-          };
+        try {
+          const canvasDatasets = await DatasetService.getCanvasDatasets(canvasId);
+          const existing = canvasDatasets.find(
+            d => d.filename === filename &&
+                 d.file_size === dataSize &&
+                 d.processing_status === 'completed'
+          );
+          if (existing) {
+            const metadata = (existing.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
+            return {
+              id: existing.id,
+              name: filename.replace(/\.[^/.]+$/, ''),
+              type: 'csv',
+              columns: metadata.columns ?? 0,
+              rows: metadata.rows ?? 0,
+              size: formatFileSize(existing.file_size),
+              lastModified: formatDate(existing.updated_at),
+              dataTypes: metadata.dataTypes ?? { numerical: 0, categorical: 0, temporal: 0, geographic: 0 },
+              preview: metadata.preview ?? [],
+              data: Array.isArray(metadata.sample_data) ? metadata.sample_data : [],
+              processingStatus: existing.processing_status as ProcessingStatus,
+            };
+          }
+        } catch (dedupeError) {
+          console.error('useDatasetManager: legacy canvas dedup check failed, proceeding with create:', dedupeError);
         }
       }
 
