@@ -526,4 +526,71 @@ CREATE POLICY "canvas_elements_service_role" ON canvas_elements
 -- ============================================================
 
 -- Enable Realtime on canvas_datasets so clients receive live dataset-linked events
-ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'canvas_datasets'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets;
+  END IF;
+END;
+$$;
+
+-- ============================================================
+-- unlink_dataset_from_canvas: atomic unlink + conditional delete
+-- ============================================================
+-- Removes a dataset from a specific canvas, then hard-deletes the datasets row
+-- only when no other canvases still reference it and the caller owns that row
+-- (or the row is anonymous/dev-mode data). Both operations happen inside a
+-- single PL/pgSQL transaction, eliminating the TOCTOU race that exists when the
+-- two steps are performed as separate round-trips from the client.
+--
+-- SECURITY DEFINER is required so that:
+--   1. The function can enforce canvas edit-access before unlinking.
+--   2. The function can perform the final cleanup DELETE after explicitly
+--      checking ownership and remaining canvas references.
+DROP FUNCTION IF EXISTS unlink_dataset_from_canvas(UUID, UUID);
+CREATE OR REPLACE FUNCTION unlink_dataset_from_canvas(
+  p_dataset_id UUID,
+  p_canvas_id  UUID
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+BEGIN
+  IF NOT user_has_canvas_edit(p_canvas_id) THEN
+    RAISE EXCEPTION 'Not authorized to modify this canvas' USING ERRCODE = '42501';
+  END IF;
+
+  -- Step 1: remove the specific canvas link.
+  DELETE FROM canvas_datasets
+  WHERE dataset_id = p_dataset_id
+    AND canvas_id  = p_canvas_id;
+
+  -- If the requested link did not exist, stop here. This prevents callers from
+  -- passing an arbitrary unlinked dataset_id and hard-deleting an orphaned row.
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  -- Step 2: delete the dataset row only when no other canvas still references it
+  -- and the caller is allowed to delete the dataset itself.
+  -- The NOT EXISTS subquery and the DELETE are evaluated atomically within this
+  -- transaction, preventing a concurrent linkDatasetToCanvas from racing past the
+  -- check before the delete fires.
+  DELETE FROM datasets
+  WHERE id = p_dataset_id
+    AND (user_id = auth.uid() OR user_id IS NULL)
+    AND NOT EXISTS (
+      SELECT 1 FROM canvas_datasets WHERE dataset_id = p_dataset_id
+    );
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION unlink_dataset_from_canvas(UUID, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION unlink_dataset_from_canvas(UUID, UUID) TO authenticated;

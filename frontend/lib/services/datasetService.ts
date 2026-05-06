@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/supabase/types';
+import type { PostgrestError } from '@supabase/supabase-js';
 
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -10,6 +11,11 @@ interface CanvasDatasetRow {
   dataset_id: string;
   added_at: string;
 }
+
+type CompletedDatasetMatch = Pick<
+  Tables<'datasets'>,
+  'id' | 'filename' | 'file_size' | 'updated_at' | 'metadata' | 'processing_status'
+>;
 
 export interface DatasetMetadata {
   columns: number;
@@ -37,10 +43,26 @@ export interface DatasetMetadata {
   };
 }
 
+type PostgrestLikeError = {
+  message: string;
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
+function toPostgrestError(error: PostgrestLikeError): Error & PostgrestError {
+  return Object.assign(new Error(error.message), {
+    name: 'PostgrestError',
+    code: error.code ?? 'UNKNOWN_ERROR',
+    details: error.details ?? '',
+    hint: error.hint ?? '',
+  });
+}
+
 export class DatasetService {
   /**
-   * Create a new dataset with pending status (supports null userId for dev mode)
-   * Includes duplicate prevention by checking for existing datasets with the same filename
+   * Create a new dataset with pending status (supports null userId for dev mode).
+   * Callers are responsible for deduplication before calling this method.
    */
   static async createDataset(params: {
     userId: string | null;
@@ -50,30 +72,6 @@ export class DatasetService {
     initialMetadata?: Partial<DatasetMetadata>;
   }): Promise<Tables<'datasets'>> {
     const { userId, filename, fileSize, fileType, initialMetadata = {} } = params;
-
-    // First, check if a dataset with this filename already exists for this user
-    let existingQuery = supabase
-      .from('datasets')
-      .select('id, filename')
-      .eq('filename', filename);
-      
-    if (userId === null) {
-      existingQuery = existingQuery.is('user_id', null);
-    } else {
-      existingQuery = existingQuery.eq('user_id', userId);
-    }
-    
-    const { data: existing, error: checkError } = await existingQuery.maybeSingle();
-    
-    // Only throw if we actually found a duplicate (ignore query errors for now)
-    if (existing && !checkError) {
-      console.log('Dataset with filename already exists:', filename, 'ID:', existing.id);
-      throw new Error(`Dataset with filename "${filename}" already exists`);
-    }
-    
-    if (checkError) {
-      console.warn('Warning: Could not check for duplicates:', checkError.message);
-    }
 
     const datasetInsert: TablesInsert<'datasets'> = {
       user_id: userId,
@@ -119,43 +117,51 @@ export class DatasetService {
       processing_status: status,
     };
 
-    // Update metadata with processing info — always read-and-merge to avoid clobbering file_info
+    // Update metadata with processing info when available. If the metadata read fails,
+    // still update processing_status so rows do not get stuck in an old state.
     if (status === 'processing') {
-      const { data: currentDataset } = await supabase
+      const { data: currentDataset, error: fetchError } = await supabase
         .from('datasets')
         .select('metadata')
         .eq('id', datasetId)
         .single();
-      const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
-      updateData.metadata = {
-        ...currentMetadata,
-        processing_info: {
-          ...currentMetadata.processing_info,
-          started_at: new Date().toISOString(),
-        },
-      };
+      if (fetchError) {
+        console.error('updateProcessingStatus: failed to read metadata before marking processing; updating status only:', fetchError);
+      } else {
+        const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
+        updateData.metadata = {
+          ...currentMetadata,
+          processing_info: {
+            ...currentMetadata.processing_info,
+            started_at: new Date().toISOString(),
+          },
+        };
+      }
     } else if (status === 'completed' || status === 'failed') {
       // Get current metadata to preserve existing data
-      const { data: currentDataset } = await supabase
+      const { data: currentDataset, error: fetchError } = await supabase
         .from('datasets')
         .select('metadata')
         .eq('id', datasetId)
         .single();
+      if (fetchError) {
+        console.error(`updateProcessingStatus: failed to read metadata before marking ${status}; updating status only:`, fetchError);
+      } else {
+        const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
+        const processingInfo = currentMetadata.processing_info || {};
 
-      const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
-      const processingInfo = currentMetadata.processing_info || {};
-
-      updateData.metadata = {
-        ...currentMetadata,
-        processing_info: {
-          ...processingInfo,
-          completed_at: new Date().toISOString(),
-          ...(processingInfo.started_at && {
-            processing_duration_ms: Date.now() - new Date(processingInfo.started_at).getTime(),
-          }),
-          ...(errorMessage && { error_message: errorMessage }),
-        },
-      };
+        updateData.metadata = {
+          ...currentMetadata,
+          processing_info: {
+            ...processingInfo,
+            completed_at: new Date().toISOString(),
+            ...(processingInfo.started_at && {
+              processing_duration_ms: Date.now() - new Date(processingInfo.started_at).getTime(),
+            }),
+            ...(errorMessage && { error_message: errorMessage }),
+          },
+        };
+      }
     }
 
     const { error } = await supabase
@@ -279,6 +285,33 @@ export class DatasetService {
   }
 
   /**
+   * Find a completed user-owned dataset by exact file identity.
+   */
+  static async getCompletedUserDatasetByFile(
+    userId: string,
+    filename: string,
+    fileSize: number
+  ): Promise<CompletedDatasetMatch | null> {
+    const { data, error } = await supabase
+      .from('datasets')
+      .select('id, filename, file_size, updated_at, metadata, processing_status')
+      .eq('user_id', userId)
+      .eq('filename', filename)
+      .eq('file_size', fileSize)
+      .eq('processing_status', 'completed')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .returns<CompletedDatasetMatch[]>();
+
+    if (error) {
+      console.error('Failed to fetch completed user dataset by file:', error);
+      throw toPostgrestError(error);
+    }
+
+    return data?.[0] ?? null;
+  }
+
+  /**
    * Get all datasets linked to a canvas (visible to both owner and collaborators)
    */
   static async getCanvasDatasets(canvasId: string): Promise<Tables<'datasets'>[]> {
@@ -299,7 +332,7 @@ export class DatasetService {
 
     if (linkError) {
       console.error('Failed to fetch canvas_datasets links:', linkError);
-      throw linkError;
+      throw toPostgrestError(linkError);
     }
 
     const datasetIds = (links || []).map((r) => r.dataset_id).filter(Boolean);
@@ -337,12 +370,51 @@ export class DatasetService {
 
     if (error && error.code !== '23505') { // 23505 = unique_violation (already linked)
       console.error('Failed to link dataset to canvas:', error);
-      throw error;
+      throw toPostgrestError(error);
     }
   }
 
   /**
-   * Delete dataset and all related data (supports null userId for dev mode)
+   * Unlink a dataset from a specific canvas without deleting the dataset itself.
+   */
+  static async unlinkDatasetFromCanvas(datasetId: string, canvasId: string): Promise<void> {
+    const { error } = await (supabase
+      .from('canvas_datasets' as any)
+      .delete()
+      .eq('dataset_id', datasetId)
+      .eq('canvas_id', canvasId)) as unknown as { error: { message: string; code: string } | null };
+
+    if (error) {
+      console.error('Failed to unlink dataset from canvas:', error);
+      throw toPostgrestError(error);
+    }
+  }
+
+  /**
+   * Remove a dataset from a canvas. If no other canvases reference the datasets row,
+   * hard-deletes it too. The unlink and conditional delete are performed atomically
+   * inside a single Postgres transaction via the unlink_dataset_from_canvas RPC,
+   * preventing the TOCTOU race that would exist across two separate round-trips.
+   *
+   * Use this instead of deleteDataset when operating from a canvas context.
+   */
+  static async removeDatasetFromCanvas(datasetId: string, canvasId: string): Promise<void> {
+    const { error } = await supabase.rpc('unlink_dataset_from_canvas' as any, {
+      p_dataset_id: datasetId,
+      p_canvas_id: canvasId,
+    });
+
+    if (error) {
+      console.error('Failed to remove dataset from canvas:', error);
+      throw toPostgrestError(error);
+    }
+  }
+
+  /**
+   * Delete a datasets row and all related data (supports null userId for dev mode).
+   * Prefer removeDatasetFromCanvas when operating from a canvas context — it unlinks
+   * from the specific canvas and only hard-deletes the datasets row when no other
+   * canvases still reference it (canvas_datasets rows cascade on datasets DELETE).
    */
   static async deleteDataset(datasetId: string, userId: string | null): Promise<void> {
     let query = supabase

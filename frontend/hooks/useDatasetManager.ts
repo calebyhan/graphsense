@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import Papa from 'papaparse';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
-import { Tables, TablesInsert } from '@/lib/supabase/types';
+import { Tables } from '@/lib/supabase/types';
 import { Dataset } from '@/components/AutoVizAgent';
 import { useAuthContext } from '@/components/providers/AuthProvider';
 import { DatasetService, DatasetMetadata, ProcessingStatus } from '@/lib/services/datasetService';
@@ -126,28 +126,33 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       }
       
       try {
-        // Check if a dataset with this filename already exists to prevent duplicates
-        // Use canvas-scoped datasets when on a canvas so collaborators see each other's uploads
+        // Check if this exact completed dataset already exists to prevent duplicates.
+        // Use canvas-scoped datasets when on a canvas so collaborators see each other's uploads.
         const existingDatasets = canvasId
           ? await DatasetService.getCanvasDatasets(canvasId)
           : await DatasetService.getUserDatasets(userId);
-        const duplicateExists = existingDatasets.some(d => d.filename === file.name);
-        if (duplicateExists) {
+        const existingDuplicate = existingDatasets.find(
+          d => d.filename === file.name &&
+               d.file_size === file.size &&
+               d.processing_status === 'completed'
+        );
+        if (existingDuplicate) {
           // Clear in-progress flag before early return so the same file can be re-uploaded later
           if (typeof window !== 'undefined') {
             delete (window as any)[inProgressKey];
           }
-          // Don't throw error, just return existing dataset to prevent UI issues
-          const existing = existingDatasets.find(d => d.filename === file.name)!;
-          const metadata = (existing.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
+          // Resolve progress/status callbacks so callers don't hang in a loading state
+          onStatusChange?.('completed');
+          onProgress?.(100);
+          const metadata = (existingDuplicate.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
           return {
-            id: existing.id,
+            id: existingDuplicate.id,
             name: file.name.replace(/\.[^/.]+$/, ''),
             type: 'csv',
             columns: metadata.columns ?? 0,
             rows: metadata.rows ?? 0,
-            size: formatFileSize(existing.file_size),
-            lastModified: formatDate(existing.updated_at),
+            size: formatFileSize(existingDuplicate.file_size),
+            lastModified: formatDate(existingDuplicate.updated_at),
             dataTypes: metadata.dataTypes ?? {
               numerical: 0,
               categorical: 0,
@@ -156,8 +161,67 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
             },
             preview: metadata.preview ?? [],
             data: Array.isArray(metadata.sample_data) ? metadata.sample_data : [],
-            processingStatus: existing.processing_status as ProcessingStatus
+            processingStatus: existingDuplicate.processing_status as ProcessingStatus
           };
+        }
+
+        // When on a canvas with an authenticated user, check if this file already exists globally
+        // (uploaded to a different canvas). Match on both filename AND file size to avoid silently
+        // returning the wrong dataset when the user re-uses a filename for different data.
+        // Only reuse a dataset that has completed processing — failed/pending ones should be
+        // re-created so the user isn't stuck with a broken import.
+        // Skip this check in dev mode (userId null): getUserDatasets(null) returns all rows
+        // where user_id IS NULL, which could include datasets created by other anonymous
+        // sessions on the same instance. Without a user identity there is no safe way to
+        // determine ownership, so always create a fresh row instead.
+        if (canvasId && userId) {
+          // Wrap in try/catch so a transient fetch failure here degrades gracefully
+          // (skip the global dedup, proceed to upload) rather than aborting the entire
+          // upload with a confusing error message.
+          let globalDuplicate: Awaited<ReturnType<typeof DatasetService.getCompletedUserDatasetByFile>> = null;
+          try {
+            globalDuplicate = await DatasetService.getCompletedUserDatasetByFile(
+              userId,
+              file.name,
+              file.size
+            );
+          } catch (dedupeError) {
+            console.error('useDatasetManager: global dedup check failed, proceeding with upload:', dedupeError);
+          }
+          if (globalDuplicate) {
+            if (typeof window !== 'undefined') {
+              delete (window as any)[inProgressKey];
+            }
+            try {
+              await DatasetService.linkDatasetToCanvas(globalDuplicate.id, canvasId);
+            } catch (linkError) {
+              onStatusChange?.('failed');
+              onProgress?.(0);
+              throw linkError;
+            }
+            // Resolve progress/status callbacks so callers don't hang in a loading state
+            onStatusChange?.('completed');
+            onProgress?.(100);
+            const metadata = (globalDuplicate.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
+            return {
+              id: globalDuplicate.id,
+              name: file.name.replace(/\.[^/.]+$/, ''),
+              type: 'csv',
+              columns: metadata.columns ?? 0,
+              rows: metadata.rows ?? 0,
+              size: formatFileSize(globalDuplicate.file_size),
+              lastModified: formatDate(globalDuplicate.updated_at),
+              dataTypes: metadata.dataTypes ?? {
+                numerical: 0,
+                categorical: 0,
+                temporal: 0,
+                geographic: 0
+              },
+              preview: metadata.preview ?? [],
+              data: Array.isArray(metadata.sample_data) ? metadata.sample_data : [],
+              processingStatus: globalDuplicate.processing_status as ProcessingStatus
+            };
+          }
         }
 
         // Step 1: Create dataset with pending status
@@ -309,10 +373,43 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       }
 
       const userId = user?.id || null;
+      const dataSize = new Blob([JSON.stringify(rawData)]).size;
+
+      // Canvas-scoped dedup: if this exact completed dataset is already linked
+      // to the current canvas, return it rather than re-running analysis and creating a
+      // duplicate datasets row. Requiring 'completed' prevents returning a broken import
+      // (failed/pending) when the user re-uploads to fix a previous failure.
+      if (canvasId && filename) {
+        try {
+          const canvasDatasets = await DatasetService.getCanvasDatasets(canvasId);
+          const existing = canvasDatasets.find(
+            d => d.filename === filename &&
+                 d.file_size === dataSize &&
+                 d.processing_status === 'completed'
+          );
+          if (existing) {
+            const metadata = (existing.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
+            return {
+              id: existing.id,
+              name: filename.replace(/\.[^/.]+$/, ''),
+              type: 'csv',
+              columns: metadata.columns ?? 0,
+              rows: metadata.rows ?? 0,
+              size: formatFileSize(existing.file_size),
+              lastModified: formatDate(existing.updated_at),
+              dataTypes: metadata.dataTypes ?? { numerical: 0, categorical: 0, temporal: 0, geographic: 0 },
+              preview: metadata.preview ?? [],
+              data: Array.isArray(metadata.sample_data) ? metadata.sample_data : [],
+              processingStatus: existing.processing_status as ProcessingStatus,
+            };
+          }
+        } catch (dedupeError) {
+          console.error('useDatasetManager: legacy canvas dedup check failed, proceeding with create:', dedupeError);
+        }
+      }
 
       // Analyze the data
       const dataAnalysis = analyzeData(rawData);
-      const dataSize = new Blob([JSON.stringify(rawData)]).size;
 
       // Create dataset with completed status since we have all the data
       const dbDataset = await DatasetService.createDataset({
@@ -398,7 +495,13 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
   const removeDatasetMutation = useMutation({
     mutationFn: async (datasetId: string) => {
       const userId = user?.id || null;
-      await DatasetService.deleteDataset(datasetId, userId);
+      // Authenticated canvas users unlink from this canvas only. Dev/anonymous mode
+      // falls back to user-scoped delete because the unlink RPC requires auth.uid().
+      if (canvasId && userId) {
+        await DatasetService.removeDatasetFromCanvas(datasetId, canvasId);
+      } else {
+        await DatasetService.deleteDataset(datasetId, userId);
+      }
       return datasetId;
     },
     onSuccess: (deletedId) => {
@@ -459,7 +562,13 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           queryClient.invalidateQueries({ queryKey: ['datasets', 'canvas', canvasId] });
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          // Don't throw — the 30 s polling fallback (refetchInterval) handles live updates.
+          // Log so the failure is observable without requiring a Supabase dashboard check.
+          console.error(`canvas_datasets realtime subscription failed (${status}):`, err);
+        }
+      });
 
     return () => { supabase.removeChannel(channel); };
   }, [canvasId, queryClient]);
