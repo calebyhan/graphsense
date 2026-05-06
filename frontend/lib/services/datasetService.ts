@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { Tables, TablesInsert, TablesUpdate } from '@/lib/supabase/types';
+import type { PostgrestError } from '@supabase/supabase-js';
 
 export type ProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
@@ -35,6 +36,15 @@ export interface DatasetMetadata {
     error_message?: string;
     processing_duration_ms?: number;
   };
+}
+
+function toPostgrestError(error: PostgrestError): Error & PostgrestError {
+  return Object.assign(new Error(error.message), {
+    name: 'PostgrestError',
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+  });
 }
 
 export class DatasetService {
@@ -104,7 +114,7 @@ export class DatasetService {
         .single();
       if (fetchError) {
         console.error('updateProcessingStatus: failed to read metadata before marking processing:', fetchError);
-        throw fetchError;
+        throw toPostgrestError(fetchError);
       }
       const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
       updateData.metadata = {
@@ -123,7 +133,7 @@ export class DatasetService {
         .single();
       if (fetchError) {
         console.error(`updateProcessingStatus: failed to read metadata before marking ${status}:`, fetchError);
-        throw fetchError;
+        throw toPostgrestError(fetchError);
       }
 
       const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};

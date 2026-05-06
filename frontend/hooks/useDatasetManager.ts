@@ -193,7 +193,13 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
             if (typeof window !== 'undefined') {
               delete (window as any)[inProgressKey];
             }
-            await DatasetService.linkDatasetToCanvas(globalDuplicate.id, canvasId);
+            try {
+              await DatasetService.linkDatasetToCanvas(globalDuplicate.id, canvasId);
+            } catch (linkError) {
+              onStatusChange?.('failed');
+              onProgress?.(0);
+              throw linkError;
+            }
             // Resolve progress/status callbacks so callers don't hang in a loading state
             onStatusChange?.('completed');
             onProgress?.(100);
