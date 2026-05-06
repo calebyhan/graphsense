@@ -12,6 +12,11 @@ interface CanvasDatasetRow {
   added_at: string;
 }
 
+type CompletedDatasetMatch = Pick<
+  Tables<'datasets'>,
+  'id' | 'filename' | 'file_size' | 'updated_at' | 'metadata' | 'processing_status'
+>;
+
 export interface DatasetMetadata {
   columns: number;
   rows: number;
@@ -277,6 +282,35 @@ export class DatasetService {
     }
 
     return data || [];
+  }
+
+  /**
+   * Find a completed user-owned dataset by exact file identity.
+   */
+  static async getCompletedUserDatasetByFile(
+    userId: string,
+    filename: string,
+    fileSize: number
+  ): Promise<CompletedDatasetMatch | null> {
+    const { data, error } = await supabase
+      .from('datasets')
+      .select('id, filename, file_size, updated_at, metadata, processing_status')
+      .eq('user_id', userId)
+      .eq('filename', filename)
+      .eq('file_size', fileSize)
+      .eq('processing_status', 'completed')
+      .order('updated_at', { ascending: false })
+      .limit(1) as unknown as {
+        data: CompletedDatasetMatch[] | null;
+        error: PostgrestLikeError | null;
+      };
+
+    if (error) {
+      console.error('Failed to fetch completed user dataset by file:', error);
+      throw toPostgrestError(error);
+    }
+
+    return data?.[0] ?? null;
   }
 
   /**

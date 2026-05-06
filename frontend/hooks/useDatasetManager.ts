@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import Papa from 'papaparse';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase/client';
-import { Tables, TablesInsert } from '@/lib/supabase/types';
+import { Tables } from '@/lib/supabase/types';
 import { Dataset } from '@/components/AutoVizAgent';
 import { useAuthContext } from '@/components/providers/AuthProvider';
 import { DatasetService, DatasetMetadata, ProcessingStatus } from '@/lib/services/datasetService';
@@ -178,17 +178,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           // Wrap in try/catch so a transient fetch failure here degrades gracefully
           // (skip the global dedup, proceed to upload) rather than aborting the entire
           // upload with a confusing error message.
-          let userDatasets: Tables<'datasets'>[] = [];
+          let globalDuplicate = null;
           try {
-            userDatasets = await DatasetService.getUserDatasets(userId);
+            globalDuplicate = await DatasetService.getCompletedUserDatasetByFile(
+              userId,
+              file.name,
+              file.size
+            );
           } catch (dedupeError) {
             console.error('useDatasetManager: global dedup check failed, proceeding with upload:', dedupeError);
           }
-          const globalDuplicate = userDatasets.find(
-            d => d.filename === file.name &&
-                 d.file_size === file.size &&
-                 d.processing_status === 'completed'
-          );
           if (globalDuplicate) {
             if (typeof window !== 'undefined') {
               delete (window as any)[inProgressKey];

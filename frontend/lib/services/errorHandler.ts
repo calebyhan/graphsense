@@ -10,6 +10,15 @@ export interface DatabaseError {
   retryAfter?: number; // seconds
 }
 
+function isPostgrestLikeError(error: unknown): error is PostgrestError {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const maybeError = error as { code?: unknown; message?: unknown };
+  return typeof maybeError.code === 'string' && typeof maybeError.message === 'string';
+}
+
 export class DatabaseErrorHandler {
   /**
    * Convert Supabase/PostgreSQL errors to user-friendly error objects
@@ -329,7 +338,7 @@ export class DatabaseErrorHandler {
  */
 export function useErrorHandler() {
   const handleError = (error: unknown): DatabaseError => {
-    if (error instanceof Error) {
+    if (error instanceof Error || isPostgrestLikeError(error)) {
       return DatabaseErrorHandler.handleDatabaseError(error);
     }
 
