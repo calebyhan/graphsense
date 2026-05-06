@@ -526,7 +526,19 @@ CREATE POLICY "canvas_elements_service_role" ON canvas_elements
 -- ============================================================
 
 -- Enable Realtime on canvas_datasets so clients receive live dataset-linked events
-ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime'
+      AND schemaname = 'public'
+      AND tablename = 'canvas_datasets'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets;
+  END IF;
+END;
+$$;
 
 -- ============================================================
 -- unlink_dataset_from_canvas: atomic unlink + conditional delete

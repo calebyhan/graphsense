@@ -38,12 +38,19 @@ export interface DatasetMetadata {
   };
 }
 
-function toPostgrestError(error: PostgrestError): Error & PostgrestError {
+type PostgrestLikeError = {
+  message: string;
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+};
+
+function toPostgrestError(error: PostgrestLikeError): Error & PostgrestError {
   return Object.assign(new Error(error.message), {
     name: 'PostgrestError',
-    code: error.code,
-    details: error.details,
-    hint: error.hint,
+    code: error.code ?? 'UNKNOWN_ERROR',
+    details: error.details ?? '',
+    hint: error.hint ?? '',
   });
 }
 
@@ -293,7 +300,7 @@ export class DatasetService {
 
     if (linkError) {
       console.error('Failed to fetch canvas_datasets links:', linkError);
-      throw linkError;
+      throw toPostgrestError(linkError);
     }
 
     const datasetIds = (links || []).map((r) => r.dataset_id).filter(Boolean);
@@ -331,7 +338,7 @@ export class DatasetService {
 
     if (error && error.code !== '23505') { // 23505 = unique_violation (already linked)
       console.error('Failed to link dataset to canvas:', error);
-      throw error;
+      throw toPostgrestError(error);
     }
   }
 
@@ -347,7 +354,7 @@ export class DatasetService {
 
     if (error) {
       console.error('Failed to unlink dataset from canvas:', error);
-      throw error;
+      throw toPostgrestError(error);
     }
   }
 
@@ -362,7 +369,7 @@ export class DatasetService {
 
     if (error) {
       console.error('Failed to count canvas links for dataset:', error);
-      throw error;
+      throw toPostgrestError(error);
     }
     // Treat a null count as an indeterminate result — do not fall back to 0, which
     // would cause removeDatasetFromCanvas to hard-delete a potentially referenced dataset.
@@ -388,7 +395,7 @@ export class DatasetService {
 
     if (error) {
       console.error('Failed to remove dataset from canvas:', error);
-      throw error;
+      throw toPostgrestError(error);
     }
   }
 
