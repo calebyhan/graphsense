@@ -117,7 +117,8 @@ export class DatasetService {
       processing_status: status,
     };
 
-    // Update metadata with processing info — always read-and-merge to avoid clobbering file_info
+    // Update metadata with processing info when available. If the metadata read fails,
+    // still update processing_status so rows do not get stuck in an old state.
     if (status === 'processing') {
       const { data: currentDataset, error: fetchError } = await supabase
         .from('datasets')
@@ -125,17 +126,17 @@ export class DatasetService {
         .eq('id', datasetId)
         .single();
       if (fetchError) {
-        console.error('updateProcessingStatus: failed to read metadata before marking processing:', fetchError);
-        throw toPostgrestError(fetchError);
+        console.error('updateProcessingStatus: failed to read metadata before marking processing; updating status only:', fetchError);
+      } else {
+        const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
+        updateData.metadata = {
+          ...currentMetadata,
+          processing_info: {
+            ...currentMetadata.processing_info,
+            started_at: new Date().toISOString(),
+          },
+        };
       }
-      const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
-      updateData.metadata = {
-        ...currentMetadata,
-        processing_info: {
-          ...currentMetadata.processing_info,
-          started_at: new Date().toISOString(),
-        },
-      };
     } else if (status === 'completed' || status === 'failed') {
       // Get current metadata to preserve existing data
       const { data: currentDataset, error: fetchError } = await supabase
@@ -144,24 +145,23 @@ export class DatasetService {
         .eq('id', datasetId)
         .single();
       if (fetchError) {
-        console.error(`updateProcessingStatus: failed to read metadata before marking ${status}:`, fetchError);
-        throw toPostgrestError(fetchError);
+        console.error(`updateProcessingStatus: failed to read metadata before marking ${status}; updating status only:`, fetchError);
+      } else {
+        const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
+        const processingInfo = currentMetadata.processing_info || {};
+
+        updateData.metadata = {
+          ...currentMetadata,
+          processing_info: {
+            ...processingInfo,
+            completed_at: new Date().toISOString(),
+            ...(processingInfo.started_at && {
+              processing_duration_ms: Date.now() - new Date(processingInfo.started_at).getTime(),
+            }),
+            ...(errorMessage && { error_message: errorMessage }),
+          },
+        };
       }
-
-      const currentMetadata = (currentDataset?.metadata as unknown as DatasetMetadata) || {};
-      const processingInfo = currentMetadata.processing_info || {};
-
-      updateData.metadata = {
-        ...currentMetadata,
-        processing_info: {
-          ...processingInfo,
-          completed_at: new Date().toISOString(),
-          ...(processingInfo.started_at && {
-            processing_duration_ms: Date.now() - new Date(processingInfo.started_at).getTime(),
-          }),
-          ...(errorMessage && { error_message: errorMessage }),
-        },
-      };
     }
 
     const { error } = await supabase
@@ -300,10 +300,8 @@ export class DatasetService {
       .eq('file_size', fileSize)
       .eq('processing_status', 'completed')
       .order('updated_at', { ascending: false })
-      .limit(1) as unknown as {
-        data: CompletedDatasetMatch[] | null;
-        error: PostgrestLikeError | null;
-      };
+      .limit(1)
+      .returns<CompletedDatasetMatch[]>();
 
     if (error) {
       console.error('Failed to fetch completed user dataset by file:', error);

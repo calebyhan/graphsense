@@ -178,7 +178,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           // Wrap in try/catch so a transient fetch failure here degrades gracefully
           // (skip the global dedup, proceed to upload) rather than aborting the entire
           // upload with a confusing error message.
-          let globalDuplicate = null;
+          let globalDuplicate: Awaited<ReturnType<typeof DatasetService.getCompletedUserDatasetByFile>> = null;
           try {
             globalDuplicate = await DatasetService.getCompletedUserDatasetByFile(
               userId,
