@@ -387,7 +387,7 @@ export class DatasetService {
    *
    * Use this instead of deleteDataset when operating from a canvas context.
    */
-  static async removeDatasetFromCanvas(datasetId: string, canvasId: string, _userId: string | null): Promise<void> {
+  static async removeDatasetFromCanvas(datasetId: string, canvasId: string): Promise<void> {
     const { error } = await supabase.rpc('unlink_dataset_from_canvas' as any, {
       p_dataset_id: datasetId,
       p_canvas_id: canvasId,

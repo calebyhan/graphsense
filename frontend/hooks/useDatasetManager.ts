@@ -492,10 +492,10 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
   const removeDatasetMutation = useMutation({
     mutationFn: async (datasetId: string) => {
       const userId = user?.id || null;
-      // When on a canvas, unlink from this canvas only. Hard-delete only if no other
-      // canvases reference the dataset — avoids wiping a shared dataset from sibling canvases.
-      if (canvasId) {
-        await DatasetService.removeDatasetFromCanvas(datasetId, canvasId, userId);
+      // Authenticated canvas users unlink from this canvas only. Dev/anonymous mode
+      // falls back to user-scoped delete because the unlink RPC requires auth.uid().
+      if (canvasId && userId) {
+        await DatasetService.removeDatasetFromCanvas(datasetId, canvasId);
       } else {
         await DatasetService.deleteDataset(datasetId, userId);
       }
