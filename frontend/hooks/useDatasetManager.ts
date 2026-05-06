@@ -131,8 +131,8 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
         const existingDatasets = canvasId
           ? await DatasetService.getCanvasDatasets(canvasId)
           : await DatasetService.getUserDatasets(userId);
-        const duplicateInCanvas = existingDatasets.find(d => d.filename === file.name);
-        if (duplicateInCanvas) {
+        const existingDuplicate = existingDatasets.find(d => d.filename === file.name);
+        if (existingDuplicate) {
           // Clear in-progress flag before early return so the same file can be re-uploaded later
           if (typeof window !== 'undefined') {
             delete (window as any)[inProgressKey];
@@ -140,15 +140,15 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
           // Resolve progress/status callbacks so callers don't hang in a loading state
           onStatusChange?.('completed');
           onProgress?.(100);
-          const metadata = (duplicateInCanvas.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
+          const metadata = (existingDuplicate.metadata as unknown as DatasetMetadata) || {} as DatasetMetadata;
           return {
-            id: duplicateInCanvas.id,
+            id: existingDuplicate.id,
             name: file.name.replace(/\.[^/.]+$/, ''),
             type: 'csv',
             columns: metadata.columns ?? 0,
             rows: metadata.rows ?? 0,
-            size: formatFileSize(duplicateInCanvas.file_size),
-            lastModified: formatDate(duplicateInCanvas.updated_at),
+            size: formatFileSize(existingDuplicate.file_size),
+            lastModified: formatDate(existingDuplicate.updated_at),
             dataTypes: metadata.dataTypes ?? {
               numerical: 0,
               categorical: 0,
@@ -157,7 +157,7 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
             },
             preview: metadata.preview ?? [],
             data: Array.isArray(metadata.sample_data) ? metadata.sample_data : [],
-            processingStatus: duplicateInCanvas.processing_status as ProcessingStatus
+            processingStatus: existingDuplicate.processing_status as ProcessingStatus
           };
         }
 
