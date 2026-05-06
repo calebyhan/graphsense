@@ -532,15 +532,15 @@ ALTER PUBLICATION supabase_realtime ADD TABLE canvas_datasets;
 -- unlink_dataset_from_canvas: atomic unlink + conditional delete
 -- ============================================================
 -- Removes a dataset from a specific canvas, then hard-deletes the datasets row
--- if no other canvases still reference it.  Both operations happen inside a
--- single PL/pgSQL transaction, eliminating the TOCTOU race that exists when
--- the two steps are performed as separate round-trips from the client.
+-- only when no other canvases still reference it and the caller owns that row
+-- (or the row is anonymous/dev-mode data). Both operations happen inside a
+-- single PL/pgSQL transaction, eliminating the TOCTOU race that exists when the
+-- two steps are performed as separate round-trips from the client.
 --
 -- SECURITY DEFINER is required so that:
 --   1. The function can enforce canvas edit-access before unlinking.
---   2. The datasets DELETE is not blocked by the RLS policy "Users can delete
---      their own datasets" when the remover is a collaborator rather than the
---      dataset owner — the cleanup is safe because no canvas references remain.
+--   2. The function can perform the final cleanup DELETE after explicitly
+--      checking ownership and remaining canvas references.
 DROP FUNCTION IF EXISTS unlink_dataset_from_canvas(UUID, UUID);
 CREATE OR REPLACE FUNCTION unlink_dataset_from_canvas(
   p_dataset_id UUID,
@@ -566,12 +566,14 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Step 2: delete the dataset row only when no other canvas still references it.
+  -- Step 2: delete the dataset row only when no other canvas still references it
+  -- and the caller is allowed to delete the dataset itself.
   -- The NOT EXISTS subquery and the DELETE are evaluated atomically within this
   -- transaction, preventing a concurrent linkDatasetToCanvas from racing past the
   -- check before the delete fires.
   DELETE FROM datasets
   WHERE id = p_dataset_id
+    AND (user_id = auth.uid() OR user_id IS NULL)
     AND NOT EXISTS (
       SELECT 1 FROM canvas_datasets WHERE dataset_id = p_dataset_id
     );

@@ -126,12 +126,16 @@ export function useDatasetManager(options: DatasetManagerOptions = {}) {
       }
       
       try {
-        // Check if a dataset with this filename already exists to prevent duplicates.
+        // Check if this exact completed dataset already exists to prevent duplicates.
         // Use canvas-scoped datasets when on a canvas so collaborators see each other's uploads.
         const existingDatasets = canvasId
           ? await DatasetService.getCanvasDatasets(canvasId)
           : await DatasetService.getUserDatasets(userId);
-        const existingDuplicate = existingDatasets.find(d => d.filename === file.name);
+        const existingDuplicate = existingDatasets.find(
+          d => d.filename === file.name &&
+               d.file_size === file.size &&
+               d.processing_status === 'completed'
+        );
         if (existingDuplicate) {
           // Clear in-progress flag before early return so the same file can be re-uploaded later
           if (typeof window !== 'undefined') {
